@@ -36,3 +36,18 @@ Run `npm run dev`, open `/capture`. Voice needs the Voice setup above; without i
 - [ ] Say (or in text mode type) "off the record": same as Pause. In text mode, type "back on the record" to resume; with voice the mic is muted while paused, so resume with the button or the agent's `set_off_record` tool.
 - [ ] Share screen: the browser picker opens; changed frames show up under `frames/`; none while paused. Without sharing, DOM events still drive questions.
 - [ ] End task navigates to `/debrief/<id>`.
+
+## Work Map
+
+Run `npm run dev` with at least one finished capture session under `data/sessions/`.
+
+- [ ] `/map` lists capture sessions only (no teach sessions), newest first, with started time as `YYYY-MM-DD HH:mm` in Europe/Zurich (24h), expert, and a confirmed / not yet confirmed / not built badge.
+- [ ] Open a session without a Work Map: a "Build Work Map" button appears; clicking it POSTs `/api/workmap` and the map renders.
+- [ ] Header shows task, expert, the confirmed badge and `N steps · J judgment calls · G guardrails`. On the demo run: 7 steps, 3 judgment calls, 4 guardrails.
+- [ ] Timeline: one dot per step at its screen time, judgment calls larger and amber. Clicking a dot or a list entry selects that step.
+- [ ] Step card: "Step n of N: title"; screen moment with mm:ss, entity, field and the frame image (a dashed "no frame" placeholder when the frame is missing or was purged).
+- [ ] Decision text; reason as a quote with "— <expert>, live question at mm:ss" (or debrief / narration). A step without a reason shows "reason not captured yet".
+- [ ] Each guardrail shows its kind badge (limit, exception, stop and ask), the rule, the verbatim quote and mm:ss.
+- [ ] Two score bars (reason captured, guardrail captured): green at or above 75%, amber below, with a threshold tick.
+- [ ] Open questions are listed at the bottom.
+- [ ] "Export guardrails (.md)" downloads the markdown from `/api/export?session_id=<id>`. "Open in Teach" goes to `/teach?session=<id>`.
