@@ -72,6 +72,8 @@ export class FakeSupabase {
   visibleWorkspaces = new Set<string>();
   maxRows: number;
   uid: string;
+  /** Every query run against a table, in order: the table, the operation and its limit. */
+  calls: { table: string; op: string; limit: number | null; countHead: boolean }[] = [];
   private serial = 0;
   private failures = new Map<string, FakeError | FakeStorageError>();
   readonly client: unknown;
@@ -208,6 +210,7 @@ class FakeQuery {
   private orders: Order[] = [];
   private rangeFrom: number | null = null;
   private rangeTo: number | null = null;
+  private limitN: number | null = null;
   private returning = false;
   private columns: string[] | null = null;
   private countHead = false;
@@ -298,6 +301,12 @@ class FakeQuery {
     return this;
   }
 
+  limit(n: number, opts?: unknown) {
+    checkOpts("limit", opts, []);
+    this.limitN = n;
+    return this;
+  }
+
   single() {
     this.mode = "single";
     return this;
@@ -330,7 +339,15 @@ class FakeQuery {
   private project(row: Row): Row {
     const out = structuredClone(row);
     if (!this.columns) return out;
-    return Object.fromEntries(this.columns.map((c) => [c, out[c]]));
+    // Plain columns and aliased JSON paths (alias:col->>key); a missing key or a null column reads as null.
+    return Object.fromEntries(
+      this.columns.map((c) => {
+        const m = /^(\w+):(\w+)->>?(\w+)$/.exec(c);
+        if (!m) return [c, out[c]];
+        const obj = out[m[2]] as Row | null | undefined;
+        return [m[1], obj?.[m[3]] ?? null];
+      }),
+    );
   }
 
   private finish(rows: Row[]): Result {
@@ -352,6 +369,7 @@ class FakeQuery {
   }
 
   private run(): Result {
+    this.fake.calls.push({ table: this.table, op: this.op ?? "none", limit: this.limitN, countHead: this.countHead });
     const failure = this.fake.takeFailure(this.table);
     if (failure) return { data: null, error: failure as FakeError, count: null, status: 400 };
     const all = this.fake.tables[this.table];
@@ -373,6 +391,7 @@ class FakeQuery {
         return 0;
       });
       if (this.rangeFrom !== null) rows = rows.slice(this.rangeFrom, (this.rangeTo as number) + 1);
+      if (this.limitN !== null) rows = rows.slice(0, this.limitN);
       return this.finish(rows);
     }
 

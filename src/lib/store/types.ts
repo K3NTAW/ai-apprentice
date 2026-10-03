@@ -14,6 +14,8 @@ export type SessionSummary = {
   agent_id?: string;
 };
 
+export const RECENT_SESSIONS_DEFAULT = 6;
+
 export type AgentInput = { name: string; role: string; expert_name?: string; avatar: Avatar };
 /** PATCH semantics: given keys replace the stored value (avatar as a whole); expert_name null clears it. */
 export type AgentPatch = { name?: string; role?: string; expert_name?: string | null; avatar?: Avatar };
@@ -27,6 +29,8 @@ export interface SessionStore {
   createSession(input: { kind: Session["kind"]; expert?: string; agent_id?: string }): Promise<Session>;
   getSession(id: string): Promise<Session | null>;
   listSessions(): Promise<SessionSummary[]>;
+  /** Newest first, at most limit (default RECENT_SESSIONS_DEFAULT). For lists only: counts may be zero (supabase skips them). */
+  recentSessions(limit?: number): Promise<SessionSummary[]>;
   appendEvents(id: string, events: ScreenEvent[]): Promise<Session>;
   appendTranscript(id: string, entries: TranscriptEntry[]): Promise<Session>;
   upsertQA(id: string, qa: QAPair): Promise<Session>;

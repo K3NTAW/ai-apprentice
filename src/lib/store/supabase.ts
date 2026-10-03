@@ -35,6 +35,7 @@ import {
   inRange,
   isOffRecord,
   isValidAgentId,
+  RECENT_SESSIONS_DEFAULT,
   redactOpts,
   SessionNotFoundError,
   type OffRecordRange,
@@ -391,6 +392,32 @@ export function createSupabaseStore(
         });
       }
       return out;
+    },
+
+    // One query, no child counts: the shell calls this on every page. has_workmap reads workmap->>task
+    // (always set by saveWorkMap) so the workmap body is not transferred.
+    async recentSessions(limit = RECENT_SESSIONS_DEFAULT) {
+      const res = await client
+        .from("sessions")
+        .select("id,kind,expert,agent_id,started_at,ended_at,has_workmap:workmap->>task")
+        .eq("workspace_id", workspaceId)
+        .order("started_at", { ascending: false })
+        .order("id", { ascending: false })
+        .limit(Math.max(0, limit));
+      if (res.error) fail("select recent sessions", res.error);
+      type RecentRow = Pick<SessionRow, "id" | "kind" | "expert" | "started_at" | "ended_at" | "agent_id"> & { has_workmap: string | null };
+      return ((res.data ?? []) as RecentRow[]).map(
+        (r): SessionSummary => ({
+          id: r.id,
+          kind: r.kind,
+          started_at: normTs(r.started_at),
+          ...(r.ended_at !== null ? { ended_at: normTs(r.ended_at) } : {}),
+          ...(r.expert !== null ? { expert: r.expert } : {}),
+          counts: { events: 0, transcript: 0, qa: 0 },
+          has_workmap: r.has_workmap !== null,
+          ...(r.agent_id ? { agent_id: r.agent_id } : {}),
+        }),
+      );
     },
 
     appendEvents(id, events) {

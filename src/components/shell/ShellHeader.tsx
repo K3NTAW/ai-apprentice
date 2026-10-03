@@ -117,7 +117,7 @@ function RecentList({ recent }: { recent: RecentSessions }) {
                   {s.title}
                 </span>
                 <span className="flex items-center gap-[6px] text-xs" style={{ color: "var(--fa)" }}>
-                  {s.live && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#FF6B6B" }} />}
+                  {s.live && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--rd)" }} />}
                   {s.meta}
                 </span>
               </Link>

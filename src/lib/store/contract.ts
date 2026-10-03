@@ -71,6 +71,28 @@ export function runStoreContract(name: string, makeStore: () => SessionStore | P
       expect((await store.getSession(s.id))?.workmap).toEqual(workmap);
     });
 
+    it("lists recent sessions newest first, at most limit", async () => {
+      const tick = () => new Promise((r) => setTimeout(r, 3));
+      const a = await store.createSession({ kind: "capture", expert: "Sabine" });
+      await tick();
+      const b = await store.createSession({ kind: "teach" });
+      await tick();
+      const c = await store.createSession({ kind: "capture", agent_id: (await store.createAgent({ name: "A", role: "R", avatar })).id });
+      await store.saveWorkMap(b.id, workmap);
+      await store.endSession(a.id);
+      const two = await store.recentSessions(2);
+      expect(two.map((x) => x.id)).toEqual([c.id, b.id]);
+      expect(two[0]).toMatchObject({ kind: "capture", agent_id: c.agent_id, has_workmap: false });
+      expect(two[0].ended_at).toBeUndefined();
+      expect(two[1]).toMatchObject({ kind: "teach", has_workmap: true });
+      const all = await store.recentSessions();
+      expect(all.length).toBeLessThanOrEqual(6);
+      expect(all.slice(0, 3).map((x) => x.id)).toEqual([c.id, b.id, a.id]);
+      expect(all[2]).toMatchObject({ expert: "Sabine", ended_at: expect.any(String) });
+      expect(all.map((x) => x.started_at)).toEqual([...all.map((x) => x.started_at)].sort().reverse());
+      expect(await store.recentSessions(0)).toEqual([]);
+    });
+
     it("keeps append order for events and transcript", async () => {
       const s = await store.createSession({ kind: "capture" });
       await store.appendEvents(s.id, [event(1), event(2, "ev_2a"), event(2, "ev_2b")]);

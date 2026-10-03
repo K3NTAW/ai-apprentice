@@ -64,6 +64,30 @@ describe("supabase store only", () => {
     expect(list.map((x) => x.started_at)).toEqual([...list.map((x) => x.started_at)].sort().reverse());
   });
 
+  it("recentSessions issues one limited sessions query for the workspace and no count queries", async () => {
+    const { fake, client, store, workspaceId } = supabaseFixture();
+    const otherWs = randomUUID();
+    fake.visibleWorkspaces.add(otherWs);
+    const other = createSupabaseStore(client, { workspaceId: otherWs, userId: UID });
+    const ids: string[] = [];
+    for (let i = 0; i < 8; i++) {
+      const s = await store.createSession({ kind: "capture" });
+      await store.appendEvents(s.id, [event(1)]);
+      ids.push(s.id);
+      await new Promise((r) => setTimeout(r, 2));
+    }
+    await other.createSession({ kind: "capture" });
+    fake.calls = [];
+    const recent = await store.recentSessions(3);
+    expect(recent.map((x) => x.id)).toEqual(ids.slice(-3).reverse());
+    expect(fake.calls).toEqual([{ table: "sessions", op: "select", limit: 3, countHead: false }]);
+    fake.calls = [];
+    expect((await store.recentSessions()).map((x) => x.id)).toEqual(ids.slice(-6).reverse());
+    expect(fake.calls).toHaveLength(1);
+    expect(fake.calls[0]).toMatchObject({ table: "sessions", limit: 6 });
+    expect(workspaceId).not.toBe(otherWs);
+  });
+
   it("treats a hidden workspace as a missing session", async () => {
     const { fake, store, workspaceId } = supabaseFixture();
     const s = await store.createSession({ kind: "capture" });

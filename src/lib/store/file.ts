@@ -33,6 +33,7 @@ import {
   type OffRecordRange,
   type SaveFrameResult,
   type SessionStore,
+  RECENT_SESSIONS_DEFAULT,
   type SessionSummary,
 } from "./types";
 
@@ -241,6 +242,10 @@ async function listSessions(): Promise<SessionSummary[]> {
   return sessions.map((s) => withoutDanglingAgent(s, agentIds));
 }
 
+async function recentSessions(limit = RECENT_SESSIONS_DEFAULT): Promise<SessionSummary[]> {
+  return (await listSessions()).slice(0, Math.max(0, limit));
+}
+
 /** Every session summary as stored, links included. */
 async function readSessions(): Promise<SessionSummary[]> {
   let ids: string[];
@@ -378,6 +383,7 @@ export const fileStore: SessionStore = {
   createSession,
   getSession,
   listSessions,
+  recentSessions,
   appendEvents,
   appendTranscript,
   upsertQA,

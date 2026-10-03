@@ -1,8 +1,19 @@
+import { readdirSync, readFileSync } from "node:fs";
+import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
-import type { SessionSummary } from "@/lib/store/types";
+import { describe, expect, it, vi } from "vitest";
+import type { RequestContext } from "@/lib/auth/context";
+import type { SessionStore, SessionSummary } from "@/lib/store/types";
+import { recentSessions } from "./AppShell";
 import ShellHeader, { type ShellUser } from "./ShellHeader";
 import { groupRecent, RECENT_LIMIT } from "./recent";
+
+const fakeStore = vi.hoisted(() => ({
+  recentSessions: vi.fn(),
+  listSessions: vi.fn(),
+}));
+vi.mock("@/lib/auth/context", () => ({ getRequestContext: vi.fn() }));
+vi.mock("@/lib/store", () => ({ getStore: () => fakeStore as unknown as SessionStore }));
 
 const user: ShellUser = {
   mode: "supabase",
@@ -79,5 +90,24 @@ describe("shell sidebar (Sidebar.dc.html)", () => {
     expect(html).toContain('aria-label="Open user menu"');
     expect(html).toContain('action="/auth/signout"');
     expect(html).not.toMatch(/paired|pairing/i);
+  });
+
+  it("AppShell reads recentSessions(limit), not listSessions", async () => {
+    fakeStore.recentSessions.mockResolvedValue(sessions);
+    const result = await recentSessions({ workspaceId: user.workspaceId } as unknown as RequestContext, now);
+    expect(fakeStore.recentSessions).toHaveBeenCalledWith(RECENT_LIMIT);
+    expect(fakeStore.listSessions).not.toHaveBeenCalled();
+    expect(result).toEqual({ kind: "ok", groups: groupRecent(sessions, now) });
+    fakeStore.recentSessions.mockRejectedValueOnce(new Error("down"));
+    expect(await recentSessions({ workspaceId: user.workspaceId } as unknown as RequestContext, now)).toEqual({ kind: "error" });
+  });
+
+  it("no hard-coded hex colours in src/components/shell/; the live dot uses var(--rd)", () => {
+    const dir = __dirname;
+    for (const f of readdirSync(dir).filter((n) => /\.tsx?$/.test(n) && !/\.test\.tsx?$/.test(n))) {
+      expect(readFileSync(path.join(dir, f), "utf8"), f).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    }
+    const html = renderToStaticMarkup(<ShellHeader user={user} recent={{ kind: "ok", groups: groupRecent(sessions, now) }} />);
+    expect(html).toContain("background:var(--rd)");
   });
 });

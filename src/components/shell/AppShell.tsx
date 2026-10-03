@@ -3,7 +3,7 @@
 import { getRequestContext, type RequestContext } from "@/lib/auth/context";
 import { getStore } from "@/lib/store";
 import ShellHeader, { type ShellUser } from "./ShellHeader";
-import { groupRecent, type RecentSessions } from "./recent";
+import { groupRecent, RECENT_LIMIT, type RecentSessions } from "./recent";
 
 const toShellUser = (ctx: RequestContext): ShellUser => ({
   mode: ctx.mode,
@@ -23,7 +23,7 @@ export async function shellUser(): Promise<ShellUser | null> {
 export async function recentSessions(ctx: RequestContext, now = new Date()): Promise<RecentSessions> {
   try {
     const store = ctx.supabase ? getStore({ supabase: ctx.supabase, workspaceId: ctx.workspaceId, userId: ctx.userId }) : getStore();
-    return { kind: "ok", groups: groupRecent(await store.listSessions(), now) };
+    return { kind: "ok", groups: groupRecent(await store.recentSessions(RECENT_LIMIT), now) };
   } catch {
     return { kind: "error" };
   }
