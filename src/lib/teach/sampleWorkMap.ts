@@ -1,0 +1,90 @@
+// Hand-written Work Map for the Sabine demo session (docs/BUILD_SPEC.md section 15).
+// Used by Teach when no confirmed capture session exists.
+import type { WorkMap } from "@/lib/types";
+
+const Q = {
+  capex: "Equipment over €5,000 is always capex.",
+  asset: "No asset number, no capex booking.",
+  december: "That supplier double-bills every December, so I hold it until purchasing confirms.",
+  czech: "Anything from the Czech subsidiary goes for second approval.",
+  unknown: "Unknown supplier: stop and ask the controller.",
+} as const;
+
+export const SAMPLE_WORKMAP: WorkMap = {
+  task: "Code and approve incoming supplier invoices",
+  expert: "Sabine",
+  confirmed_by_expert: true,
+  steps: [
+    {
+      n: 1,
+      title: "Open the invoice and check the supplier",
+      screen_moment: { t: 12, entity: "invoice 4471", field: "supplier" },
+      decision: "Check the supplier is known before coding anything; if not, stop and ask the controller.",
+      is_judgment_call: false,
+      reason: { quote: Q.unknown, t: 20, source: "live_question" },
+      guardrails: [{ rule: "Unknown supplier: stop and ask the controller before booking", quote_ref: 20, kind: "stop_and_ask", quote: Q.unknown }],
+      scores: { reason_captured: 0.9, guardrail_captured: 0.9 },
+    },
+    {
+      n: 2,
+      title: "Check amount and description",
+      screen_moment: { t: 31, entity: "invoice 4471", field: "description" },
+      decision: "Read the description and amount to see if it is equipment or operating supplies.",
+      is_judgment_call: false,
+      reason: { quote: "First I look at what it actually is and how much.", t: 35, source: "narration" },
+      guardrails: [],
+      scores: { reason_captured: 0.8, guardrail_captured: 0.8 },
+    },
+    {
+      n: 3,
+      title: "Set the cost center",
+      screen_moment: { t: 48, entity: "invoice 4471", field: "cost_center" },
+      decision: "Equipment over 5,000 EUR goes to capex cost center 0400 instead of 4711.",
+      is_judgment_call: true,
+      reason: { quote: Q.capex, t: 52, source: "live_question" },
+      guardrails: [{ rule: "Equipment over 5,000 EUR must be booked as capex on cost center 0400", quote_ref: 52, kind: "limit", quote: Q.capex }],
+      scores: { reason_captured: 0.95, guardrail_captured: 0.9 },
+    },
+    {
+      n: 4,
+      title: "Enter the asset number",
+      screen_moment: { t: 66, entity: "invoice 4471", field: "asset_number" },
+      decision: "Enter the asset number for every capex booking on 0400.",
+      is_judgment_call: false,
+      reason: { quote: Q.asset, t: 70, source: "live_question" },
+      guardrails: [{ rule: "No capex booking on 0400 without an asset number", quote_ref: 70, kind: "limit", quote: Q.asset }],
+      scores: { reason_captured: 0.9, guardrail_captured: 0.9 },
+    },
+    {
+      n: 5,
+      title: "Hold the December duplicate",
+      screen_moment: { t: 95, entity: "invoice 4502", field: "approval_status" },
+      decision: "Put the second December invoice from Nordlicht on hold until purchasing confirms.",
+      is_judgment_call: true,
+      reason: { quote: Q.december, t: 101, source: "live_question" },
+      guardrails: [],
+      scores: { reason_captured: 0.9, guardrail_captured: 0.8 },
+    },
+    {
+      n: 6,
+      title: "Send subsidiary invoices for second approval",
+      screen_moment: { t: 128, entity: "invoice 4517", field: "second_approval" },
+      decision: "Invoices from the Czech subsidiary go for second approval instead of a direct save.",
+      is_judgment_call: true,
+      reason: { quote: Q.czech, t: 133, source: "debrief" },
+      guardrails: [{ rule: "Czech subsidiary invoices need a second approval", quote_ref: 133, kind: "exception", quote: Q.czech }],
+      scores: { reason_captured: 0.9, guardrail_captured: 0.85 },
+    },
+    {
+      n: 7,
+      title: "Save the invoice",
+      screen_moment: { t: 150, entity: "invoice 4471", field: "save" },
+      decision: "Save once cost center, asset number and approval route are right.",
+      is_judgment_call: false,
+      reason: { quote: "Then it's done, save and next one.", t: 152, source: "narration" },
+      guardrails: [],
+      scores: { reason_captured: 0.8, guardrail_captured: 0.8 },
+    },
+  ],
+  open_questions: [],
+};

@@ -66,3 +66,17 @@ Run `npm run dev` with a finished capture session. End task on `/capture` goes t
 - [ ] Judge corrects one detail: "Not quite", type the correction, Send correction. The map is rebuilt, the correction is in `qa` (phase debrief) and in the map's open questions, and a revised teach-back is shown for a second confirm.
 - [ ] Confirm: "Yes, that is how it works" sets `workmap.confirmed_by_expert: true` in `session.json`. The Work Map and a link to `/map/<id>` appear; `/map` shows the session as confirmed.
 - [ ] With voice, saying "yes" or a correction after the teach-back triggers the agent's `confirm_teach_back` tool with the same result.
+
+## Teach
+
+Run `npm run dev`. With no confirmed capture session the sample Work Map (Sabine) is used.
+
+- [ ] Open `/teach`: the banner says which Work Map is used (`?session=<id>`, latest confirmed session, or the sample). Left is the teach-mode ERP with invoice 4630 (EUR 7,200, servo drive unit, equipment, cost center 4711).
+- [ ] Without starting voice the panel says "Text mode" and everything below works by typing. "Start tutor voice" connects the tutor with the Work Map injected; if it fails, a note says so and text mode stays on.
+- [ ] Open invoice 4630: the panel asks "What would you do next?". Type (or say) "change the cost center to 0400, it is capex": it says it matches what Sabine does, and shows the step in her words.
+- [ ] Click Save with cost center 4711: blocked before save (status stays Open, the ERP shows the block banner). A halo rings the cost center field with a "Sabine would stop here" bubble. The card shows "Sabine would stop here. Why do you think?" and `Sabine would stop here. "Equipment over €5,000 is always capex."`. With voice on, the tutor says the same.
+- [ ] "Replay Sabine's moment" opens her screen moment (frame or "no frame" placeholder) and her quote inline. With voice on, the tutor's replay_moment tool does the same.
+- [ ] Change cost center to 0400, leave asset number empty, Save: blocked again, halo on asset number, quote "No asset number, no capex booking."
+- [ ] Enter an asset number, Save: saved (status Saved), halo gone, the panel notes it went through after the stop.
+- [ ] Finish: mastery summary shows "Mastered" (correctly predicted steps) and "Practice next" (the cost center step that needed a stop), and it is spoken (tutor voice, or the browser voice in text mode).
+- [ ] Stop the network to `/api/decide` (or let it time out): the 4711 save is still blocked by the rules.
