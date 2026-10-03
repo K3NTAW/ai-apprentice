@@ -3,7 +3,7 @@ import { createActivityTracker } from "@/lib/perception/activity";
 import { createEventBus } from "@/lib/perception/eventBus";
 import { createAskGate } from "@/lib/voice/askGate";
 import type { DecisionQuestionName, DecisionResult } from "@/lib/types";
-import { createCaptureController, type CaptureApi, type CaptureVoice } from "./controller";
+import { createCaptureController, type CaptureApi, type CaptureCompanion, type CaptureVoice } from "./controller";
 
 const dr = (question: DecisionQuestionName, answer: string | number): DecisionResult => ({
   question,
@@ -19,7 +19,7 @@ const judgment = () => ({
   ask_timing: dr("ask_timing", "ask_now"),
 });
 
-function setup(opts: { decide?: CaptureApi["decide"]; agentSpeaking?: boolean } = {}) {
+function setup(opts: { decide?: CaptureApi["decide"]; agentSpeaking?: boolean; companion?: CaptureCompanion } = {}) {
   const api = {
     postEvents: vi.fn<CaptureApi["postEvents"]>(async () => ({})),
     postTranscript: vi.fn<CaptureApi["postTranscript"]>(async () => ({})),
@@ -50,6 +50,8 @@ function setup(opts: { decide?: CaptureApi["decide"]; agentSpeaking?: boolean } 
     sessionId: "s_test",
     getT: () => now() / 1000,
     onError,
+    companion: opts.companion,
+    session: { expert: "Sabine", appUrl: "https://ai-apprentice.vercel.app/capture" },
   });
   c.start();
   const publish = (id = "4471") =>
@@ -291,5 +293,61 @@ describe("capture controller", () => {
     await flush();
     expect(bus.all()).toHaveLength(1);
     expect(bus.all()[0]).toMatchObject({ source: "os", type: "app_switched", app: "Microsoft Outlook" });
+  });
+
+  describe("companion buddy", () => {
+    function fakeCompanion() {
+      const sent: { kind: string; arg: unknown }[] = [];
+      const rec = (kind: string) => (arg?: unknown) => {
+        sent.push({ kind, arg });
+        return true;
+      };
+      const companion: CaptureCompanion = {
+        buddyState: rec("state"),
+        buddySay: rec("say"),
+        buddyPoint: rec("point"),
+        buddyClear: rec("clear"),
+        sessionState: rec("session"),
+      };
+      return { companion, sent };
+    }
+    const rect = { x: 0.2, y: 0.3, w: 0.2, h: 0.05 };
+
+    it("a question about an event with a rect sends buddy.say with the question and a glance point", async () => {
+      const { companion, sent } = fakeCompanion();
+      const { c, bus } = setup({ companion });
+      expect(sent[0]).toEqual({ kind: "state", arg: "idle" });
+      expect(sent[1]).toMatchObject({ kind: "session", arg: { mode: "capture", expert: "Sabine", asked: 0, off_record: false } });
+      const ev = bus.publishOs({ type: "field_changed", entity: { kind: "invoice", id: "4471" }, field: "cost_center", from: "4711", to: "0400", rect })!;
+      await vi.advanceTimersByTimeAsync(2500);
+      expect(sent.filter((m) => m.kind === "point")).toEqual([
+        { kind: "point", arg: { id: `glance_${ev.id}`, rect, style: "glance" } },
+      ]);
+      c.onTranscript("agent", "Why did you move invoice 4471 to 0400?");
+      expect(sent.filter((m) => m.kind === "say")).toEqual([{ kind: "say", arg: "Why did you move invoice 4471 to 0400?" }]);
+      c.onTranscript("expert", "It is capex.");
+      expect(sent.filter((m) => m.kind === "say")).toHaveLength(1);
+      expect(sent[sent.length - 1]).toMatchObject({
+        kind: "session",
+        arg: { asked: 1, last_question: "Why did you move invoice 4471 to 0400?", last_answer: "It is capex." },
+      });
+    });
+
+    it("off the record only buddy.state 'paused' and session.state go out", async () => {
+      const { companion, sent } = fakeCompanion();
+      const { c, bus } = setup({ companion });
+      sent.length = 0;
+      c.setOffRecord(true);
+      bus.publishOs({ type: "field_changed", entity: { kind: "invoice", id: "1" }, field: "cost_center", to: "0400", rect });
+      c.onTranscript("agent", "Paused.");
+      c.onTranscript("expert", "private");
+      c.setAgent({ status: "connected", mode: "speaking" });
+      await vi.advanceTimersByTimeAsync(10000);
+      expect(sent.map((m) => m.kind).every((k) => k === "state" || k === "session")).toBe(true);
+      expect(sent.filter((m) => m.kind === "state").map((m) => m.arg)).toEqual(["paused"]);
+      expect(sent.filter((m) => m.kind === "session").every((m) => (m.arg as { off_record: boolean }).off_record)).toBe(true);
+      c.setOffRecord(false);
+      expect(sent[sent.length - 2]).toEqual({ kind: "state", arg: "speaking" });
+    });
   });
 });

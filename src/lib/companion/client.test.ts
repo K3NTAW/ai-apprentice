@@ -214,3 +214,74 @@ describe("companion client", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 });
+
+describe("protocol v2", () => {
+  function paired() {
+    const s = setup();
+    s.client.connect();
+    s.last().open();
+    s.last().receive(STATUS);
+    s.last().sent.length = 0;
+    return s;
+  }
+  const sent = (s: { last: () => FakeSocket }) => s.last().sent.map((m) => JSON.parse(m));
+  const rect = { x: 0.1, y: 0.2, w: 0.3, h: 0.1 };
+  const session = {
+    mode: "capture" as const,
+    title: "Capture: Sabine",
+    expert: "Sabine",
+    asked: 2,
+    guardrails: 1,
+    last_question: "Why 0400?",
+    last_answer: "Capex.",
+    off_record: false,
+    app_url: "https://ai-apprentice.vercel.app/capture",
+  };
+
+  it("senders emit exactly the protocol shapes", () => {
+    const s = paired();
+    expect(s.client.buddyState("thinking")).toBe(true);
+    s.client.buddySay("x".repeat(400));
+    s.client.buddySay("Why?", 4000);
+    s.client.buddyPoint({ id: "g1", rect, style: "glance" });
+    s.client.buddyPoint({ id: "iv_1", rect: { ...rect, x: 2 }, style: "stop", text: "y".repeat(200), ttl_ms: 9000 });
+    s.client.buddyClear("iv_1");
+    s.client.buddyClear();
+    s.client.sessionState(session);
+    expect(sent(s)).toEqual([
+      { type: "buddy.state", state: "thinking" },
+      { type: "buddy.say", text: "x".repeat(280) },
+      { type: "buddy.say", text: "Why?", ttl_ms: 4000 },
+      { type: "buddy.point", id: "g1", rect, style: "glance" },
+      { type: "buddy.point", id: "iv_1", rect: { ...rect, x: 1 }, style: "stop", text: "y".repeat(140), ttl_ms: 9000 },
+      { type: "buddy.clear", id: "iv_1" },
+      { type: "buddy.clear" },
+      { type: "session.state", ...session },
+    ]);
+  });
+
+  it("senders are no-ops when not paired; state is resent on pairing", () => {
+    const s = setup();
+    s.client.connect();
+    s.last().open();
+    s.last().sent.length = 0;
+    expect(s.client.buddyState("listening")).toBe(false);
+    expect(s.client.buddySay("hi")).toBe(false);
+    expect(s.client.buddyPoint({ id: "g", rect, style: "glance" })).toBe(false);
+    expect(s.client.buddyClear()).toBe(false);
+    expect(s.client.sessionState(session)).toBe(false);
+    expect(s.last().sent).toEqual([]);
+    s.last().receive(STATUS);
+    expect(sent(s)).toEqual([{ type: "buddy.state", state: "listening" }, { type: "session.state", ...session }]);
+  });
+
+  it("a shortcut message reaches the registered handler; unknown actions are ignored", () => {
+    const s = paired();
+    const fn = vi.fn();
+    s.client.on("shortcut", fn);
+    s.last().receive({ type: "shortcut", action: "end_task" });
+    s.last().receive({ type: "shortcut", action: "format_disk" });
+    expect(fn.mock.calls).toEqual([["end_task"]]);
+    expect(parseCompanionMessage(JSON.stringify({ type: "shortcut", action: "talk_start" }))).toEqual({ type: "shortcut", action: "talk_start" });
+  });
+});

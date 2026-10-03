@@ -13,6 +13,8 @@ import type { EventBus } from "@/lib/perception/eventBus";
 import type { ActivityTracker } from "@/lib/perception/activity";
 import { COMPANION_STALE_MS, type AskGate, type CompanionActivity } from "@/lib/voice/askGate";
 import { redactScreenEvent } from "@/lib/perception/redactEvent";
+import type { CompanionClient } from "@/lib/companion/client";
+import { buddyStateFor } from "@/lib/companion/buddyState";
 import { buildScreenEventTurn, describeEvent, describeObject, type AskKind } from "@/lib/voice/prompts";
 
 export const TICK_MS = 500;
@@ -63,7 +65,15 @@ export type CaptureControllerOptions = {
   getT: () => number;
   onChange?: () => void;
   onError?: (where: string, err: unknown) => void;
+  /** Desktop companion buddy and panel (protocol v2); every sender is a no-op while not paired. */
+  companion?: CaptureCompanion | null;
+  /** What the companion panel shows about this session. */
+  session?: { expert: string; title?: string; appUrl?: string };
 };
+
+export type CaptureCompanion = Pick<CompanionClient, "buddyState" | "buddySay" | "buddyPoint" | "buddyClear" | "sessionState">;
+/** Voice agent status and mode (useVoiceAgent); null in text mode. */
+export type AgentPresence = { status: string | null; mode: string | null };
 
 type Pending = { event: ScreenEvent; decisions: Decisions; since: number };
 
@@ -92,6 +102,7 @@ export function fallbackQuestion(event: ScreenEvent, ask: AskKind): string {
 
 export function createCaptureController(opts: CaptureControllerOptions) {
   const { api, voice, bus, activity, gate, now, getT, onChange, onError } = opts;
+  const buddy = opts.companion ?? null;
   const seen: ScreenEvent[] = [];
   let pending: Pending[] = [];
   const debrief: DebriefItem[] = [];
@@ -108,8 +119,52 @@ export function createCaptureController(opts: CaptureControllerOptions) {
   let unsubscribe: (() => void) | null = null;
   // Once a kind hits its daily cap, the loop stops calling it for this session.
   const limited = new Set<LimitedKind>();
+  let running = false;
+  let talking = false;
+  let agent: AgentPresence = { status: null, mode: null };
+  let lastAnswer = "";
+  let sentBuddy: string | null = null;
+  let sentSession: string | null = null;
 
-  const changed = () => onChange?.();
+  /** Sends buddy.state and session.state when they changed. Off the record only these two go out. */
+  function syncCompanion() {
+    if (!buddy) return;
+    const state = buddyStateFor({
+      active: running,
+      paused: offRecord,
+      voiceStatus: agent.status,
+      mode: agent.mode,
+      pending: deciding,
+      talking,
+    });
+    if (state !== sentBuddy) {
+      sentBuddy = state;
+      buddy.buddyState(state);
+    }
+    const g = gate.stats();
+    const expert = opts.session?.expert ?? "";
+    const session = {
+      mode: running ? ("capture" as const) : null,
+      title: opts.session?.title ?? (expert ? `Capture: ${expert}` : "Capture"),
+      expert,
+      asked: g.asked,
+      guardrails: g.guardrailAsked,
+      last_question: lastQuestion ?? "",
+      last_answer: lastAnswer,
+      off_record: offRecord,
+      app_url: opts.session?.appUrl ?? "",
+    };
+    const key = JSON.stringify(session);
+    if (key !== sentSession) {
+      sentSession = key;
+      buddy.sessionState(session);
+    }
+  }
+
+  const changed = () => {
+    syncCompanion();
+    onChange?.();
+  };
   const hitLimit = (kind: LimitedKind) => {
     limited.add(kind);
     changed();
@@ -143,7 +198,8 @@ export function createCaptureController(opts: CaptureControllerOptions) {
     const c = companionBlock();
     return {
       typing: snap.typing,
-      speaking: snap.speaking,
+      // Push-to-talk held: the user is talking, so the gate holds questions and the agent listens.
+      speaking: snap.speaking || talking,
       silence_ms: snap.silence_ms,
       ...(c ? { companion: c } : {}),
     };
@@ -172,6 +228,8 @@ export function createCaptureController(opts: CaptureControllerOptions) {
     };
     lastQuestion = question;
     voice.promptTurn(buildScreenEventTurn(event, kind), { event, ask: kind });
+    // Glance at what the question is about; no halo, the expert keeps driving.
+    if (event.rect) buddy?.buddyPoint({ id: `glance_${event.id}`, rect: event.rect, style: "glance" });
   }
 
   /** Runs the gate on one item; true when it is settled (asked, saved or dropped as routine). */
@@ -303,6 +361,7 @@ export function createCaptureController(opts: CaptureControllerOptions) {
     if (speaker === "agent") {
       if (offRecord) return;
       postEntry("agent", text);
+      buddy?.buddySay(text);
       if (open && !open.filled) {
         open.qa.question = text;
         open.filled = true;
@@ -323,7 +382,10 @@ export function createCaptureController(opts: CaptureControllerOptions) {
     activity.noteSpeech(true);
     activity.noteSpeech(false);
     postEntry(speaker, text);
-    if (open) closeOpen(text);
+    if (open) {
+      lastAnswer = text;
+      closeOpen(text);
+    }
     changed();
   }
 
@@ -375,10 +437,12 @@ export function createCaptureController(opts: CaptureControllerOptions) {
   return {
     start() {
       if (timer) return;
+      running = true;
       unsubscribe = bus.subscribe((ev) => {
         void onEvent(ev);
       });
       timer = setInterval(tick, TICK_MS);
+      changed();
     },
     stop() {
       if (timer) clearInterval(timer);
@@ -389,6 +453,8 @@ export function createCaptureController(opts: CaptureControllerOptions) {
       for (const p of pending) debrief.push({ event: p.event, why: "task_ended" });
       pending = [];
       closeOpen();
+      running = false;
+      talking = false;
       changed();
     },
     tick,
@@ -398,6 +464,19 @@ export function createCaptureController(opts: CaptureControllerOptions) {
     onCompanionApp,
     onCompanionDisconnected,
     setOffRecord,
+    /** Voice agent status and mode, for the buddy state. */
+    setAgent(next: AgentPresence) {
+      if (next.status === agent.status && next.mode === agent.mode) return;
+      agent = { ...next };
+      changed();
+    },
+    /** Push-to-talk from the companion: while held the gate holds and the agent hears the user. */
+    setTalking(held: boolean) {
+      if (held === talking) return;
+      talking = held;
+      if (held && !offRecord) voice.noteUserActivity();
+      changed();
+    },
     setCapture(handle: FrameCapture | null) {
       capture = handle;
       if (handle && offRecord) handle.pause();

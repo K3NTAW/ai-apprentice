@@ -2,7 +2,8 @@
 
 // Capture page (pivot): a session console on the left watches the expert's real screen (any app);
 // the voice side panel stays on the right. The desktop companion, when paired, adds typing/pointer
-// activity and frontmost-app events. Voice is optional: when it cannot start, the loop runs in text mode and questions show in the panel.
+// activity and frontmost-app events, mirrors the session on its buddy and panel, and its shortcuts drive
+// the controls. Voice is optional: when it cannot start, the loop runs in text mode and questions show in the panel.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createActivityTracker } from "@/lib/perception/activity";
@@ -14,6 +15,7 @@ import type { ScreenEvent } from "@/lib/types";
 import {
   createCaptureController,
   fallbackQuestion,
+  type CaptureCompanion,
   type CaptureController,
   type CaptureVoice,
 } from "@/lib/capture/controller";
@@ -23,7 +25,9 @@ import {
   type CompanionClient,
   type CompanionPermissions,
   type CompanionStatus,
+  type ShortcutAction,
 } from "@/lib/companion/client";
+import { routeShortcut } from "@/lib/companion/shortcuts";
 import CaptureConsole from "./CaptureConsole";
 import { dailyLimitNotice, voiceStartNotice } from "./dailyLimit";
 import SidePanel, { type PresenceStatus } from "./SidePanel";
@@ -34,6 +38,7 @@ type Loop = {
   activity: ReturnType<typeof createActivityTracker>;
   getT: () => number;
   sessionId: string;
+  startedAt: number;
 };
 
 type View = {
@@ -97,6 +102,7 @@ function CaptureInner() {
   const voiceModeRef = useRef(false);
   const captureRef = useRef<CaptureHandle | null>(null);
   const companionRef = useRef<CompanionClient | null>(null);
+  const shortcutRef = useRef<(a: ShortcutAction) => void>(() => {});
   const [companionStatus, setCompanionStatus] = useState<CompanionStatus>("not connected");
   const [companionPerms, setCompanionPerms] = useState<CompanionPermissions | null>(null);
   const [shareWarning, setShareWarning] = useState<string | null>(null);
@@ -133,6 +139,7 @@ function CaptureInner() {
       }),
       client.on("activity", (a) => loopRef.current?.ctrl.onCompanionActivity(a)),
       client.on("app", (a) => loopRef.current?.ctrl.onCompanionApp(a)),
+      client.on("shortcut", (a) => shortcutRef.current(a)),
     ];
     client.connect();
     return () => {
@@ -141,6 +148,10 @@ function CaptureInner() {
       companionRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    loopRef.current?.ctrl.setAgent({ status: textMode ? null : agent.status, mode: textMode ? null : agentMode });
+  }, [agent.status, agentMode, textMode, running]);
 
   useEffect(
     () => () => {
@@ -187,6 +198,14 @@ function CaptureInner() {
       },
       isSpeaking: () => voiceModeRef.current && agentRef.current.isSpeaking,
     };
+    // Reads the ref on every call: the companion client may be re-created while the session runs.
+    const buddy: CaptureCompanion = {
+      buddyState: (s) => companionRef.current?.buddyState(s) ?? false,
+      buddySay: (text, ttl) => companionRef.current?.buddySay(text, ttl) ?? false,
+      buddyPoint: (p) => companionRef.current?.buddyPoint(p) ?? false,
+      buddyClear: (id) => companionRef.current?.buddyClear(id) ?? false,
+      sessionState: (st) => companionRef.current?.sessionState(st) ?? false,
+    };
     const ctrl = createCaptureController({
       api: createHttpCaptureApi(sessionId, () => bus.all()),
       voice,
@@ -198,8 +217,10 @@ function CaptureInner() {
       getT,
       onChange: () => setView(viewOf(ctrl)),
       onError: (where, err) => console.warn(`capture: ${where} failed`, err),
+      companion: buddy,
+      session: { expert: name, appUrl: window.location.href },
     });
-    loopRef.current = { ctrl, bus, activity, getT, sessionId };
+    loopRef.current = { ctrl, bus, activity, getT, sessionId, startedAt: t0 };
     ctrl.start();
     setRunning(true);
 
@@ -275,6 +296,18 @@ function CaptureInner() {
     if (voiceModeRef.current) void agentRef.current.stop();
     router.push(`/debrief/${loop.sessionId}`);
   }
+
+  // Companion shortcuts call the same controls as the buttons; Capture's pause is off the record.
+  useEffect(() => {
+    shortcutRef.current = (a) =>
+      routeShortcut(a, {
+        talk: (held) => loopRef.current?.ctrl.setTalking(held),
+        toggleOffRecord: togglePause,
+        togglePause,
+        endTask,
+        startedAt: () => loopRef.current?.startedAt ?? null,
+      });
+  });
 
   const status: PresenceStatus = !running
     ? "idle"

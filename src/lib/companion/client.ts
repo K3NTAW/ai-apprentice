@@ -1,5 +1,6 @@
 // Browser client for the desktop companion (COMPANION PROTOCOL, pivot wave): ws://127.0.0.1:47321,
-// hello with the 6-digit pairing code, status/activity/app in, overlay.halo/overlay.clear out.
+// hello with the 6-digit pairing code, status/activity/app/shortcut in, overlay.* and (protocol v2)
+// buddy.state/buddy.say/buddy.point/buddy.clear/session.state out.
 // Works without the companion: status stays "not connected" and nothing throws.
 // The pairing code is never logged.
 
@@ -8,6 +9,7 @@ export const CODE_KEY = "ai-apprentice.companion.code";
 export const BACKOFF_BASE_MS = 1000;
 export const BACKOFF_MAX_MS = 30000;
 export const HALO_TEXT_MAX = 140;
+export const SAY_TEXT_MAX = 280;
 const MAX_APP = 200;
 const MAX_TITLE = 500;
 
@@ -24,8 +26,30 @@ export type CompanionActivityMsg = {
   idle_ms: number;
 };
 export type CompanionAppMsg = { type: "app"; t: number; app: string; title: string };
-export type CompanionMessage = CompanionStatusMsg | CompanionActivityMsg | CompanionAppMsg | { type: "pong" };
+export const SHORTCUT_ACTIONS = ["talk_start", "talk_end", "off_record_toggle", "pause_toggle", "end_task"] as const;
+export type ShortcutAction = (typeof SHORTCUT_ACTIONS)[number];
+export type CompanionShortcutMsg = { type: "shortcut"; action: ShortcutAction };
+export type CompanionMessage =
+  | CompanionStatusMsg
+  | CompanionActivityMsg
+  | CompanionAppMsg
+  | CompanionShortcutMsg
+  | { type: "pong" };
 export type HaloRect = { x: number; y: number; w: number; h: number };
+export type BuddyState = "idle" | "listening" | "thinking" | "speaking" | "paused";
+export type PointStyle = "glance" | "stop";
+export type BuddyPoint = { id: string; rect: HaloRect; style: PointStyle; text?: string; ttl_ms?: number };
+export type SessionState = {
+  mode: "capture" | "teach" | null;
+  title: string;
+  expert: string;
+  asked: number;
+  guardrails: number;
+  last_question: string;
+  last_answer: string;
+  off_record: boolean;
+  app_url: string;
+};
 
 /** The subset of WebSocket the client uses, so tests can inject a fake. */
 export type SocketLike = {
@@ -51,12 +75,16 @@ type Listeners = {
   status: (s: CompanionStatus, permissions: CompanionPermissions | null) => void;
   activity: (a: CompanionActivityMsg) => void;
   app: (a: CompanionAppMsg) => void;
+  shortcut: (action: ShortcutAction) => void;
 };
 
 const OPEN = 1;
 const isBool = (v: unknown): v is boolean => typeof v === "boolean";
 const isCount = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v) && v >= 0;
 const clamp01 = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0);
+const clampRect = (r: HaloRect): HaloRect => ({ x: clamp01(r.x), y: clamp01(r.y), w: clamp01(r.w), h: clamp01(r.h) });
+const ttl = (v: unknown) => (typeof v === "number" && Number.isFinite(v) && v > 0 ? Math.round(v) : undefined);
+const count = (v: number) => (Number.isFinite(v) && v > 0 ? Math.floor(v) : 0);
 
 /** Validates one incoming frame; malformed frames return null and are ignored. */
 export function parseCompanionMessage(raw: unknown): CompanionMessage | null {
@@ -95,6 +123,9 @@ export function parseCompanionMessage(raw: unknown): CompanionMessage | null {
     case "app":
       if (!isCount(m.t) || typeof m.app !== "string" || !m.app.trim() || typeof m.title !== "string") return null;
       return { type: "app", t: m.t, app: m.app.slice(0, MAX_APP), title: m.title.slice(0, MAX_TITLE) };
+    case "shortcut":
+      if (!(SHORTCUT_ACTIONS as readonly unknown[]).includes(m.action)) return null;
+      return { type: "shortcut", action: m.action as ShortcutAction };
     case "pong":
       return { type: "pong" };
     default:
@@ -126,7 +157,11 @@ export function createCompanionClient({
     status: new Set(),
     activity: new Set(),
     app: new Set(),
+    shortcut: new Set(),
   };
+  // Last buddy and session state, resent when pairing completes.
+  let lastBuddy: BuddyState | null = null;
+  let lastSession: SessionState | null = null;
   let socket: SocketLike | null = null;
   let status: CompanionStatus = "not connected";
   let permissions: CompanionPermissions | null = null;
@@ -198,12 +233,19 @@ export function createCompanionClient({
     if (msg.type === "status") {
       version = msg.version;
       permissions = msg.permissions;
+      const wasPaired = status === "paired";
       status = "paired";
+      if (!wasPaired) {
+        if (lastBuddy) send({ type: "buddy.state", state: lastBuddy });
+        if (lastSession) send({ type: "session.state", ...lastSession });
+      }
       for (const fn of listeners.status) fn(status, permissions);
     } else if (msg.type === "activity") {
       if (status === "paired") for (const fn of listeners.activity) fn(msg);
     } else if (msg.type === "app") {
       if (status === "paired") for (const fn of listeners.app) fn(msg);
+    } else if (msg.type === "shortcut") {
+      if (status === "paired") for (const fn of listeners.shortcut) fn(msg.action);
     }
   }
 
@@ -294,13 +336,50 @@ export function createCompanionClient({
     },
     /** Draws a halo over any app. No-op returning false while not paired. */
     showHalo(id: string, rect: HaloRect, text?: string): boolean {
-      const r = { x: clamp01(rect.x), y: clamp01(rect.y), w: clamp01(rect.w), h: clamp01(rect.h) };
-      const msg: Record<string, unknown> = { type: "overlay.halo", id: String(id), rect: r };
+      const msg: Record<string, unknown> = { type: "overlay.halo", id: String(id), rect: clampRect(rect) };
       if (typeof text === "string" && text) msg.text = text.slice(0, HALO_TEXT_MAX);
       return send(msg);
     },
     clearHalo(id?: string): boolean {
       return send(id === undefined ? { type: "overlay.clear" } : { type: "overlay.clear", id: String(id) });
+    },
+    /** Buddy presence. Remembered and resent on pairing; false while not paired. */
+    buddyState(state: BuddyState): boolean {
+      lastBuddy = state;
+      return send({ type: "buddy.state", state });
+    },
+    /** Caption next to the buddy (agent lines only), clipped to 280 chars. */
+    buddySay(text: string, ttlMs?: number): boolean {
+      const t = String(text ?? "").trim().slice(0, SAY_TEXT_MAX);
+      if (!t) return false;
+      const ms = ttl(ttlMs);
+      return send(ms === undefined ? { type: "buddy.say", text: t } : { type: "buddy.say", text: t, ttl_ms: ms });
+    },
+    /** 'glance' flies to the rect briefly; 'stop' stays with halo and bubble until buddyClear. */
+    buddyPoint(p: BuddyPoint): boolean {
+      const msg: Record<string, unknown> = { type: "buddy.point", id: String(p.id), rect: clampRect(p.rect), style: p.style };
+      if (typeof p.text === "string" && p.text) msg.text = p.text.slice(0, HALO_TEXT_MAX);
+      const ms = ttl(p.ttl_ms);
+      if (ms !== undefined) msg.ttl_ms = ms;
+      return send(msg);
+    },
+    buddyClear(id?: string): boolean {
+      return send(id === undefined ? { type: "buddy.clear" } : { type: "buddy.clear", id: String(id) });
+    },
+    /** Session summary for the companion panel. Remembered and resent on pairing. */
+    sessionState(s: SessionState): boolean {
+      lastSession = {
+        mode: s.mode,
+        title: String(s.title ?? ""),
+        expert: String(s.expert ?? ""),
+        asked: count(s.asked),
+        guardrails: count(s.guardrails),
+        last_question: String(s.last_question ?? "").slice(0, SAY_TEXT_MAX),
+        last_answer: String(s.last_answer ?? "").slice(0, SAY_TEXT_MAX),
+        off_record: Boolean(s.off_record),
+        app_url: String(s.app_url ?? ""),
+      };
+      return send({ type: "session.state", ...lastSession });
     },
     dispose() {
       disposed = true;
