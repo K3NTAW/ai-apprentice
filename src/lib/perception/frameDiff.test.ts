@@ -31,7 +31,10 @@ describe("frameDiff", () => {
     const a = frame(4000, [0, 0, 0]);
     const b = frame(4000, [0, 0, 0]);
     b.set([255, 255, 255], 0);
-    expect(hasChanged(a, b)).toBe(true); // 1 of 1000 sampled = 0.001 < 0.002
+    expect(hasChanged(a, b)).toBe(false); // 1 of 1000 sampled = 0.001 < 0.002
+    expect(hasChanged(a, b, 0.001)).toBe(true);
+    b.set([255, 255, 255], 16); // pixel 4, the next sampled one
+    expect(hasChanged(a, b)).toBe(true);
     expect(hasChanged(a, b, 0.5)).toBe(false);
   });
 
