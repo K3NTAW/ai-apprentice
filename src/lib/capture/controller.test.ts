@@ -4,6 +4,7 @@ import { createEventBus } from "@/lib/perception/eventBus";
 import { createAskGate } from "@/lib/voice/askGate";
 import type { DecisionQuestionName, DecisionResult } from "@/lib/types";
 import { createCaptureController, type CaptureApi, type CaptureCompanion, type CaptureVoice } from "./controller";
+import type { SessionAgent } from "@/lib/companion/agentState";
 
 const dr = (question: DecisionQuestionName, answer: string | number): DecisionResult => ({
   question,
@@ -348,6 +349,113 @@ describe("capture controller", () => {
       expect(sent.filter((m) => m.kind === "session").every((m) => (m.arg as { off_record: boolean }).off_record)).toBe(true);
       c.setOffRecord(false);
       expect(sent[sent.length - 2]).toEqual({ kind: "state", arg: "speaking" });
+    });
+  });
+
+  describe("agents wave: agent, dock and shortcut questions", () => {
+    const URLS = Object.fromEntries(
+      ["idle", "listening", "thinking", "talking", "asking", "stop", "happy", "paused"].map((s) => [s, `data:image/svg+xml;base64,${s}`]),
+    ) as SessionAgent["avatar"];
+    const AGENT: SessionAgent = { id: "a1", name: "Senior Sales Person", role: "Sales", avatar: URLS };
+
+    function make(extra: { agent?: SessionAgent | null; silence?: boolean } = {}) {
+      const sent: { kind: string; arg: unknown[] }[] = [];
+      const rec = (kind: string) => (...arg: unknown[]) => {
+        sent.push({ kind, arg });
+        return true;
+      };
+      const companion: CaptureCompanion = {
+        buddyState: rec("state"),
+        buddySay: rec("say"),
+        buddyPoint: rec("point"),
+        buddyClear: rec("clear"),
+        sessionState: rec("session"),
+        dockShow: rec("dock.show"),
+        dockHide: rec("dock.hide"),
+        dockLearned: rec("dock.learned"),
+      };
+      const now = () => Date.now();
+      const bus = createEventBus({ now: () => now() / 1000 });
+      const voice = { promptTurn: vi.fn(), injectContext: vi.fn(), noteUserActivity: vi.fn(), setMuted: vi.fn(), isSpeaking: vi.fn(() => false) };
+      const api = {
+        postEvents: vi.fn(async () => ({})),
+        postTranscript: vi.fn(async () => ({})),
+        postQA: vi.fn(async () => ({})),
+        setOffRecord: vi.fn(async () => ({})),
+        decide: vi.fn(async () => judgment()),
+      };
+      const c = createCaptureController({
+        api,
+        voice: voice as unknown as CaptureVoice,
+        bus,
+        activity: createActivityTracker({ now }),
+        gate: createAskGate({ now, minGapMs: 0 }),
+        now,
+        sessionId: "s",
+        getT: () => now() / 1000,
+        companion,
+        session: { expert: "Sabine" },
+        agent: extra.agent === undefined ? AGENT : extra.agent,
+      });
+      return { c, bus, sent, voice, api, kinds: () => sent.map((m) => m.kind) };
+    }
+
+    it("session.state carries the agent with eight avatar data URLs; dock.show on start, dock.hide on end", () => {
+      const { c, sent, kinds } = make();
+      c.start();
+      expect(kinds()).toContain("dock.show");
+      expect(sent.find((m) => m.kind === "dock.show")!.arg).toEqual(["right"]);
+      const st = sent.find((m) => m.kind === "session")!.arg[0] as { agent: SessionAgent };
+      expect(Object.keys(st.agent.avatar)).toHaveLength(8);
+      expect(st.agent).toEqual(AGENT);
+      c.stop();
+      expect(kinds()[kinds().length - 1]).not.toBe("dock.show");
+      expect(kinds().filter((k) => k === "dock.hide")).toHaveLength(1);
+    });
+
+    it("without an agent session.state has no agent block (old path)", () => {
+      const { c, sent } = make({ agent: null });
+      c.start();
+      expect(sent.find((m) => m.kind === "session")!.arg[0]).not.toHaveProperty("agent");
+    });
+
+    it("dock.learned: shortcut on use, step and guardrail on answers, deduped, nothing off the record", async () => {
+      const { c, bus, sent } = make();
+      c.start();
+      const ev = bus.publishOs({ type: "field_changed", entity: { kind: "invoice", id: "4471" }, field: "cost_center", from: "4711", to: "0400" })!;
+      await vi.advanceTimersByTimeAsync(2500);
+      c.onTranscript("expert", "It is capex.");
+      expect(ev.id).toBeTruthy();
+      c.onCompanionChord({ t: 1, chord: "Cmd+Enter", app: "Outlook" });
+      await vi.advanceTimersByTimeAsync(2500);
+      c.onCompanionChord({ t: 2, chord: "Cmd+Enter", app: "Outlook" });
+      await vi.advanceTimersByTimeAsync(2500);
+      c.setOffRecord(true);
+      c.onCompanionChord({ t: 3, chord: "Cmd+K", app: "Outlook" });
+      await vi.advanceTimersByTimeAsync(2500);
+      const learned = sent.filter((m) => m.kind === "dock.learned").map((m) => m.arg);
+      expect(learned).toEqual([
+        ["step", "invoice 4471: It is capex."],
+        ["shortcut", "Cmd+Enter in Outlook"],
+      ]);
+    });
+
+    it("asks about a repeated shortcut at a pause with the shortcut question; at most one live per 3 minutes", async () => {
+      const { c, voice, sent } = make();
+      c.start();
+      const press = async (chord: string) => {
+        c.onCompanionChord({ t: 0, chord, app: "Outlook" });
+        await vi.advanceTimersByTimeAsync(2600);
+      };
+      for (let i = 0; i < 3; i++) await press("Cmd+Shift+M");
+      expect(voice.promptTurn).toHaveBeenCalledTimes(1);
+      expect(voice.promptTurn.mock.calls[0][1]).toMatchObject({ ask: "shortcut" });
+      expect(c.lastQuestion()).toBe("You pressed Cmd+Shift+M in Outlook there. What does it do for you and why that way?");
+      c.onTranscript("expert", "It moves the mail to the done folder.");
+      for (let i = 0; i < 3; i++) await press("Cmd+Shift+J");
+      expect(voice.promptTurn).toHaveBeenCalledTimes(1);
+      expect(c.debrief().map((d) => d.why)).toContain("shortcut_cap");
+      expect(sent.filter((m) => m.kind === "dock.learned").map((m) => m.arg[1])).toContain("Cmd+Shift+M: It moves the mail to the done folder.");
     });
   });
 });

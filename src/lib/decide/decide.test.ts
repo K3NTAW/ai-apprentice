@@ -322,3 +322,40 @@ describe("POST /api/decide", () => {
     expect(body.results.ask_timing.provider).toBe("heuristic");
   });
 });
+
+describe("shortcuts as judgment-call candidates (A9)", async () => {
+  const { shortcutVerdict, createShortcutAskCap, SHORTCUT_REPEAT_N, SHORTCUT_ASK_GAP_MS } = await import("./shortcut");
+  const { heuristicAnswer } = await import("./heuristic");
+  const use = (t: number, chord = "Cmd+Shift+M", app = "Outlook") => ({ type: "shortcut_used", t, chord, app });
+
+  it("a state-changing effect makes a shortcut a candidate", () => {
+    expect(shortcutVerdict(use(10), [{ type: "item_sent" }], [])).toEqual({ candidate: true, why: "state_change" });
+    expect(shortcutVerdict(use(10), [{ type: "field_changed", field: "folder", to: "Archive" }], []).candidate).toBe(true);
+    expect(shortcutVerdict(use(10), [{ type: "field_changed", field: "subject", to: "Hi" }], []).candidate).toBe(false);
+    expect(shortcutVerdict(use(10), [], []).candidate).toBe(false);
+  });
+
+  it(`the ${SHORTCUT_REPEAT_N}rd use of the same chord+app within 10 minutes is a candidate; other apps do not count`, () => {
+    const hist = [use(1), use(5), use(6, "Cmd+Shift+M", "Excel")];
+    expect(shortcutVerdict(use(9), [], hist.slice(0, 1)).candidate).toBe(false);
+    expect(shortcutVerdict(use(9), [], hist)).toEqual({ candidate: true, why: "repeated" });
+    expect(shortcutVerdict(use(9 + 700), [], hist).candidate).toBe(false);
+  });
+
+  it("the heuristic provider classes it the same way", () => {
+    expect(heuristicAnswer("event_class", { event: use(10), effects: [{ type: "item_deleted" }] }).answer).toBe("judgment_call");
+    expect(heuristicAnswer("event_class", { event: use(10), recent_events: [] }).answer).toBe("routine");
+  });
+
+  it("at most one shortcut question live per 3 minutes", () => {
+    let t = 0;
+    const cap = createShortcutAskCap({ now: () => t });
+    expect(cap.canAsk("a")).toBe(true);
+    cap.markAsked("a");
+    t = SHORTCUT_ASK_GAP_MS - 1;
+    expect(cap.canAsk("b")).toBe(false);
+    t = SHORTCUT_ASK_GAP_MS;
+    expect(cap.canAsk("b")).toBe(true);
+    expect(cap.canAsk("a")).toBe(false);
+  });
+});

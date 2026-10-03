@@ -27,12 +27,21 @@ export const SCREEN_EVENT_TYPES = [
 ] as const;
 export type ScreenEventType = (typeof SCREEN_EVENT_TYPES)[number];
 
-export const ScreenEventSchema = z.object({
+/** Event types only the desktop companion (source "os") produces. Never offered to or accepted from vision. */
+export const OS_ONLY_EVENT_TYPES = ["shortcut_used"] as const;
+export const ALL_SCREEN_EVENT_TYPES = [...SCREEN_EVENT_TYPES, ...OS_ONLY_EVENT_TYPES] as const;
+export type AnyScreenEventType = (typeof ALL_SCREEN_EVENT_TYPES)[number];
+
+/** A key chord as the companion reports it, e.g. "Cmd+Shift+T". */
+export const CHORD_MAX = 40;
+export const ChordSchema = z.string().min(1).max(CHORD_MAX);
+
+const ScreenEventBase = z.object({
   id: z.string(),
   t: z.number(),
-  // os: frontmost app or window changes reported by the desktop companion.
+  // os: frontmost app or window changes and key chords reported by the desktop companion.
   source: z.enum(["vision", "dom", "os"]),
-  type: z.enum(SCREEN_EVENT_TYPES),
+  type: z.enum(ALL_SCREEN_EVENT_TYPES),
   // kind is free text, e.g. "email", "slide", "cell", "file".
   entity: z.object({ kind: z.string(), id: z.string() }),
   app: z.string().optional(),
@@ -42,15 +51,26 @@ export const ScreenEventSchema = z.object({
   from: z.string().optional(),
   to: z.string().optional(),
   frame_ref: z.string().optional(),
+  // shortcut_used only: the chord, and the ids of the vision events it caused (linked in the browser).
+  chord: ChordSchema.optional(),
+  effect_ids: z.array(z.string()).max(20).optional(),
+});
+
+export const ScreenEventSchema = ScreenEventBase.superRefine((e, ctx) => {
+  if (e.type === "shortcut_used" && !e.chord) ctx.addIssue({ code: "custom", path: ["chord"], message: "chord required" });
+  if (e.type === "shortcut_used" && e.source !== "os") ctx.addIssue({ code: "custom", path: ["source"], message: "shortcut_used is os only" });
 });
 export type ScreenEvent = z.infer<typeof ScreenEventSchema>;
 
-export const VisionEventSchema = ScreenEventSchema.omit({
+/** What vision may report: no os-only types, no chord. */
+export const VisionEventSchema = ScreenEventBase.omit({
   id: true,
   t: true,
   source: true,
   frame_ref: true,
-});
+  chord: true,
+  effect_ids: true,
+}).extend({ type: z.enum(SCREEN_EVENT_TYPES) });
 export type VisionEvent = z.infer<typeof VisionEventSchema>;
 
 export const VisionResultSchema = z.object({ events: z.array(VisionEventSchema) });
@@ -166,12 +186,32 @@ export const WorkMapStepSchema = z.object({
 });
 export type WorkMapStep = z.infer<typeof WorkMapStepSchema>;
 
+/**
+ * A keyboard shortcut the expert used. Dedupe key: chord + app. first_t and count are computed in code from
+ * the session's shortcut_used events, never by the LLM; why is a verified expert quote.
+ */
+export const WorkMapShortcutSchema = z.object({
+  chord: ChordSchema,
+  app: z.string(),
+  effect: z.string(),
+  // Event type of the linked effect, e.g. item_sent; Teach matches the slow path against it.
+  effect_type: z.enum(SCREEN_EVENT_TYPES).optional(),
+  why: z.object({ quote: z.string(), t: z.number() }).optional(),
+  first_t: z.number(),
+  count: z.number().int().min(1),
+  // Work Map step n the shortcut belongs to, when it could be placed.
+  step: z.number().optional(),
+});
+export type WorkMapShortcut = z.infer<typeof WorkMapShortcutSchema>;
+
 export const WorkMapSchema = z.object({
   task: z.string(),
   expert: z.string(),
   confirmed_by_expert: z.boolean(),
   steps: z.array(WorkMapStepSchema),
   open_questions: z.array(z.string()),
+  // Optional: Work Maps from before the agents wave have none. Contract read by the agent page Shortcuts tab.
+  shortcuts: z.array(WorkMapShortcutSchema).optional(),
 });
 export type WorkMap = z.infer<typeof WorkMapSchema>;
 

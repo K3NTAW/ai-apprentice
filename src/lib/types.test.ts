@@ -168,3 +168,25 @@ describe("avatar and agent", () => {
     expect(SessionSchema.parse({ ...base, agent_id: "a" }).agent_id).toBe("a");
   });
 });
+
+describe("shortcut_used (agents wave A5)", async () => {
+  const { VisionEventSchema, WorkMapSchema: WM } = await import("./types");
+  const sc = { id: "ev_1", t: 3, source: "os", type: "shortcut_used", entity: { kind: "shortcut", id: "Cmd+Enter" }, chord: "Cmd+Enter", app: "Outlook" };
+  it("requires a chord of at most 40 chars and source os", () => {
+    expect(ScreenEventSchema.safeParse(sc).success).toBe(true);
+    expect(ScreenEventSchema.safeParse({ ...sc, chord: undefined }).success).toBe(false);
+    expect(ScreenEventSchema.safeParse({ ...sc, chord: "x".repeat(41) }).success).toBe(false);
+    expect(ScreenEventSchema.safeParse({ ...sc, source: "vision" }).success).toBe(false);
+  });
+  it("vision can never report shortcut_used", () => {
+    expect(VisionEventSchema.safeParse({ type: "shortcut_used", entity: { kind: "shortcut", id: "Cmd+Enter" } }).success).toBe(false);
+    expect(VisionEventSchema.safeParse({ type: "item_sent", entity: { kind: "email", id: "x" } }).success).toBe(true);
+  });
+  it("old Work Maps without shortcuts still parse; shortcuts parse when present", () => {
+    const base = { task: "t", expert: "Sabine", confirmed_by_expert: false, steps: [], open_questions: [] };
+    expect(WM.parse(base).shortcuts).toBeUndefined();
+    const withSc = { ...base, shortcuts: [{ chord: "Cmd+Enter", app: "Outlook", effect: "sent", first_t: 1, count: 2 }] };
+    expect(WM.parse(withSc).shortcuts).toHaveLength(1);
+    expect(WM.safeParse({ ...base, shortcuts: [{ chord: "Cmd+Enter", app: "Outlook", effect: "sent", first_t: 1, count: 0 }] }).success).toBe(false);
+  });
+});

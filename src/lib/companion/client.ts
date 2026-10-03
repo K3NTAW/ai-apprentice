@@ -1,8 +1,12 @@
 // Browser client for the desktop companion (COMPANION PROTOCOL, pivot wave): ws://127.0.0.1:47321,
 // hello with the 6-digit pairing code, status/activity/app/shortcut in, overlay.* and (protocol v2)
-// buddy.state/buddy.say/buddy.point/buddy.clear/session.state out.
+// buddy.state/buddy.say/buddy.point/buddy.clear/session.state out; protocol v3: chord in, dock.* out and
+// session.state.agent.
 // Works without the companion: status stays "not connected" and nothing throws.
 // The pairing code is never logged.
+
+import { CHORD_APP_MAX, isAllowedChord } from "./chord";
+import { validSessionAgent, type SessionAgent } from "./agentState";
 
 export const COMPANION_URL = "ws://127.0.0.1:47321";
 export const CODE_KEY = "ai-apprentice.companion.code";
@@ -29,11 +33,16 @@ export type CompanionAppMsg = { type: "app"; t: number; app: string; title: stri
 export const SHORTCUT_ACTIONS = ["talk_start", "talk_end", "off_record_toggle", "pause_toggle", "end_task"] as const;
 export type ShortcutAction = (typeof SHORTCUT_ACTIONS)[number];
 export type CompanionShortcutMsg = { type: "shortcut"; action: ShortcutAction };
+export type CompanionChordMsg = { type: "chord"; t: number; chord: string; app: string };
+export type DockSide = "right" | "left";
+export type DockLearnedKind = "step" | "shortcut" | "guardrail";
+export const DOCK_TEXT_MAX = 140;
 export type CompanionMessage =
   | CompanionStatusMsg
   | CompanionActivityMsg
   | CompanionAppMsg
   | CompanionShortcutMsg
+  | CompanionChordMsg
   | { type: "pong" };
 export type HaloRect = { x: number; y: number; w: number; h: number };
 export type BuddyState = "idle" | "listening" | "thinking" | "speaking" | "paused";
@@ -49,6 +58,8 @@ export type SessionState = {
   last_answer: string;
   off_record: boolean;
   app_url: string;
+  /** Protocol v3, optional: the session's agent and its eight avatar data URLs. Omitted when invalid. */
+  agent?: SessionAgent;
 };
 
 /** The subset of WebSocket the client uses, so tests can inject a fake. */
@@ -76,6 +87,7 @@ type Listeners = {
   activity: (a: CompanionActivityMsg) => void;
   app: (a: CompanionAppMsg) => void;
   shortcut: (action: ShortcutAction) => void;
+  chord: (c: CompanionChordMsg) => void;
 };
 
 const OPEN = 1;
@@ -126,6 +138,10 @@ export function parseCompanionMessage(raw: unknown): CompanionMessage | null {
     case "shortcut":
       if (!(SHORTCUT_ACTIONS as readonly unknown[]).includes(m.action)) return null;
       return { type: "shortcut", action: m.action as ShortcutAction };
+    case "chord":
+      // Defensive: the companion never sends plain typing; drop anything that looks like it.
+      if (!isCount(m.t) || !isAllowedChord(m.chord) || typeof m.app !== "string") return null;
+      return { type: "chord", t: m.t, chord: m.chord, app: m.app.trim().slice(0, CHORD_APP_MAX) };
     case "pong":
       return { type: "pong" };
     default:
@@ -158,10 +174,12 @@ export function createCompanionClient({
     activity: new Set(),
     app: new Set(),
     shortcut: new Set(),
+    chord: new Set(),
   };
   // Last buddy and session state, resent when pairing completes.
   let lastBuddy: BuddyState | null = null;
   let lastSession: SessionState | null = null;
+  let lastDock: DockSide | null = null;
   let socket: SocketLike | null = null;
   let status: CompanionStatus = "not connected";
   let permissions: CompanionPermissions | null = null;
@@ -238,6 +256,7 @@ export function createCompanionClient({
       if (!wasPaired) {
         if (lastBuddy) send({ type: "buddy.state", state: lastBuddy });
         if (lastSession) send({ type: "session.state", ...lastSession });
+        if (lastDock) send({ type: "dock.show", side: lastDock });
       }
       for (const fn of listeners.status) fn(status, permissions);
     } else if (msg.type === "activity") {
@@ -246,6 +265,8 @@ export function createCompanionClient({
       if (status === "paired") for (const fn of listeners.app) fn(msg);
     } else if (msg.type === "shortcut") {
       if (status === "paired") for (const fn of listeners.shortcut) fn(msg.action);
+    } else if (msg.type === "chord") {
+      if (status === "paired") for (const fn of listeners.chord) fn(msg);
     }
   }
 
@@ -378,10 +399,31 @@ export function createCompanionClient({
         last_answer: String(s.last_answer ?? "").slice(0, SAY_TEXT_MAX),
         off_record: Boolean(s.off_record),
         app_url: String(s.app_url ?? ""),
+        ...(validSessionAgent(s.agent) ? { agent: s.agent } : {}),
       };
       return send({ type: "session.state", ...lastSession });
     },
+    /** Docks the agent at the side of the screen. Remembered and resent on pairing until dockHide. */
+    dockShow(side: DockSide = "right"): boolean {
+      lastDock = side === "left" ? "left" : "right";
+      return send({ type: "dock.show", side: lastDock });
+    },
+    dockHide(): boolean {
+      lastDock = null;
+      return send({ type: "dock.hide" });
+    },
+    /** One line in the dock's 'What I learned' feed, clipped to 140 chars. Not resent. */
+    dockLearned(kind: DockLearnedKind, text: string): boolean {
+      const t = String(text ?? "").trim().slice(0, DOCK_TEXT_MAX);
+      if (!t || !["step", "shortcut", "guardrail"].includes(kind)) return false;
+      return send({ type: "dock.learned", kind, text: t });
+    },
     dispose() {
+      // Clean-up: the dock goes away with the page.
+      if (lastDock) {
+        lastDock = null;
+        send({ type: "dock.hide" });
+      }
       disposed = true;
       clearTimer();
       drop();

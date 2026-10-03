@@ -1,5 +1,5 @@
 // Browser fetch adapter for the capture controller: /api/session/<id>/*, /api/decide, /api/vision.
-import type { ScreenEvent } from "@/lib/types";
+import { AgentSchema, type Agent, type ScreenEvent } from "@/lib/types";
 import type { CaptureApi, Decisions } from "./controller";
 
 async function post<T = unknown>(url: string, body: unknown): Promise<T> {
@@ -31,7 +31,21 @@ export function createHttpCaptureApi(sessionId: string, previousEvents: () => Sc
   };
 }
 
-export async function createCaptureSession(expert: string): Promise<string> {
-  const s = await post<{ id: string }>("/api/session", { kind: "capture", expert });
+/** Creates the capture session; agent_id links it to the agent it trains. */
+export async function createCaptureSession(expert: string, agentId?: string | null): Promise<string> {
+  const s = await post<{ id: string }>("/api/session", { kind: "capture", expert, ...(agentId ? { agent_id: agentId } : {}) });
   return s.id;
+}
+
+/** The session's agent from /api/agents/<id>; null when missing, unreadable or malformed. */
+export async function loadAgent(agentId: string | null | undefined, fetchImpl: typeof fetch = fetch): Promise<Agent | null> {
+  if (!agentId) return null;
+  try {
+    const res = await fetchImpl(`/api/agents/${encodeURIComponent(agentId)}`);
+    if (!res.ok) return null;
+    const parsed = AgentSchema.safeParse(await res.json());
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
 }

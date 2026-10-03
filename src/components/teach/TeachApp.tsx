@@ -14,9 +14,11 @@ import { stopPointSink, teachShortcutControls } from "@/lib/teach/companionBridg
 import { COMPANION_STALE_MS, MIN_SILENCE_MS, effectiveActivity } from "@/lib/voice/askGate";
 import { buildGuardrailStopTurn, buildMasteryTurn, buildPredictTurn } from "@/lib/voice/prompts";
 import { useVoiceAgent, VoiceProvider, type UseVoiceAgentOptions } from "@/lib/voice/useVoiceAgent";
-import { createInterventionEngine, decideViaApi, type Intervention, type InterventionEngine, type InterventionStats } from "@/lib/teach/intervention";
+import { COOLDOWN_MS, createInterventionEngine, decideViaApi, type Intervention, type InterventionEngine, type InterventionStats } from "@/lib/teach/intervention";
 import { buildTeachProgress, recordPrediction, recordStop, scorePrediction, summary, type MasteryState } from "@/lib/teach/mastery";
 import { matchStep } from "@/lib/teach/stepMatch";
+import { createShortcutCoach, type ShortcutCoach } from "@/lib/teach/shortcutHint";
+import { SHORTCUT_LEARNING } from "@/lib/companion/chord";
 import { newId, type Rect, type ScreenEvent, type VisionEvent, type WorkMap, type WorkMapStep } from "@/lib/types";
 import { loadPickerOptions, loadWorkMap, preselect, type PickerOption } from "./loadWorkMap";
 import TeachConsole, { type TeachConsoleProps, type TeachLine } from "./TeachConsole";
@@ -43,6 +45,10 @@ type Loop = {
   paused: boolean;
   /** Last screen position seen per step, for the buddy's glance at prediction prompts. */
   lastRect: Map<number, Rect>;
+  /** Shortcut hints on the slow path (agents wave A5). */
+  coach: ShortcutCoach;
+  /** When the last guardrail stop fired; a shortcut hint waits out COOLDOWN_MS after it. */
+  lastStopAt: number;
 };
 
 async function postJson<T>(url: string, body: unknown): Promise<T> {
@@ -181,6 +187,10 @@ function TeachInner({ sessionId, localMode }: TeachAppProps) {
       client.on("activity", (a) => {
         companionActivity.current = { typing: a.typing, idle_ms: a.idle_ms, at: Date.now() };
       }),
+      client.on("chord", (c) => {
+        const loop = loopRef.current;
+        if (SHORTCUT_LEARNING && loop && !loop.paused) loop.coach.noteChord(c.chord);
+      }),
     ];
     client.connect();
     return () => {
@@ -195,6 +205,7 @@ function TeachInner({ sessionId, localMode }: TeachAppProps) {
   function onIntervene(iv: Intervention) {
     const loop = loopRef.current;
     if (!loop) return;
+    loop.lastStopAt = Date.now();
     masteryRef.current = recordStop(masteryRef.current, iv.step.n);
     setIntervention(iv);
     setReplayOpen(false);
@@ -233,6 +244,10 @@ function TeachInner({ sessionId, localMode }: TeachAppProps) {
       loop.nextToAsk = next && !loop.predicted.has(next.n) ? next : null;
     }
     void loop.engine.onEvent(ev, match);
+    // Stops win: no hint while a stop is active or within the cooldown after one.
+    const busy = loop.paused || loop.engine.stats().active > 0 || Date.now() - loop.lastStopAt < COOLDOWN_MS;
+    const hint = SHORTCUT_LEARNING ? loop.coach.onEvent(ev, match?.step ?? loop.step, { busy }) : null;
+    if (hint) say(hint.text, hint.text);
   }
 
   async function onFrame(loop: Loop, f: CapturedFrame) {
@@ -298,6 +313,8 @@ function TeachInner({ sessionId, localMode }: TeachAppProps) {
       nextToAsk: workmap.steps[0] ?? null,
       paused: false,
       lastRect: new Map(),
+      coach: createShortcutCoach({ workmap }),
+      lastStopAt: -Infinity,
     };
     setRunning(true);
     try {

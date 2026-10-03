@@ -35,3 +35,33 @@ describe("sandbox Teach code is gone", () => {
     expect(hits).toEqual([]);
   });
 });
+
+describe("shortcut hint on the slow path (agents wave A5)", async () => {
+  const { createShortcutCoach, SHORTCUT_QUIET_MS } = await import("./shortcutHint");
+  const base = WorkMapSchema.parse(SAMPLE_WORKMAP);
+  const step = base.steps[0];
+  const workmap = {
+    ...base,
+    shortcuts: [{ chord: "Cmd+Enter", app: "Microsoft Outlook", effect: "email out", effect_type: "item_sent" as const, first_t: 1, count: 3, step: step.n }],
+  };
+  const done = { id: "e1", t: 5, source: "vision" as const, type: "item_sent" as const, entity: { kind: "email", id: "Offer" } };
+
+  it("the slow path on a step with a shortcut triggers one suggestion naming the expert and the chord", () => {
+    const coach = createShortcutCoach({ workmap, now: () => 0 });
+    expect(coach.onEvent(done, step)?.text).toBe("Sabine uses Cmd+Enter here.");
+    expect(coach.onEvent({ ...done, id: "e2" }, step)).toBeNull();
+  });
+
+  it("no hint when the learner pressed the chord, on another step, for another effect, or while busy", () => {
+    let t = 0;
+    const coach = createShortcutCoach({ workmap, now: () => t });
+    coach.noteChord("Cmd+Enter");
+    t = SHORTCUT_QUIET_MS - 1;
+    expect(coach.onEvent(done, step)).toBeNull();
+    t = SHORTCUT_QUIET_MS + 1;
+    expect(coach.onEvent(done, { ...step, n: step.n + 99 })).toBeNull();
+    expect(coach.onEvent({ ...done, type: "item_deleted" }, step)).toBeNull();
+    expect(coach.onEvent(done, step, { busy: true })).toBeNull();
+    expect(coach.onEvent(done, step)?.text).toBe("Sabine uses Cmd+Enter here.");
+  });
+});

@@ -257,3 +257,65 @@ describe("exportGuardrailsMarkdown", () => {
     expect(md).toContain("# Agent instructions: Update the board deck in Microsoft PowerPoint");
   });
 });
+
+describe("shortcuts in the Work Map (agents wave A5)", async () => {
+  const { fallbackWorkMap, verifyWorkMap } = await import("./synthesize");
+  const { SessionSchema } = await import("@/lib/types");
+  const ANSWER = "It sends right away, so I never forget the attachment check.";
+  const session = SessionSchema.parse({
+    id: "s1",
+    kind: "capture",
+    started_at: "2026-10-04T08:00:00Z",
+    expert: "Sabine",
+    events: [
+      { id: "ev_sc1", t: 10, source: "os", type: "shortcut_used", entity: { kind: "shortcut", id: "Cmd+Enter" }, chord: "Cmd+Enter", app: OUTLOOK, effect_ids: ["ev_out"] },
+      { id: "ev_out", t: 11, source: "vision", type: "item_sent", entity: { kind: "email", id: "Offer Q3" }, to: "controller", app: OUTLOOK },
+      { id: "ev_sc2", t: 40, source: "os", type: "shortcut_used", entity: { kind: "shortcut", id: "Cmd+Enter" }, chord: "Cmd+Enter", app: OUTLOOK },
+      { id: "ev_sc3", t: 50, source: "os", type: "shortcut_used", entity: { kind: "shortcut", id: "Cmd+Shift+V" }, chord: "Cmd+Shift+V", app: "Microsoft Excel" },
+    ],
+    transcript: [],
+    qa: [
+      { id: "qa1", t_question: 12, t_answer: 15, question: `You pressed Cmd+Enter in ${OUTLOOK} there. What does it do for you and why that way?`, answer: ANSWER, event_id: "ev_sc1", phase: "capture", about: "other" },
+    ],
+    off_record_ranges: [],
+  });
+
+  it("fills shortcuts from linked events and the expert's answer; first_t and count from code; deduped by chord+app", () => {
+    const wm = fallbackWorkMap(session);
+    expect(wm.steps).toHaveLength(1);
+    expect(wm.shortcuts).toEqual([
+      {
+        chord: "Cmd+Enter",
+        app: OUTLOOK,
+        effect: `email Offer Q3 sent to controller in ${OUTLOOK}`,
+        effect_type: "item_sent",
+        why: { quote: ANSWER, t: 15 },
+        first_t: 10,
+        count: 2,
+        step: 1,
+      },
+      { chord: "Cmd+Shift+V", app: "Microsoft Excel", effect: "effect not seen on screen", first_t: 50, count: 1 },
+    ]);
+    expect(wm.open_questions).toContain("You pressed Cmd+Shift+V in Microsoft Excel there. What does it do for you and why that way?");
+  });
+
+  it("verify drops a why quote the expert never said", () => {
+    const wm = fallbackWorkMap(session);
+    const forged = { ...wm, shortcuts: wm.shortcuts!.map((s) => ({ ...s, why: { quote: "Because the manual says so.", t: 15 } })) };
+    expect(verifyWorkMap(forged, session).shortcuts!.every((s) => s.why === undefined)).toBe(true);
+    expect(verifyWorkMap(wm, session).shortcuts![0].why?.quote).toBe(ANSWER);
+  });
+
+  it("exports the shortcuts in the guardrails markdown", () => {
+    const md = exportGuardrailsMarkdown(fallbackWorkMap(session));
+    expect(md).toContain("## Keyboard shortcuts");
+    expect(md).toContain(`- \`Cmd+Enter\` in ${OUTLOOK}: email Offer Q3 sent to controller in ${OUTLOOK} (step 1, used 2x, first at 00:10). Why: "${ANSWER}" [00:15]`);
+    expect(md).toContain("- `Cmd+Shift+V` in Microsoft Excel: effect not seen on screen (used 1x, first at 00:50). Why: not stated by the expert.");
+  });
+
+  it("old Work Maps without shortcuts export without the section", () => {
+    const old: WorkMap = { ...fallbackWorkMap(session) };
+    delete old.shortcuts;
+    expect(exportGuardrailsMarkdown(old)).not.toContain("Keyboard shortcuts");
+  });
+});

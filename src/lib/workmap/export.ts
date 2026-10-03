@@ -40,6 +40,16 @@ export function exportGuardrailsMarkdown(workmap: WorkMap): string {
   for (const g of stop) lines.push(`- ${g.rule} (step ${g.step}).${quoted(g.quote, g.quote_ref)}`);
   lines.push("- Anything is not covered by the steps and guardrails above.");
 
+  if (workmap.shortcuts?.length) {
+    lines.push("", "## Keyboard shortcuts", "");
+    for (const sc of workmap.shortcuts) {
+      const where = sc.app ? ` in ${sc.app}` : "";
+      const step = sc.step !== undefined ? `step ${sc.step}, ` : "";
+      const why = sc.why ? ` Why: "${sc.why.quote}" [${formatT(sc.why.t)}]` : " Why: not stated by the expert.";
+      lines.push(`- \`${sc.chord}\`${where}: ${sc.effect} (${step}used ${sc.count}x, first at ${formatT(sc.first_t)}).${why}`);
+    }
+  }
+
   if (workmap.open_questions.length) {
     lines.push("", "## Open questions", "");
     for (const q of workmap.open_questions) lines.push(`- ${q}`);

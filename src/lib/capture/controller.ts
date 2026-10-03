@@ -15,7 +15,10 @@ import { COMPANION_STALE_MS, type AskGate, type CompanionActivity } from "@/lib/
 import { redactScreenEvent } from "@/lib/perception/redactEvent";
 import type { CompanionClient } from "@/lib/companion/client";
 import { buddyStateFor } from "@/lib/companion/buddyState";
-import { buildScreenEventTurn, describeEvent, describeObject, type AskKind } from "@/lib/voice/prompts";
+import { buildScreenEventTurn, describeEvent, describeObject, shortcutQuestion, type AskKind } from "@/lib/voice/prompts";
+import { SHORTCUT_LEARNING, createChordLinker, type ChordIn, type ClosedChord } from "@/lib/companion/chord";
+import type { SessionAgent } from "@/lib/companion/agentState";
+import { createShortcutAskCap, shortcutKey, shortcutVerdict } from "@/lib/decide/shortcut";
 
 export const TICK_MS = 500;
 export const MAX_WAIT_MS = 20000;
@@ -69,17 +72,39 @@ export type CaptureControllerOptions = {
   companion?: CaptureCompanion | null;
   /** What the companion panel shows about this session. */
   session?: { expert: string; title?: string; appUrl?: string };
+  /** The session's agent with its eight avatar data URLs (buildSessionAgent); null omits session.state.agent. */
+  agent?: SessionAgent | null;
+  /** Rollback switch for chords, the dock and session.state.agent. Default SHORTCUT_LEARNING. */
+  shortcutLearning?: boolean;
 };
 
-export type CaptureCompanion = Pick<CompanionClient, "buddyState" | "buddySay" | "buddyPoint" | "buddyClear" | "sessionState">;
+export type CaptureCompanion = Pick<CompanionClient, "buddyState" | "buddySay" | "buddyPoint" | "buddyClear" | "sessionState"> &
+  Partial<Pick<CompanionClient, "dockShow" | "dockHide" | "dockLearned">>;
 /** Voice agent status and mode (useVoiceAgent); null in text mode. */
 export type AgentPresence = { status: string | null; mode: string | null };
 
-type Pending = { event: ScreenEvent; decisions: Decisions; since: number };
+type Pending = { event: ScreenEvent; decisions: Decisions; since: number; shortcut?: boolean };
+
+const DOCK_TEXT_MAX = 140;
+const synthetic = (question: DecisionQuestionName, answer: string | number): DecisionResult => ({
+  question,
+  answer,
+  confidence: 1,
+  provider: "heuristic",
+  latency_ms: 0,
+});
+/** Shortcut candidates skip the paid decide call; these feed the gate's pause, budget and gap checks. */
+const SHORTCUT_DECISIONS = (): Decisions =>
+  ({
+    event_class: synthetic("event_class", "judgment_call"),
+    screen_explains_it: synthetic("screen_explains_it", 0),
+    ask_timing: synthetic("ask_timing", "ask_now"),
+  }) as Decisions;
 
 /** Activity and app messages from the desktop companion (counts only, see src/lib/companion/client.ts). */
 export type CompanionActivityIn = { typing: boolean; pointer: boolean; idle_ms: number };
 export type CompanionAppIn = { app: string; title: string };
+export type CompanionChordIn = ChordIn;
 
 /** Paid calls the capture loop makes that can hit the workspace daily cap. */
 export type LimitedKind = "vision" | "decide";
@@ -93,6 +118,7 @@ export function isDailyLimitError(err: unknown): boolean {
 
 /** Plain question for text mode, and the placeholder until the voice agent phrases its own. */
 export function fallbackQuestion(event: ScreenEvent, ask: AskKind): string {
+  if (ask === "shortcut") return shortcutQuestion(event.chord ?? "", event.app);
   const obj = describeObject(event);
   const field = event.field ? `, ${event.field.replace(/[_-]+/g, " ")}` : "";
   return ask === "guardrail"
@@ -125,6 +151,31 @@ export function createCaptureController(opts: CaptureControllerOptions) {
   let lastAnswer = "";
   let sentBuddy: string | null = null;
   let sentSession: string | null = null;
+  const learning = opts.shortcutLearning ?? SHORTCUT_LEARNING;
+  const sessionAgent = learning ? (opts.agent ?? null) : null;
+  const linker = createChordLinker();
+  const shortcutCap = createShortcutAskCap({ now });
+  // dock.learned lines already sent, keyed on kind + normalised text.
+  const learnedSent = new Set<string>();
+  let docked = false;
+
+  /** One 'What I learned' line in the dock: redacted, deduped, never off the record. */
+  function learned(kind: "step" | "shortcut" | "guardrail", raw: string) {
+    if (!learning || offRecord || !buddy?.dockLearned) return;
+    const text = (redactScreenEvent({ to: raw.replace(/\s+/g, " ").trim() }).to ?? "").slice(0, DOCK_TEXT_MAX);
+    if (!text) return;
+    const key = `${kind}|${text.toLowerCase()}`;
+    if (learnedSent.has(key)) return;
+    learnedSent.add(key);
+    buddy.dockLearned(kind, text);
+  }
+
+  function setDock(show: boolean) {
+    if (!learning || !buddy || show === docked) return;
+    docked = show;
+    if (show) buddy.dockShow?.("right");
+    else buddy.dockHide?.();
+  }
 
   /** Sends buddy.state and session.state when they changed. Off the record only these two go out. */
   function syncCompanion() {
@@ -153,6 +204,7 @@ export function createCaptureController(opts: CaptureControllerOptions) {
       last_answer: lastAnswer,
       off_record: offRecord,
       app_url: opts.session?.appUrl ?? "",
+      ...(sessionAgent ? { agent: sessionAgent } : {}),
     };
     const key = JSON.stringify(session);
     if (key !== sentSession) {
@@ -222,7 +274,7 @@ export function createCaptureController(opts: CaptureControllerOptions) {
         event_id: event.id,
         ...(event.frame_ref ? { frame_ref: event.frame_ref } : {}),
         phase: "capture",
-        about: kind,
+        about: kind === "shortcut" ? "other" : kind,
       },
       filled: false,
     };
@@ -242,6 +294,17 @@ export function createCaptureController(opts: CaptureControllerOptions) {
       activity: gateActivity(),
       agentSpeaking: voice.isSpeaking(),
     });
+    if (d.action === "ask_now" && item.shortcut) {
+      // One shortcut question per SHORTCUT_ASK_GAP_MS and per chord+app; the rest go to the debrief gap list.
+      const key = shortcutKey(item.event.chord, item.event.app);
+      if (!shortcutCap.canAsk(key)) {
+        debrief.push({ event: item.event, why: "shortcut_cap" });
+        return true;
+      }
+      shortcutCap.markAsked(key);
+      ask(item.event, "shortcut");
+      return true;
+    }
     if (d.action === "ask_now") {
       ask(item.event, d.ask ?? "reason");
       return true;
@@ -258,8 +321,25 @@ export function createCaptureController(opts: CaptureControllerOptions) {
     return false;
   }
 
+  /** Publishes a closed chord as an os shortcut_used event with its linked effects. */
+  function publishChord(c: ClosedChord | null) {
+    if (!c || offRecord) return;
+    const clean = redactScreenEvent({ app: c.app });
+    bus.publishOs(
+      {
+        type: "shortcut_used",
+        entity: { kind: "shortcut", id: c.chord },
+        chord: c.chord,
+        ...(clean.app ? { app: clean.app } : {}),
+        ...(c.effects.length ? { effect_ids: c.effects.map((e) => e.id).slice(0, 20) } : {}),
+      },
+      c.t,
+    );
+  }
+
   function tick() {
     if (offRecord) return;
+    if (learning) publishChord(linker.poll(now()));
     if (activity.snapshot().typing || companionTyping()) pingActivity();
     if (!pending.length) return;
     const keep: Pending[] = [];
@@ -278,11 +358,30 @@ export function createCaptureController(opts: CaptureControllerOptions) {
     changed();
   }
 
+  /** shortcut_used: no paid decide call; a candidate waits for a natural pause under the shortcut cap. */
+  function onShortcut(event: ScreenEvent) {
+    const effects = seen.filter((e) => event.effect_ids?.includes(e.id));
+    learned("shortcut", `${event.chord}${event.app ? ` in ${event.app}` : ""}`);
+    const verdict = shortcutVerdict(event, effects, seen.slice(0, -1));
+    if (!verdict.candidate) {
+      changed();
+      return;
+    }
+    const item: Pending = { event, decisions: SHORTCUT_DECISIONS(), since: now(), shortcut: true };
+    if (!evaluate(item)) pending.push(item);
+    changed();
+  }
+
   async function onEvent(event: ScreenEvent) {
     if (offRecord) return;
+    if (learning && event.source === "vision") publishChord(linker.onVision(event, now()));
     seen.push(event);
     send("postEvents", () => api.postEvents([event]));
     voice.injectContext(describeEvent(event));
+    if (event.type === "shortcut_used") {
+      onShortcut(event);
+      return;
+    }
     if (limited.has("decide")) {
       debrief.push({ event, why: "daily_limit" });
       changed();
@@ -328,7 +427,13 @@ export function createCaptureController(opts: CaptureControllerOptions) {
   function closeOpen(answer?: string) {
     if (!open) return;
     const qa: QAPair = answer === undefined ? open.qa : { ...open.qa, answer, t_answer: getT() };
+    const ev = seen.find((e) => e.id === qa.event_id);
     open = null;
+    if (answer !== undefined && ev) {
+      if (ev.type === "shortcut_used") learned("shortcut", `${ev.chord}: ${answer}`);
+      else if (qa.about === "guardrail") learned("guardrail", answer);
+      else learned("step", `${describeObject(ev)}: ${answer}`);
+    }
     send("postQA", () => api.postQA(qa));
   }
 
@@ -343,8 +448,9 @@ export function createCaptureController(opts: CaptureControllerOptions) {
     bus.setPaused(active);
     voice.setMuted(active);
     if (active) {
-      // Nothing companion-derived survives into the off-record range.
+      // Nothing companion-derived survives into the off-record range, pending chords included.
       companion = null;
+      linker.cancel();
       capture?.pause();
       offFrom = getT();
       send("setOffRecord", () => api.setOffRecord({ from: offFrom }));
@@ -406,6 +512,14 @@ export function createCaptureController(opts: CaptureControllerOptions) {
     bus.publishOs({ type: "app_switched", entity: { kind: "app", id: clean.app ?? app }, ...clean });
   }
 
+  /** A key chord from the companion (protocol v3). Dropped off the record or when shortcut learning is off. */
+  function onCompanionChord(c: CompanionChordIn) {
+    if (!learning || offRecord || !running) return;
+    const chord = c.chord.trim();
+    if (!chord) return;
+    publishChord(linker.onChord({ chord, app: c.app.trim() }, now(), getT()));
+  }
+
   /** The socket closed: companion activity counts as absent until the next message. */
   function onCompanionDisconnected() {
     companion = null;
@@ -442,11 +556,14 @@ export function createCaptureController(opts: CaptureControllerOptions) {
         void onEvent(ev);
       });
       timer = setInterval(tick, TICK_MS);
+      setDock(true);
       changed();
     },
     stop() {
       if (timer) clearInterval(timer);
       timer = null;
+      if (learning && !offRecord) publishChord(linker.flush());
+      linker.cancel();
       unsubscribe?.();
       unsubscribe = null;
       if (offRecord) setOffRecord(false);
@@ -455,6 +572,7 @@ export function createCaptureController(opts: CaptureControllerOptions) {
       closeOpen();
       running = false;
       talking = false;
+      setDock(false);
       changed();
     },
     tick,
@@ -463,6 +581,7 @@ export function createCaptureController(opts: CaptureControllerOptions) {
     onCompanionActivity,
     onCompanionApp,
     onCompanionDisconnected,
+    onCompanionChord,
     setOffRecord,
     /** Voice agent status and mode, for the buddy state. */
     setAgent(next: AgentPresence) {

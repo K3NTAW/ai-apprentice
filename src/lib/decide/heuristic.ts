@@ -1,16 +1,29 @@
 // Deterministic last resort. Never throws; works on partial or unknown state shapes. App-agnostic.
 import type { DecisionQuestionName } from "../types";
 import type { RawAnswer } from "./prompts";
+import { shortcutVerdict } from "./shortcut";
 
 const CONFIDENCE = 0.4;
 /** Buttons and statuses that stop, park or escalate something. */
 const STOPPING = /^(hold|on[ _]hold|flag(ged)?|escalate|reject(ed)?|block(ed)?|stop|pause|report|second[ _]approval|send for 2nd approval)$/i;
 
-type HEvent = { type?: string; field?: string; from?: string; to?: string; entity?: { kind?: string; id?: string } };
+type HEvent = {
+  type?: string;
+  t?: number;
+  field?: string;
+  from?: string;
+  to?: string;
+  chord?: string;
+  app?: string;
+  entity?: { kind?: string; id?: string };
+};
 type HState = {
   event?: HEvent;
   /** Recent events before this one, oldest first. */
   previous_events?: HEvent[];
+  recent_events?: HEvent[];
+  /** shortcut_used only: the vision events linked as its effect. */
+  effects?: HEvent[];
   silence_ms?: number;
   typing?: boolean;
   questions_asked_last_10min?: number;
@@ -46,6 +59,10 @@ function eventClass(s: HState): string {
   switch (e.type) {
     case "item_deleted":
       return "judgment_call";
+    case "shortcut_used": {
+      const history = [...(Array.isArray(s.previous_events) ? s.previous_events : []), ...(Array.isArray(s.recent_events) ? s.recent_events : [])];
+      return shortcutVerdict(e, Array.isArray(s.effects) ? s.effects : [], history).candidate ? "judgment_call" : "routine";
+    }
     case "item_sent":
       return newRecipient(e, s.previous_events) ? "judgment_call" : "routine";
     case "status_changed":

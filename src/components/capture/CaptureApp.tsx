@@ -19,7 +19,9 @@ import {
   type CaptureController,
   type CaptureVoice,
 } from "@/lib/capture/controller";
-import { createCaptureSession, createHttpCaptureApi } from "@/lib/capture/httpApi";
+import { createCaptureSession, createHttpCaptureApi, loadAgent } from "@/lib/capture/httpApi";
+import { buildSessionAgent } from "@/lib/companion/agentState";
+import { SHORTCUT_LEARNING } from "@/lib/companion/chord";
 import {
   createCompanionClient,
   type CompanionClient,
@@ -140,6 +142,7 @@ function CaptureInner() {
       client.on("activity", (a) => loopRef.current?.ctrl.onCompanionActivity(a)),
       client.on("app", (a) => loopRef.current?.ctrl.onCompanionApp(a)),
       client.on("shortcut", (a) => shortcutRef.current(a)),
+      client.on("chord", (c) => loopRef.current?.ctrl.onCompanionChord(c)),
     ];
     client.connect();
     return () => {
@@ -166,9 +169,11 @@ function CaptureInner() {
     setStarting(true);
     setNotice(null);
     const name = expert.trim() || "Sabine";
+    // The agent this capture trains: ?agent=<id>, linked on the session and shown in the companion dock.
+    const agentId = SHORTCUT_LEARNING ? new URLSearchParams(window.location.search).get("agent") : null;
     let sessionId: string;
     try {
-      sessionId = await createCaptureSession(name);
+      sessionId = await createCaptureSession(name, agentId);
     } catch (err) {
       setNotice(`Could not create the session: ${err instanceof Error ? err.message : String(err)}`);
       setStarting(false);
@@ -205,7 +210,12 @@ function CaptureInner() {
       buddyPoint: (p) => companionRef.current?.buddyPoint(p) ?? false,
       buddyClear: (id) => companionRef.current?.buddyClear(id) ?? false,
       sessionState: (st) => companionRef.current?.sessionState(st) ?? false,
+      dockShow: (side) => companionRef.current?.dockShow(side) ?? false,
+      dockHide: () => companionRef.current?.dockHide() ?? false,
+      dockLearned: (kind, text) => companionRef.current?.dockLearned(kind, text) ?? false,
     };
+    // Agent missing or avatar render failed: session.state goes out without an agent (logged once).
+    const sessionAgent = buildSessionAgent(await loadAgent(agentId));
     const ctrl = createCaptureController({
       api: createHttpCaptureApi(sessionId, () => bus.all()),
       voice,
@@ -219,6 +229,7 @@ function CaptureInner() {
       onError: (where, err) => console.warn(`capture: ${where} failed`, err),
       companion: buddy,
       session: { expert: name, appUrl: window.location.href },
+      agent: sessionAgent,
     });
     loopRef.current = { ctrl, bus, activity, getT, sessionId, startedAt: t0 };
     ctrl.start();
