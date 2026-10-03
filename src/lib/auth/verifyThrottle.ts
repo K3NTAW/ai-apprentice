@@ -13,7 +13,7 @@ export type Throttle = {
   reset(): void;
 };
 
-export function createThrottle({ limit, windowMs, now = Date.now }: { limit: number; windowMs: number; now?: () => number }): Throttle {
+export function createThrottle({ limit, windowMs, now = () => Date.now() }: { limit: number; windowMs: number; now?: () => number }): Throttle {
   const hits = new Map<string, number[]>();
   return {
     hit(key) {
