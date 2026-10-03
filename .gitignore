@@ -8,14 +8,14 @@ wt/
 .orchestrator/daemon.lock
 graphify-out/
 .mcp.json
-node_modules/
+node_modules
 .next/
 out/
 .env
 .env.*
 !.env.example
-frames/
-data/
+frames
+data
 spikes/out/
 *.tsbuildinfo
 next-env.d.ts
