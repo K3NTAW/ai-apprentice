@@ -7,7 +7,7 @@ import { ActivityAggregator, AppChangeTracker, WINDOW_MS, toInputKind, type Inpu
 import { HaloStore, mapRect, type DisplayInfo } from "./overlay.mjs";
 import { parseAllowlist } from "./origin.mjs";
 import { Pairing } from "./pairing.mjs";
-import { PermissionMonitor, readPermissions } from "./permissions.mjs";
+import { canStartHook, PermissionMonitor, readPermissions } from "./permissions.mjs";
 import { appMessage, parsePort, statusMessage, type Permissions } from "./protocol.mjs";
 import { startServer, type CompanionServer } from "./server.mjs";
 
@@ -41,20 +41,23 @@ const pairing = new Pairing(undefined, () => rebuildMenu());
 type Hook = { on(event: string, cb: () => void): void; start(): void; stop(): void };
 let hook: Hook | null = null;
 
-// input comes from the permission APIs (see permissions.mts), never from observed input events.
-// Electron has no Input Monitoring query, so inputMonitoringStatus is not passed.
+// Electron has no Input Monitoring query, so inputMonitoringStatus is not passed: input is reported
+// true only after the hook has delivered its first event (see permissions.mts).
+let inputEventSeen = false;
+const permissionApis = {
+  platform: process.platform,
+  isTrustedAccessibilityClient: (prompt: boolean) => systemPreferences.isTrustedAccessibilityClient(prompt),
+  getMediaAccessStatus: (type: "screen") => systemPreferences.getMediaAccessStatus(type),
+  hookEventSeen: () => inputEventSeen,
+};
 function permissions(): Permissions {
-  return readPermissions({
-    platform: process.platform,
-    isTrustedAccessibilityClient: (prompt) => systemPreferences.isTrustedAccessibilityClient(prompt),
-    getMediaAccessStatus: (type) => systemPreferences.getMediaAccessStatus(type),
-  });
+  return readPermissions(permissionApis);
 }
 
 const status = () => statusMessage(app.getVersion(), permissions(), paused);
 
 function startHook(): void {
-  if (hookRunning || paused || !permissions().input) return;
+  if (hookRunning || paused || !canStartHook(permissionApis)) return;
   try {
     if (!hook) {
       hook = (require("uiohook-napi") as { uIOhook: Hook }).uIOhook;
@@ -62,7 +65,12 @@ function startHook(): void {
         // The handler takes no arguments: keycode, char and x/y never enter this process's state.
         hook.on(name, () => {
           const kind: InputKind | null = toInputKind(name);
-          if (!kind || paused) return;
+          if (!kind) return;
+          if (!inputEventSeen) {
+            inputEventSeen = true;
+            permissionMonitor.check();
+          }
+          if (paused) return;
           aggregator.record(kind, Date.now());
         });
       }

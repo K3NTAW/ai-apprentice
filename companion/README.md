@@ -65,7 +65,9 @@ Open System Settings > Privacy & Security and enable the companion (in dev: the 
 or your terminal) under:
 
 1. **Accessibility**: required for the input hook and for reading the frontmost app.
-2. **Input Monitoring**: required by macOS for global key and mouse events.
+2. **Input Monitoring**: required by macOS for global key and mouse events. Grant it in System
+   Settings > Privacy & Security > Input Monitoring: click `+`, add the companion (in dev: `Electron`
+   or your terminal), switch it on, then quit and relaunch the companion.
 3. **Screen Recording**: required for window titles (without it titles are empty). Screen frames
    are never captured by the companion.
 
@@ -77,11 +79,14 @@ How `status.permissions` is derived:
 
 - `accessibility`: `systemPreferences.isTrustedAccessibilityClient(false)`.
 - `screen`: `systemPreferences.getMediaAccessStatus('screen') === 'granted'`.
-- `input`: from the permission APIs, never from observed input: `true` when
-  `isTrustedAccessibilityClient(false)` is true and the Input Monitoring status, where a query is
-  available, is not denied. Electron has no Input Monitoring query, so today Accessibility is the
-  gate. It is reported in the first `status` right after launch and re-sent on change. The hook
-  only starts when `input` is true.
+- `input`: `true` when `isTrustedAccessibilityClient(false)` is true and Input Monitoring is
+  granted. Where the Input Monitoring status can be queried, the query decides. Electron has no
+  such query, so today `input` is **unverified until the first keystroke or click**: it is `false`
+  after launch and turns `true` (with a new `status`) once the input hook has delivered at least one
+  event. The hook starts as soon as Accessibility is trusted, so that first event can arrive.
+- `inputVerified` (extra field in `permissions`): `true` when `input` is backed by an Input
+  Monitoring query or by an observed hook event, `false` while it is unverified. If it stays
+  `false` after you typed or clicked, Input Monitoring is not granted: grant it as above.
 
 ## Protocol summary
 
@@ -98,17 +103,21 @@ Admission:
 - Codes come from `crypto.randomInt` and are compared in constant time. Each wrong code closes
   that connection with `4401` and counts against its Origin. After 5 failures from one Origin
   within 10 minutes, new connections from that Origin are refused with `4429` until the failures
-  age out of the window. Other Origins are not affected. Failures never change the displayed
-  code; it rotates only on `New pairing code` or after a successful pairing.
+  age out of the window. Other Origins are not affected by that lockout. On top, a global budget:
+  after 20 failures across all Origins within 10 minutes, every connection and hello is refused
+  with `4429` for 60 s, then the budget starts over (at most 20 guesses per ~70 s, so weeks for a
+  6-digit code). The per-Origin failure map is swept on every failure and capped at 256 Origins.
+  Failures never change the displayed code; it rotates only on `New pairing code` or after a
+  successful pairing.
 - One paired client at a time. Unauthenticated sockets do not take the paired slot, but at most 4
   may wait for hello; new connections while a client is paired are refused.
 
 Close codes: `4401` bad or missing hello, `4403` origin or host rejected, `4408` hello timeout,
-`4409` another client is paired or too many pending sockets, `4429` too many wrong codes from this Origin in the last 10 minutes.
+`4409` another client is paired or too many pending sockets, `4429` too many wrong codes from this Origin in the last 10 minutes, or 20 across all Origins (60 s cooldown).
 
 Companion to web:
 
-- `{"type":"status","version":"x.y.z","permissions":{"input":bool,"screen":bool,"accessibility":bool},"paused":bool}`
+- `{"type":"status","version":"x.y.z","permissions":{"input":bool,"screen":bool,"accessibility":bool,"inputVerified":bool},"paused":bool}`
   after hello and on change. `paused` is an optional extension; clients that ignore it see silence
   while paused.
 - `{"type":"activity","t":ms,"typing":bool,"pointer":bool,"keys":int,"clicks":int,"idle_ms":int}` every 500 ms.

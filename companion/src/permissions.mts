@@ -11,19 +11,30 @@ export type PermissionApis = {
   getMediaAccessStatus(type: "screen"): string;
   /** Input Monitoring status where a query is available (IOHIDCheckAccess). Electron has none today. */
   inputMonitoringStatus?: () => InputMonitoringStatus;
+  /** True once the input hook has delivered at least one event since launch. */
+  hookEventSeen?: () => boolean;
 };
 
 /**
- * input: Accessibility is trusted and Input Monitoring is not known to be denied. Without an
- * Input Monitoring query, Accessibility is the gate (uiohook needs it to start). Never derived from
- * observed input events.
+ * input: Accessibility is trusted and Input Monitoring is granted. Where Input Monitoring cannot be
+ * queried (Electron today), input is true only after the hook has delivered at least one event since
+ * launch. inputVerified: the input value is backed by a query result or an observed event.
  */
 export function readPermissions(api: PermissionApis): Permissions {
-  if (api.platform !== "darwin") return { input: true, screen: true, accessibility: true };
+  if (api.platform !== "darwin") return { input: true, screen: true, accessibility: true, inputVerified: true };
   const accessibility = api.isTrustedAccessibilityClient(false) === true;
   const screen = api.getMediaAccessStatus("screen") === "granted";
   const monitoring = api.inputMonitoringStatus?.() ?? "unknown";
-  return { input: accessibility && monitoring !== "denied", screen, accessibility };
+  const seen = api.hookEventSeen?.() === true;
+  const inputVerified = monitoring !== "unknown" || seen;
+  const monitoringOk = monitoring === "granted" || (monitoring === "unknown" && seen);
+  return { input: accessibility && monitoringOk, screen, accessibility, inputVerified };
+}
+
+/** The hook needs Accessibility; it is started without a known Input Monitoring grant so the first event can verify it. */
+export function canStartHook(api: PermissionApis): boolean {
+  if (api.platform !== "darwin") return true;
+  return api.isTrustedAccessibilityClient(false) === true && api.inputMonitoringStatus?.() !== "denied";
 }
 
 /** Emits once on start() and then only when the permission set changes. */

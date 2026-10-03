@@ -12,13 +12,18 @@ Automated: the root gate does not cover `companion/`. The companion suite runs w
    `Check Input Monitoring…`, `Grant Screen Recording (window titles)…`; each opens the matching
    System Settings pane.
 3. **Permissions granted**: enable Accessibility, Input Monitoring and Screen Recording. Within a few
-   seconds the missing items disappear, without any key or mouse move, and the web app console
-   shows a new `status` with all three `true`.
+   seconds the Accessibility and Screen Recording items disappear and the web app console shows a
+   `status` with `accessibility:true`, `screen:true`, `input:false`, `inputVerified:false`. After the
+   first keystroke or click in any app a new `status` arrives with `input:true`, `inputVerified:true`
+   and `Check Input Monitoring…` disappears from the menu.
 4. **Pairing from the web app console**:
    `ws = new WebSocket("ws://127.0.0.1:47321"); ws.onmessage = e => console.log(e.data); ws.onclose = e => console.log("closed", e.code); ws.onopen = () => ws.send(JSON.stringify({type:"hello",token:"<code>"}))`
    logs `status`; the tray shows `Paired with web app` and a new code. A wrong code logs `closed 4401`;
    after five wrong codes the next connection from that page logs `closed 4429` (for 10 minutes), the
    tray code stays the same, and a page on another allowed Origin still pairs. No hello for 5 s logs `closed 4408`.
+   Global budget: send 20 wrong codes spread over 4+ allowed Origins (or patch Origins in a script);
+   the next connection from any Origin, also with the right code, logs `closed 4429`; after 60 s the
+   right code pairs and the tray code never changed in between.
    A second tab while paired logs `closed 4409`. The same snippet from `https://example.com` logs `closed 4403`.
 5. **Activity while typing in another app**: with the page paired, type in TextEdit or Outlook.
    The console shows `activity` every 500 ms with `typing:true` and `keys>0`; stop and `idle_ms` grows.

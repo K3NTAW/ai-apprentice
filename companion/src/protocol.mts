@@ -14,11 +14,17 @@ export const CLOSE = {
   HELLO_TIMEOUT: 4408,
   /** Another client is already paired, or too many pending sockets. */
   BUSY: 4409,
-  /** Too many failed pairing attempts from this Origin within the lockout window. */
+  /** Too many failed pairing attempts from this Origin, or across all Origins (60 s global cooldown). */
   LOCKED: 4429,
 } as const;
 
-export type Permissions = { input: boolean; screen: boolean; accessibility: boolean };
+export type Permissions = {
+  input: boolean;
+  screen: boolean;
+  accessibility: boolean;
+  /** Optional extension: true when 'input' is backed by an Input Monitoring query or an observed hook event. */
+  inputVerified?: boolean;
+};
 
 export type StatusMessage = {
   type: "status";
@@ -100,6 +106,7 @@ export function statusMessage(version: string, permissions: Permissions, paused?
       accessibility: permissions.accessibility === true,
     },
   };
+  if (permissions.inputVerified !== undefined) msg.permissions.inputVerified = permissions.inputVerified === true;
   if (paused !== undefined) msg.paused = paused;
   return msg;
 }
