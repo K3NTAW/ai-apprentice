@@ -55,7 +55,7 @@ Vercel project, Settings, Environment Variables. Set each for **Production** and
 | ELEVENLABS_AGENT_ID_TUTOR | ElevenLabs agent id for teach sessions |
 | ANTHROPIC_API_KEY | Anthropic API key (vision, Work Map synthesis) |
 | JEV_API_KEY | JEV API key |
-| DECIDE_PROVIDER | optional, overrides the decide provider |
+| DECIDE_PROVIDER | optional, forces the decide provider: jev, llm or heuristic |
 | VISION_MODEL | optional, overrides the vision model |
 
 NEXT_PUBLIC_* values are inlined at build time, so redeploy after changing them.
