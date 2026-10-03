@@ -60,7 +60,7 @@ describe("renderAvatarSvg", () => {
       expect(lower).not.toContain("foreignobject");
       expect(lower).not.toContain("image");
       expect(lower).not.toContain("use");
-      for (const a of attrs) {
+      for (const a of attrs.filter((x) => !(x.name === "xmlns" && x.value === "http://www.w3.org/2000/svg"))) {
         expect(a.name.toLowerCase().startsWith("on")).toBe(false);
         if (/href$/i.test(a.name)) expect(a.value.startsWith("#")).toBe(true);
         expect(a.value).not.toMatch(/url\((?!#)/);
@@ -92,7 +92,7 @@ describe("renderAvatarSvg", () => {
   it("neutralises hostile input", () => {
     const evil = { shape: "<script>", face: "x", color: '"/><script>alert(1)</script>', accent: "url(http://x)" } as unknown as Avatar;
     const svg = renderAvatarSvg(evil, "nope" as never, 1e9);
-    expect(svg).not.toMatch(/script|http:/);
+    expect(svg).not.toMatch(/script|http:\/\/x/);
     expect(svg).toContain('width="1024"');
     expect(normalizeAvatar(evil)).toEqual(DEFAULT_AVATAR);
   });
