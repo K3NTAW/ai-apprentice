@@ -135,7 +135,6 @@ function CaptureInner() {
       client.on("app", (a) => loopRef.current?.ctrl.onCompanionApp(a)),
     ];
     client.connect();
-    setCompanionStatus(client.status());
     return () => {
       for (const off of offs) off();
       client.dispose();

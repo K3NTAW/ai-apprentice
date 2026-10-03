@@ -90,15 +90,8 @@ export async function startScreenCapture({
     timer = null;
   };
 
-  let handle: CaptureHandle;
-  track?.addEventListener("ended", () => {
-    if (stopped) return;
-    handle.stop();
-    onEnded?.();
-  });
-
   start();
-  handle = {
+  const handle: CaptureHandle = {
     stream,
     displaySurface,
     pause: halt,
@@ -110,5 +103,10 @@ export async function startScreenCapture({
       video.srcObject = null;
     },
   };
+  track?.addEventListener("ended", () => {
+    if (stopped) return;
+    handle.stop();
+    onEnded?.();
+  });
   return handle;
 }
