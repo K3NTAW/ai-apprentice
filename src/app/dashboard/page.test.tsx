@@ -1,8 +1,14 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import Dashboard from "@/components/dashboard/Dashboard";
 import { buildDashboard } from "@/lib/dashboard/summary";
 import type { Session } from "@/lib/types";
+
+vi.mock("next/navigation", () => ({
+  redirect: vi.fn((to: string) => {
+    throw new Error(`REDIRECT ${to}`);
+  }),
+}));
 
 const base = { events: [], transcript: [], qa: [], off_record_ranges: [] };
 const sessions: Session[] = [
@@ -49,5 +55,12 @@ describe("Dashboard", () => {
     expect(html).toContain("No learners yet");
     expect(html).toContain('href="/workspace"');
     expect(html).not.toContain("Start a capture");
+  });
+});
+
+describe("/dashboard", () => {
+  it("redirects to /agents", async () => {
+    const { default: DashboardPage } = await import("./page");
+    expect(() => DashboardPage()).toThrow("REDIRECT /agents");
   });
 });

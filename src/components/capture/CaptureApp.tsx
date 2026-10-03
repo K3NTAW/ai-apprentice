@@ -30,6 +30,9 @@ import {
   type ShortcutAction,
 } from "@/lib/companion/client";
 import { routeShortcut } from "@/lib/companion/shortcuts";
+import AgentHeader from "@/components/agents/AgentHeader";
+import { agentBlocker, useAgent } from "@/components/agents/useAgent";
+import { createAgentCaptureSession } from "./agentSession";
 import CaptureConsole from "./CaptureConsole";
 import { dailyLimitNotice, voiceStartNotice } from "./dailyLimit";
 import SidePanel, { type PresenceStatus } from "./SidePanel";
@@ -82,17 +85,25 @@ function viewOf(c: CaptureController): View {
   };
 }
 
-export default function CaptureApp() {
+export default function CaptureApp({ agentParam = null }: { agentParam?: string | null }) {
   return (
     <VoiceProvider>
-      <CaptureInner />
+      <CaptureInner agentParam={agentParam} />
     </VoiceProvider>
   );
 }
 
-function CaptureInner() {
+function CaptureInner({ agentParam }: { agentParam: string | null }) {
   const router = useRouter();
+  const agentLoad = useAgent(agentParam);
   const [expert, setExpert] = useState("Sabine");
+  const agentExpert = agentLoad.status === "ok" ? agentLoad.agent.expert_name?.trim() : undefined;
+  // Adopt the agent's expert name when it loads or changes (state adjusted during render, not in an effect).
+  const [seenAgentExpert, setSeenAgentExpert] = useState<string | undefined>(undefined);
+  if (agentExpert !== seenAgentExpert) {
+    setSeenAgentExpert(agentExpert);
+    if (agentExpert) setExpert(agentExpert);
+  }
   const [running, setRunning] = useState(false);
   const [starting, setStarting] = useState(false);
   const [textMode, setTextMode] = useState(false);
@@ -168,12 +179,21 @@ function CaptureInner() {
     if (starting || loopRef.current) return;
     setStarting(true);
     setNotice(null);
+    const blocked = agentBlocker(agentLoad);
+    if (blocked) {
+      setNotice(blocked);
+      setStarting(false);
+      return;
+    }
     const name = expert.trim() || "Sabine";
     // The agent this capture trains: ?agent=<id>, linked on the session and shown in the companion dock.
     const agentId = SHORTCUT_LEARNING ? new URLSearchParams(window.location.search).get("agent") : null;
     let sessionId: string;
     try {
-      sessionId = await createCaptureSession(name, agentId);
+      sessionId =
+        agentLoad.status === "ok"
+          ? await createAgentCaptureSession(name, agentLoad.agent.id)
+          : await createCaptureSession(name, agentId);
     } catch (err) {
       setNotice(`Could not create the session: ${err instanceof Error ? err.message : String(err)}`);
       setStarting(false);
@@ -331,6 +351,8 @@ function CaptureInner() {
           : "listening";
 
   return (
+    <>
+    <AgentHeader load={agentLoad} state={running ? "listening" : "idle"} verb="training" />
     <main className="flex h-screen bg-slate-100">
       <div className="min-w-0 flex-1 overflow-auto p-4">
         <CaptureConsole
@@ -382,5 +404,6 @@ function CaptureInner() {
         hideControls
       />
     </main>
+    </>
   );
 }

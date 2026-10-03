@@ -3,7 +3,13 @@ import { appMode } from "@/lib/supabase/env";
 
 export const dynamic = "force-dynamic";
 
-export default async function TeachPage({ searchParams }: { searchParams: Promise<{ session?: string | string[] }> }) {
-  const { session } = await searchParams;
-  return <TeachApp sessionId={typeof session === "string" ? session : null} localMode={appMode() === "local"} />;
+export default async function TeachPage({ searchParams }: { searchParams: Promise<{ session?: string | string[]; agent?: string | string[] }> }) {
+  const { session, agent } = await searchParams;
+  return (
+    <TeachApp
+      sessionId={typeof session === "string" ? session : null}
+      localMode={appMode() === "local"}
+      agentParam={typeof agent === "string" ? agent : null}
+    />
+  );
 }

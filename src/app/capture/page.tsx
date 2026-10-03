@@ -4,7 +4,8 @@ import { getRequestContext } from "@/lib/auth/context";
 
 export const dynamic = "force-dynamic";
 
-export default async function CapturePage() {
+export default async function CapturePage({ searchParams }: { searchParams: Promise<{ agent?: string | string[] }> }) {
+  const { agent } = await searchParams;
   const result = await getRequestContext();
   if (result.kind === "ok" && !canCapture(result.ctx.role)) {
     return (
@@ -14,5 +15,5 @@ export default async function CapturePage() {
       </main>
     );
   }
-  return <CaptureApp />;
+  return <CaptureApp agentParam={typeof agent === "string" ? agent : null} />;
 }

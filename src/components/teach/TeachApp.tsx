@@ -21,9 +21,13 @@ import { createShortcutCoach, type ShortcutCoach } from "@/lib/teach/shortcutHin
 import { SHORTCUT_LEARNING } from "@/lib/companion/chord";
 import { newId, type Rect, type ScreenEvent, type VisionEvent, type WorkMap, type WorkMapStep } from "@/lib/types";
 import { loadPickerOptions, loadWorkMap, preselect, type PickerOption } from "./loadWorkMap";
+import AgentHeader from "@/components/agents/AgentHeader";
+import { agentBlocker, useAgent } from "@/components/agents/useAgent";
+import { checkTeachSource, teachSessionBody } from "./agentSource";
 import TeachConsole, { type TeachConsoleProps, type TeachLine } from "./TeachConsole";
 
-export type TeachAppProps = { sessionId: string | null; localMode: boolean };
+/** agentParam: ?agent, the agent of the new teach session. sessionId: ?session, the source Work Map capture session. */
+export type TeachAppProps = { sessionId: string | null; localMode: boolean; agentParam?: string | null };
 
 const NO_STATS: InterventionStats = { interventions: 0, active: 0, decideCalls: 0, decideFailures: 0, lastDecideError: null, capped: false };
 const PREDICT_QUESTION = "What would you do next?";
@@ -65,9 +69,15 @@ export default function TeachApp(props: TeachAppProps) {
   );
 }
 
-function TeachInner({ sessionId, localMode }: TeachAppProps) {
+function TeachInner({ sessionId, localMode, agentParam = null }: TeachAppProps) {
+  const agentLoad = useAgent(agentParam);
+  const agentId = agentLoad.status === "ok" ? agentLoad.agent.id : null;
+  const [sourceCheck, setSourceCheck] = useState<{ key: string; error: string | null } | null>(null);
   const [options, setOptions] = useState<PickerOption[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
+  // The source error belongs to one agent + Work Map pair; it reads as null as soon as either changes.
+  const sourceError =
+    agentId && selected && sourceCheck?.key === `${agentId}:${selected}` ? sourceCheck.error : null;
   const [workmap, setWorkmap] = useState<WorkMap | null>(null);
   const [workmapSessionId, setWorkmapSessionId] = useState<string | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
@@ -159,6 +169,16 @@ function TeachInner({ sessionId, localMode }: TeachAppProps) {
       live = false;
     };
   }, [localMode, sessionId]);
+
+  useEffect(() => {
+    if (!agentId || !selected) return;
+    const key = `${agentId}:${selected}`;
+    let live = true;
+    void checkTeachSource(agentId, selected).then((error) => live && setSourceCheck({ key, error }));
+    return () => {
+      live = false;
+    };
+  }, [agentId, selected]);
 
   useEffect(() => {
     if (!selected) return;
@@ -278,9 +298,15 @@ function TeachInner({ sessionId, localMode }: TeachAppProps) {
     setStarting(true);
     setNotice(null);
     setResult(null);
+    const blocked = agentBlocker(agentLoad) ?? (agentId ? sourceError : null);
+    if (blocked) {
+      setNotice(blocked);
+      setStarting(false);
+      return;
+    }
     let id: string;
     try {
-      id = (await postJson<{ id: string }>("/api/session", { kind: "teach" })).id;
+      id = (await postJson<{ id: string }>("/api/session", teachSessionBody(agentId))).id;
     } catch (err) {
       setNotice(`Could not create the teach session: ${err instanceof Error ? err.message : String(err)}`);
       setStarting(false);
@@ -460,6 +486,13 @@ function TeachInner({ sessionId, localMode }: TeachAppProps) {
   }, [running, workmap, stats.interventions, transcript, lastQuestion, lastAnswer, paused]);
 
   return (
+    <>
+    <AgentHeader load={agentLoad} state={running ? (paused ? "paused" : "listening") : "idle"} verb="teaching" />
+    {agentId && sourceError && (
+      <div role="alert" className="border-b border-line px-4 py-2 text-sm text-red-500">
+        {sourceError}
+      </div>
+    )}
     <TeachConsole
       options={options}
       selected={selected}
@@ -491,5 +524,6 @@ function TeachInner({ sessionId, localMode }: TeachAppProps) {
         onLearner(text);
       }}
     />
+    </>
   );
 }
