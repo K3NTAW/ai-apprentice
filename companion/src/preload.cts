@@ -8,6 +8,8 @@ type OverlayView = {
   say: string | null;
   target: { id: string; rect: Rect; style: string } | null;
   halos: { id: string; rect: Rect; text?: string }[];
+  /** Teach with an agent: validated avatar data URL for the current state, else null (orb). */
+  avatar: string | null;
 };
 
 contextBridge.exposeInMainWorld("companionOverlay", {

@@ -4,12 +4,14 @@
 const root = document.getElementById("root");
 const buddyEl = document.getElementById("buddy");
 const sayEl = document.getElementById("say");
+const avatarEl = document.getElementById("avatar");
 const px = (n) => `${Number(n) || 0}px`;
 const OFFSET = 18;
 const FLY_MS = 400;
 const MODES = ["idle", "listening", "thinking", "speaking", "paused"];
 
-let view = { buddy: false, mode: "idle", say: null, target: null, halos: [] };
+let view = { buddy: false, mode: "idle", say: null, target: null, halos: [], avatar: null };
+let half = 9;
 let cursor = null;
 let pos = null;
 let flight = null;
@@ -97,7 +99,7 @@ function frame(now) {
     } else {
       pos = g;
     }
-    buddyEl.style.transform = `translate(${pos.x - 9}px, ${pos.y - 9}px)`;
+    buddyEl.style.transform = `translate(${pos.x - half}px, ${pos.y - half}px)`;
   }
   placeBubble();
   requestAnimationFrame(frame);
@@ -107,7 +109,10 @@ window.companionOverlay.onView((next) => {
   view = next && typeof next === "object" ? next : view;
   drawHalos(view.halos);
   const mode = MODES.includes(view.mode) ? view.mode : "idle";
-  buddyEl.className = `buddy ${mode}${buddyEl.classList.contains("hidden") ? " hidden" : ""}`;
+  // The avatar (a validated data URL) only ever goes to the img src; null keeps the v2 orb.
+  const hasAvatar = window.companionAvatar.setAvatarSrc(avatarEl, view.avatar);
+  half = hasAvatar ? 14 : 9;
+  buddyEl.className = `buddy ${mode}${hasAvatar ? " has-avatar" : ""}${buddyEl.classList.contains("hidden") ? " hidden" : ""}`;
   sayEl.textContent = typeof view.say === "string" ? view.say : "";
   const key = view.target ? `${view.target.id}:${view.target.rect.x},${view.target.rect.y}` : null;
   if (key !== targetKey) {

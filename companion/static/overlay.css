@@ -37,6 +37,11 @@ html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; w
 .buddy.paused::after {
   content: ""; position: absolute; left: 1px; top: 8px; width: 16px; height: 2px; background: #fff; transform: rotate(-45deg);
 }
+.buddy .avatar { display: none; }
+/* Teach with an agent: the agent avatar (28 px) replaces the orb; its own SVG animates the state. */
+.buddy.has-avatar { width: 28px; height: 28px; }
+.buddy.has-avatar .core, .buddy.has-avatar .ring, .buddy.has-avatar .dot, .buddy.has-avatar.paused::after { display: none; }
+.buddy.has-avatar .avatar { display: block; width: 28px; height: 28px; filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.35)); }
 .bubble.say { position: fixed; max-width: 280px; font-size: 13px; }
 @keyframes breathe { 0%, 100% { opacity: 0.45; transform: scale(0.92); } 50% { opacity: 0.75; transform: scale(1); } }
 @keyframes pulse-buddy { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.25); box-shadow: 0 0 16px 6px rgba(47, 107, 255, 0.7); } }

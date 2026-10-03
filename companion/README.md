@@ -2,7 +2,8 @@
 
 Tray app that gives the AI Apprentice web app what a browser cannot: global typing and pointer
 activity counts, the frontmost app and window title, a cursor buddy that talks and points at things
-over any app, global push-to-talk shortcuts and a small floating panel.
+over any app, global push-to-talk shortcuts, a small floating panel, the agent side dock (Capture) and
+the agent avatar as the cursor buddy (Teach).
 It talks only to the paired web page over a local WebSocket on `127.0.0.1`.
 
 ## Install
@@ -48,6 +49,9 @@ Environment:
   error line in the tray menu; the app keeps running without the server.
 - `COMPANION_BUDDY=0` (or `off`, `false`): rollback switch. No cursor buddy, no bubbles, no glances;
   `stop` points and `overlay.halo` still draw the v1 halo. Same as unticking `Cursor buddy` in the panel.
+- `COMPANION_DOCK=0` (or `off`, `false`, `no`): rollback switch for the v3 dock. No side dock and the v2
+  orb buddy in every mode (no avatar, buddy not hidden in Capture). `dock.*` messages are ignored.
+- `COMPANION_CHORDS=0` (or `off`, `false`, `no`): rollback switch. No `chord` messages are sent.
 - `COMPANION_ALLOWED_ORIGINS` comma separated, e.g. `http://localhost:3000,https://ai-apprentice*.vercel.app`.
   Unset means the defaults below. Set but empty, or with no valid entry, means deny all.
 
@@ -108,8 +112,10 @@ Shortcuts (configurable in the panel, saved to `settings.json` in the app's user
 
 - Without a paired page a shortcut shows the bubble `Open the control room to start a session`.
 - Press is `globalShortcut`; release comes from a uiohook `keyup` listener in `shortcuts.mts`, the
-  only module that reads keycodes: it compares the keycode with the talk binding's key, calls release
-  on a match and keeps nothing. `activity.mts` still never sees keycodes or `keyup`.
+  only module that reads keyup keycodes: it compares the keycode with the talk binding's key, calls
+  release on a match and keeps nothing. Keydown keycodes and modifier flags are read only by
+  `chord.mts` (see Chords). `activity.mts` still never sees keycodes or `keyup`.
+- These five bindings are never sent as `chord` messages (the off the record toggle included).
 - Without the input hook (macOS Input Monitoring or Accessibility missing) talk falls back to
   press-to-toggle and the panel says so.
 - While paused (tray `Pause sensing`, or `buddy.state` paused) talk is blocked with a bubble; pause,
@@ -118,6 +124,52 @@ Shortcuts (configurable in the panel, saved to `settings.json` in the app's user
   input hook stop, and after a hard 60 s cap.
 - A failed `globalShortcut.register` (taken by the system or another app) is shown next to that
   binding in the panel and logged; pick another binding there.
+
+## Agent side dock and avatar buddy (protocol v3)
+
+- **Side dock** (`dock.mts` pure rules, `static/dock.*` renderer): a rounded, always-on-top window on
+  the primary display's work area, docked to the right edge (or left per `dock.show`), 300 px wide
+  and 60% of the work area height, vertically centred. `›` collapses it to a 56 px tab with only the
+  avatar; the tab expands it. The collapse state persists in `dock.json` in userData. It shows the
+  agent avatar for the current state, name and role, the current `buddy.say` as a speech bubble, the
+  `What I learned` feed (last 8 `dock.learned` lines, icons `→` step, `⌘` shortcut, `⚠` guardrail;
+  a line equal to one already in the feed is dropped), the question and guardrail counters, and
+  `Pause`, `Off the record`, `End task` (same actions as the shortcuts). It never takes focus:
+  `focusable: false`, `showInactive`, and on macOS a non-activating `panel` window. It uses
+  `setContentProtection(true)` like the overlays, so vision frames do not see it.
+- **Mode rules**: visible while paired, not `teach`, and either `capture` without a later `dock.hide`,
+  or after `dock.show`. `dock.show`/`dock.hide` last until the next session. In `capture` the cursor
+  buddy is hidden; in `teach` the dock is hidden and the buddy is drawn with the agent avatar (28 px)
+  instead of the orb; without an agent the orb stays. `buddy.state` maps to avatar frames: idle,
+  listening, thinking, speaking -> talking, paused; a `stop` point shows `stop` while it flies and
+  stays. Missing frames fall back to `idle`.
+- **Feed reset**: a new session (agent id, mode or title change) or unpair clears the feed. On unpair
+  the dock hides. On display changes the dock is re-placed on the current primary display.
+- **Avatars** (`avatarUrl.mts`, `static/avatarSrc.js`): each frame must match
+  `data:image/svg+xml;base64,<base64>` and be at most 100 KiB; `idle` is required; all frames together
+  at most 800 KiB. The renderers set them only through `companionAvatar.setAvatarSrc` (an `<img>`
+  `src`), never as HTML; the dock and overlay pages have `img-src data:` in their CSP. An SVG in an
+  `<img>` runs no scripts and loads nothing external.
+
+## Chords (keyboard shortcuts, protocol v3)
+
+`chord.mts` is the only module that reads keydown keycodes and modifier flags. Its classifier is a
+pure function that returns a chord string (`Cmd+Shift+T`, `Ctrl+C`, `Alt+F4`) or null and keeps no
+key history. Emitted: combinations with Cmd (macOS), Ctrl or Alt/Option, with or without Shift,
+including Escape/Tab/Enter with one of them, and F1-F24 when a secure input check exists. Never
+emitted: letters, digits, punctuation, Space, Shift+letter, Escape/Tab/Enter alone, Option+printable
+key on macOS and Ctrl+Alt+printable key on Windows (both type characters such as `@` on many
+layouts), and the companion's own five bindings. Nothing is emitted while `Pause sensing` is on,
+while `session.state.off_record` is true, while `buddy.state` is `paused`, or without a paired page.
+Key names are uiohook's US layout names of the physical key.
+
+**Secure input (password fields)**: Electron has no `IsSecureEventInputEnabled` API and the companion
+adds no native or FFI module for it, so there is no check (`secureInput: null`). Without a check
+only Cmd/Ctrl/Alt chords are sent (no bare F-keys). On macOS a password field turns on secure event
+input, which keeps key events away from the event tap uiohook uses, so nothing is seen there.
+Residual risk: on Windows there is no such OS flag; a chord typed in a password field (for example
+`Ctrl+V`) is sent as the chord name only, never the characters. The classifier takes the check as an
+injected function, so a future native check plugs in; a throw counts as secure (nothing sent).
 
 ## Package a local unsigned .app
 
@@ -181,7 +233,8 @@ How `status.permissions` is derived:
 
 ## Protocol summary
 
-`ws://127.0.0.1:47321`, bound to loopback only, max payload 16 KiB.
+`ws://127.0.0.1:47321`, bound to loopback only, max payload 16 KiB (1 MiB for `session.state` only,
+for v3 avatars; any other type above 16 KiB is rejected).
 
 Admission:
 
@@ -208,14 +261,15 @@ Close codes: `4401` bad or missing hello, `4403` origin or host rejected, `4408`
 
 Companion to web:
 
-- `{"type":"status","version":"x.y.z","protocol":2,"permissions":{"input":bool,"screen":bool,"accessibility":bool,"inputVerified":bool},"paused":bool}`
-  after hello and on change. `protocol: 2` means the v2 messages below are understood; a page that
+- `{"type":"status","version":"x.y.z","protocol":3,"permissions":{"input":bool,"screen":bool,"accessibility":bool,"inputVerified":bool},"paused":bool}`
+  after hello and on change. `protocol: 3` means the v2 and v3 messages below are understood; a page that
   sees no `protocol` field talks to a v1 companion and should only send `overlay.*`. `paused` is an optional extension; clients that ignore it see silence
   while paused.
 - `{"type":"activity","t":ms,"typing":bool,"pointer":bool,"keys":int,"clicks":int,"idle_ms":int}` every 500 ms.
 - `{"type":"app","t":ms,"app":"Microsoft Outlook","title":"..."}` when app or title changes.
 - `{"type":"pong"}`.
 - v2: `{"type":"shortcut","action":"talk_start"|"talk_end"|"off_record_toggle"|"pause_toggle"|"end_task"}`.
+- v3: `{"type":"chord","t":ms,"chord":"Cmd+Shift+T","app":"<frontmost app>"}` (see Chords).
 
 Web to companion:
 
@@ -231,6 +285,11 @@ Web to companion:
 - v2: `{"type":"buddy.clear","id":"..."}` (id optional: clears all).
 - v2: `{"type":"session.state","mode":"capture"|"teach"|null,"title":"<200","expert":"<200","asked":int,"guardrails":int,"last_question":"<500","last_answer":"<2000","off_record":bool,"app_url":"<2048"}`;
   counters are integers 0..1000000. Too long texts, bad enums or counters reject the whole message.
+- v3: `session.state` may carry `"agent":{"id":"[A-Za-z0-9-]{1,64}","name":"<1..60>","role":"<0..80>","avatar":{"idle":"data:...",...}}`
+  (lengths in code points, avatar rules above). A bad agent is dropped with a log line; the rest of
+  `session.state` is kept.
+- v3: `{"type":"dock.show","side":"right"|"left"}` (side optional, default right), `{"type":"dock.hide"}`,
+  `{"type":"dock.learned","kind":"step"|"shortcut"|"guardrail","text":"<1..140>"}`.
 
 Invalid messages are ignored with a log line. Halos are cleared on disconnect, on pause and on quit.
 
@@ -243,6 +302,9 @@ Invalid messages are ignored with a log line. Halos are cleared on disconnect, o
   document names or email subjects; that is the one piece of content the companion sends.
 - `Pause sensing` stops the input hook and the app poll, clears halos and sends nothing but `status`
   (with `paused: true`). No app or title is sent while paused.
+- Shortcuts (modifier combos such as `Cmd+Shift+T`) are recorded and sent to the paired page with the
+  frontmost app name; plain typing never is (see Chords for exactly what counts). No chords while
+  paused, off the record or with `COMPANION_CHORDS=0`.
 - Nothing leaves the machine except to the paired local web page over `127.0.0.1`. No files, no
   telemetry, no network calls.
 
@@ -265,7 +327,8 @@ Invalid messages are ignored with a log line. Halos are cleared on disconnect, o
 ## Rollback
 
 Buddy problems on a machine: set `COMPANION_BUDDY=0` or untick `Cursor buddy` in the panel. That
-falls back to the halo-only overlay and does not block Capture.
+falls back to the halo-only overlay and does not block Capture. Dock or avatar problems:
+`COMPANION_DOCK=0` (v2 orb buddy, no dock). Chord concerns: `COMPANION_CHORDS=0`.
 
 The change is additive: everything lives in `companion/` plus `docs/checks/pivot-companion.md` and
 a few `.gitignore` lines. Revert the commit to remove it.

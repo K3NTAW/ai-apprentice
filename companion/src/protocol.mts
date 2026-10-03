@@ -1,12 +1,18 @@
 // COMPANION PROTOCOL message shapes, validation and builders. Electron-free and ws-free.
 import { BUDDY_MODES, MAX_POINT_TEXT, MAX_SAY, POINT_STYLES, type BuddyAction, type BuddyMode, type PointStyle } from "./buddy.mjs";
+import { validateAvatarSet, type AvatarSet } from "./avatarUrl.mjs";
+import { DOCK_SIDES, LEARNED_KINDS, MAX_LEARNED_TEXT, type DockSide, type LearnedKind } from "./dock.mjs";
 import { validateHalo, validateRect, HALO_TTL_MS, type Halo, type Rect } from "./overlay.mjs";
 import type { WireAction } from "./shortcuts.mjs";
 
 export const DEFAULT_PORT = 47321;
 export const MAX_PAYLOAD_BYTES = 16 * 1024;
-/** Protocol capability sent in status so the page can feature-detect v2 (buddy.*, session.state, shortcut). */
-export const PROTOCOL_VERSION = 2;
+/** session.state only (v3 avatars: up to 8 x 100 KiB data URLs, 800 KiB total, plus texts). Every other type keeps 16 KiB. */
+export const MAX_SESSION_PAYLOAD_BYTES = 1024 * 1024;
+/** Protocol capability sent in status so the page can feature-detect v2 (buddy.*, session.state, shortcut) and v3 (agent, dock.*, chord). */
+export const PROTOCOL_VERSION = 3;
+/** session.state.agent limits (code points). A bad agent is dropped; the rest of session.state is kept. */
+export const AGENT_LIMITS = { id: 64, name: 60, role: 80 } as const;
 
 /** session.state text limits (code points). Longer texts reject the whole message. */
 export const SESSION_LIMITS = { title: 200, expert: 200, last_question: 500, last_answer: 2000, app_url: 2048 } as const;
@@ -55,7 +61,8 @@ export type ActivityMessage = {
 export type AppMessage = { type: "app"; t: number; app: string; title: string };
 export type PongMessage = { type: "pong" };
 export type ShortcutMessage = { type: "shortcut"; action: WireAction };
-export type ServerMessage = StatusMessage | ActivityMessage | AppMessage | PongMessage | ShortcutMessage;
+export type ChordMessage = { type: "chord"; t: number; chord: string; app: string };
+export type ServerMessage = StatusMessage | ActivityMessage | AppMessage | PongMessage | ShortcutMessage | ChordMessage;
 
 export type HelloMessage = { type: "hello"; token: string };
 export type HaloMessage = { type: "overlay.halo" } & Halo;
@@ -76,7 +83,13 @@ export type SessionStateMessage = {
   last_answer: string;
   off_record: boolean;
   app_url: string;
+  /** v3, optional: absent in local mode without an agent, or when the agent failed validation. */
+  agent?: AgentInfo;
 };
+export type AgentInfo = { id: string; name: string; role: string; avatar: AvatarSet };
+export type DockShowMessage = { type: "dock.show"; side: DockSide };
+export type DockHideMessage = { type: "dock.hide" };
+export type DockLearnedMessage = { type: "dock.learned"; kind: LearnedKind; text: string };
 export type ClientMessage =
   | HelloMessage
   | HaloMessage
@@ -86,9 +99,13 @@ export type ClientMessage =
   | BuddySayMessage
   | BuddyPointMessage
   | BuddyClearMessage
-  | SessionStateMessage;
+  | SessionStateMessage
+  | DockShowMessage
+  | DockHideMessage
+  | DockLearnedMessage;
 
-export type ParseResult = { ok: true; msg: ClientMessage } | { ok: false; reason: string };
+/** warning: something was dropped from an otherwise valid message (e.g. a bad session.state.agent). */
+export type ParseResult = { ok: true; msg: ClientMessage; warning?: string } | { ok: false; reason: string };
 
 const MAX_ID_LENGTH = 128;
 
@@ -126,6 +143,19 @@ function counter(v: unknown): number | null {
   return typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= MAX_COUNTER ? v : null;
 }
 
+/** session.state.agent: id [A-Za-z0-9-] up to 64, name 1..60 and role 0..80 code points, avatar per avatarUrl.mts. */
+export function parseAgent(v: unknown): { ok: true; agent: AgentInfo } | { ok: false; reason: string } {
+  if (!isRecord(v)) return { ok: false, reason: "agent_shape" };
+  if (typeof v.id !== "string" || !/^[A-Za-z0-9-]{1,64}$/.test(v.id)) return { ok: false, reason: "agent_id" };
+  const name = cleanText(v.name, AGENT_LIMITS.name);
+  if (name === null || name.trim() === "") return { ok: false, reason: "agent_name" };
+  const role = v.role === undefined ? "" : cleanText(v.role, AGENT_LIMITS.role);
+  if (role === null) return { ok: false, reason: "agent_role" };
+  const avatar = validateAvatarSet(v.avatar);
+  if (!avatar.ok) return avatar;
+  return { ok: true, agent: { id: v.id, name, role, avatar: avatar.avatar } };
+}
+
 function parseSessionState(d: Record<string, unknown>): ParseResult {
   const mode = d.mode === undefined || d.mode === null ? null : isEnum(d.mode, ["capture", "teach"] as const) ? d.mode : undefined;
   if (mode === undefined) return bad("session_mode");
@@ -139,21 +169,21 @@ function parseSessionState(d: Record<string, unknown>): ParseResult {
   const guardrails = counter(d.guardrails);
   if (asked === null || guardrails === null) return bad("session_counter");
   if (d.off_record !== undefined && typeof d.off_record !== "boolean") return bad("session_off_record");
-  return {
-    ok: true,
-    msg: {
-      type: "session.state",
-      mode,
-      title: strings.title ?? "",
-      expert: strings.expert ?? "",
-      asked,
-      guardrails,
-      last_question: strings.last_question ?? "",
-      last_answer: strings.last_answer ?? "",
-      off_record: d.off_record === true,
-      app_url: strings.app_url ?? "",
-    },
+  const agent = d.agent === undefined || d.agent === null ? null : parseAgent(d.agent);
+  const msg: SessionStateMessage = {
+    type: "session.state",
+    mode,
+    title: strings.title ?? "",
+    expert: strings.expert ?? "",
+    asked,
+    guardrails,
+    last_question: strings.last_question ?? "",
+    last_answer: strings.last_answer ?? "",
+    off_record: d.off_record === true,
+    app_url: strings.app_url ?? "",
   };
+  if (agent?.ok) msg.agent = agent.agent;
+  return agent && !agent.ok ? { ok: true, msg, warning: `session_${agent.reason}` } : { ok: true, msg };
 }
 
 /** Parse and validate one inbound frame. Never throws. */
@@ -162,7 +192,11 @@ export function parseClientMessage(raw: unknown): ParseResult {
   if (typeof raw === "string") text = raw;
   else if (raw instanceof Uint8Array) text = Buffer.from(raw).toString("utf8");
   else return { ok: false, reason: "not_text" };
-  if (Buffer.byteLength(text, "utf8") > MAX_PAYLOAD_BYTES) return { ok: false, reason: "too_large" };
+  const bytes = Buffer.byteLength(text, "utf8");
+  // Only session.state may exceed 16 KiB (avatars); checked again on the parsed type below.
+  if (bytes > MAX_SESSION_PAYLOAD_BYTES || (bytes > MAX_PAYLOAD_BYTES && !/^\s*\{\s*"type"\s*:\s*"session\.state"/.test(text))) {
+    return { ok: false, reason: "too_large" };
+  }
   let data: unknown;
   try {
     data = JSON.parse(text);
@@ -170,6 +204,7 @@ export function parseClientMessage(raw: unknown): ParseResult {
     return { ok: false, reason: "invalid_json" };
   }
   if (!isRecord(data) || typeof data.type !== "string") return { ok: false, reason: "no_type" };
+  if (bytes > MAX_PAYLOAD_BYTES && data.type !== "session.state") return { ok: false, reason: "too_large" };
   switch (data.type) {
     case "hello":
       if (typeof data.token !== "string") return { ok: false, reason: "hello_token" };
@@ -217,6 +252,17 @@ export function parseClientMessage(raw: unknown): ParseResult {
       return { ok: true, msg: { type: "buddy.clear", id: data.id } };
     case "session.state":
       return parseSessionState(data);
+    case "dock.show":
+      if (data.side !== undefined && !isEnum(data.side, DOCK_SIDES)) return bad("dock_side");
+      return { ok: true, msg: { type: "dock.show", side: data.side ?? "right" } };
+    case "dock.hide":
+      return { ok: true, msg: { type: "dock.hide" } };
+    case "dock.learned": {
+      if (!isEnum(data.kind, LEARNED_KINDS)) return bad("learned_kind");
+      const t = cleanText(data.text, MAX_LEARNED_TEXT);
+      if (t === null || t.trim() === "") return bad("learned_text");
+      return { ok: true, msg: { type: "dock.learned", kind: data.kind, text: t.trim() } };
+    }
     default:
       return { ok: false, reason: "unknown_type" };
   }
@@ -244,6 +290,7 @@ export function appMessage(t: number, app: string, title: string): AppMessage {
 
 export const pongMessage = (): PongMessage => ({ type: "pong" });
 export const shortcutMessage = (action: WireAction): ShortcutMessage => ({ type: "shortcut", action });
+export const chordMessage = (t: number, chord: string, app: string): ChordMessage => ({ type: "chord", t, chord, app: String(app).slice(0, 256) });
 
 /**
  * The one place overlay.* (v1) meets the buddy: overlay.halo is buddy.point style 'stop' (keeping the

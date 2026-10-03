@@ -5,10 +5,13 @@ import type { Allowlist } from "./origin.mjs";
 import type { Pairing } from "./pairing.mjs";
 import {
   CLOSE,
-  MAX_PAYLOAD_BYTES,
+  MAX_SESSION_PAYLOAD_BYTES,
   parseClientMessage,
   pongMessage,
   toBuddyAction,
+  type DockHideMessage,
+  type DockLearnedMessage,
+  type DockShowMessage,
   type ServerMessage,
   type SessionStateMessage,
   type StatusMessage,
@@ -20,6 +23,7 @@ export type ServerHooks = {
   onPairedChange(paired: boolean): void;
   onBuddy(action: BuddyAction): void;
   onSession(state: SessionStateMessage): void;
+  onDock(msg: DockShowMessage | DockHideMessage | DockLearnedMessage): void;
   log(line: string): void;
 };
 
@@ -35,7 +39,7 @@ export function startServer(port: number, allowlist: Allowlist, pairing: Pairing
   let nextId = 1;
 
   return new Promise((resolve, reject) => {
-    const wss = new WebSocketServer({ host: "127.0.0.1", port, maxPayload: MAX_PAYLOAD_BYTES, perMessageDeflate: false });
+    const wss = new WebSocketServer({ host: "127.0.0.1", port, maxPayload: MAX_SESSION_PAYLOAD_BYTES, perMessageDeflate: false });
 
     const safeClose = (ws: WebSocket, code: number, reason: string) => {
       try {
@@ -82,9 +86,11 @@ export function startServer(port: number, allowlist: Allowlist, pairing: Pairing
             hooks.log(`ignored invalid message: ${parsed.reason}`);
             return;
           }
+          if (parsed.warning) hooks.log(`dropped part of message: ${parsed.warning}`);
           const msg = parsed.msg;
           if (msg.type === "ping") ws.send(JSON.stringify(pongMessage()));
           else if (msg.type === "session.state") hooks.onSession(msg);
+          else if (msg.type === "dock.show" || msg.type === "dock.hide" || msg.type === "dock.learned") hooks.onDock(msg);
           else if (msg.type === "hello") hooks.log("ignored message: hello after pairing");
           else {
             const action = toBuddyAction(msg);

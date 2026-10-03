@@ -1,0 +1,33 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src data:" />
+    <title>AI Apprentice agent</title>
+    <link rel="stylesheet" href="dock.css" />
+  </head>
+  <body>
+    <main id="dock" class="dock">
+      <button id="tab" class="tab" type="button" title="Expand"><img id="tab-avatar" class="avatar-sm" alt="" draggable="false" /></button>
+      <section id="full" class="full">
+        <header class="head">
+          <img id="avatar" class="avatar" alt="" draggable="false" />
+          <div class="who"><div id="name" class="name"></div><div id="role" class="role"></div></div>
+          <button id="collapse" class="icon" type="button" title="Collapse">›</button>
+        </header>
+        <div class="row"><span id="offrec" class="pill warn hidden">Off the record</span><span id="paused" class="pill hidden">Paused</span></div>
+        <div id="say" class="say hidden"></div>
+        <div class="label">What I learned</div>
+        <ul id="feed" class="feed"></ul>
+        <div class="row counters"><span>Questions <b id="asked">0</b></span><span>Guardrails <b id="guardrails">0</b></span></div>
+        <div class="row buttons">
+          <button data-action="pause_toggle" type="button">Pause</button>
+          <button data-action="off_record_toggle" type="button">Off the record</button>
+          <button data-action="end_task" type="button" class="danger">End task</button>
+        </div>
+      </section>
+    </main>
+    <script src="avatarSrc.js"></script>
+    <script src="dock.js"></script>
+  </body>
+</html>

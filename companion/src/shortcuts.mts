@@ -1,8 +1,9 @@
 // Global shortcuts: bindings, settings persistence, talk hold detection. Electron-free.
 //
-// PRIVACY: this is the ONE module allowed to read uiohook keycodes. createKeyUpListener compares the
+// PRIVACY: this is the one module that reads uiohook KEYUP keycodes. createKeyUpListener compares the
 // keycode of a keyup event against the configured talk binding's key only, returns nothing and keeps no
-// history. activity.mts toInputKind stays payload-blind and never sees keyup events.
+// history. Keydown keycodes and modifier flags are read only by chord.mts (which never emits these
+// bindings). activity.mts toInputKind stays payload-blind and never sees keyup events.
 
 export const SHORTCUT_ACTIONS = ["talk", "off_record_toggle", "end_task", "pause_toggle", "panel_toggle"] as const;
 export type ShortcutAction = (typeof SHORTCUT_ACTIONS)[number];

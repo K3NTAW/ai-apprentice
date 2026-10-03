@@ -6,14 +6,29 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ActivityAggregator, AppChangeTracker, WINDOW_MS, toInputKind, type InputKind } from "./activity.mjs";
 import { checkAppUrl } from "./appUrl.mjs";
+import { avatarFor } from "./avatarUrl.mjs";
 import { buddyView, cursorPollNeeded, expireBuddy, initialBuddy, reduceBuddy, type BuddyAction } from "./buddy.mjs";
+import { chordsEnabled, createChordListener, type ChordGates } from "./chord.mjs";
+import {
+  avatarState,
+  dockBounds,
+  dockEnabled,
+  dockViewModel,
+  initialDock,
+  parseDockPrefs,
+  reduceDock,
+  serializeDockPrefs,
+  sessionKey,
+  surfaces,
+  type DockAction,
+} from "./dock.mjs";
 import { mapRect, type DisplayInfo } from "./overlay.mjs";
 import { parseAllowlist } from "./origin.mjs";
 import { Pairing } from "./pairing.mjs";
 import { isPanelAction, panelMaterial, panelViewModel } from "./panel.mjs";
 import { formatPairingLine, isPermissionKey } from "./pairingWindow.mjs";
 import { canStartHook, PermissionMonitor, readPermissions } from "./permissions.mjs";
-import { appMessage, parsePort, shortcutMessage, statusMessage, type Permissions, type SessionStateMessage } from "./protocol.mjs";
+import { appMessage, chordMessage, parsePort, shortcutMessage, statusMessage, type Permissions, type SessionStateMessage } from "./protocol.mjs";
 import {
   allowedWhilePaused,
   buddyEnabled as resolveBuddyEnabled,
@@ -48,6 +63,8 @@ let tray: Tray | null = null;
 /** One transparent, click-through overlay per display, keyed by display id. */
 const overlays = new Map<number, BrowserWindow>();
 let panel: BrowserWindow | null = null;
+/** Side dock (protocol v3), on the primary display. */
+let dockWin: BrowserWindow | null = null;
 let server: CompanionServer | null = null;
 let serverError: string | null = null;
 let paused = false;
@@ -55,6 +72,12 @@ let paired = false;
 let hookRunning = false;
 let buddy = initialBuddy();
 let session: SessionStateMessage | null = null;
+/** Frontmost app name from the app poll, sent with chords. */
+let frontApp = "";
+// Rollback switches: COMPANION_DOCK=0 is the v2 orb buddy without dock, COMPANION_CHORDS=0 sends no chords.
+const dockOn = dockEnabled(process.env.COMPANION_DOCK);
+const chordsOn = chordsEnabled(process.env.COMPANION_CHORDS);
+let dock = initialDock();
 const allowlist = parseAllowlist(process.env.COMPANION_ALLOWED_ORIGINS);
 const settings = new SettingsStore(
   {
@@ -81,6 +104,10 @@ const pairing = new Pairing(undefined, (code) => {
   console.log(formatPairingLine(code));
   rebuildMenu();
 });
+
+function dockPrefsPath(): string {
+  return path.join(app.getPath("userData"), "dock.json");
+}
 
 function settingsPath(): string {
   return path.join(app.getPath("userData"), "settings.json");
@@ -115,6 +142,11 @@ function startHook(): void {
       talkKeycode = releaseKeycode(settings.get().bindings.talk, keyTable);
       // Key-up for the talk hold: shortcuts.mts is the only module that reads keycodes (compare only).
       hook.on("keyup", createKeyUpListener(() => talkKeycode, () => talk.release()));
+      // Chords: chord.mts is the only module that reads keydown keycodes and modifier flags.
+      hook.on(
+        "keydown",
+        createChordListener(keyTable, chordGates, (chord) => server?.send(chordMessage(Date.now(), chord, frontApp))),
+      );
       for (const name of HOOK_EVENTS) {
         // The handler takes no arguments: keycode, char and x/y never enter this process's state.
         hook.on(name, () => {
@@ -158,6 +190,7 @@ async function pollApp(): Promise<void> {
   try {
     const { activeWindow } = await import("get-windows");
     const w = await activeWindow({ accessibilityPermission: false, screenRecordingPermission: false });
+    if (w && !paused) frontApp = w.owner.name;
     if (w && !paused && appTracker.changed(w.owner.name, w.title)) server?.send(appMessage(Date.now(), w.owner.name, w.title));
   } catch (err) {
     log(`active window unavailable: ${String(err)}`);
@@ -177,6 +210,107 @@ function primaryDisplay(): DisplayInfo {
   return { bounds: d.bounds, scaleFactor: d.scaleFactor };
 }
 
+/**
+ * Secure input: Electron exposes no IsSecureEventInputEnabled and the companion adds no native module
+ * for it, so there is no check on any platform (null). classifyChord then emits only Cmd/Ctrl/Alt
+ * combinations. On macOS, secure input also keeps key events away from the event tap uiohook uses.
+ */
+function chordGates(): ChordGates {
+  const s = settings.get();
+  return {
+    enabled: chordsOn,
+    paired,
+    paused,
+    offRecord: session?.off_record === true,
+    buddyPaused: buddy.mode === "paused",
+    secureInput: null,
+    platform: process.platform,
+    ownBindings: Object.values(s.bindings),
+  };
+}
+
+function dispatchDock(action: DockAction): void {
+  dock = reduceDock(dock, action);
+  pushView();
+}
+
+function currentSurfaces() {
+  return surfaces({ dockEnabled: dockOn, paired, mode: session?.mode ?? null, page: dock.page });
+}
+
+function dockWorkArea(): Electron.Rectangle {
+  return screen.getPrimaryDisplay().workArea;
+}
+
+function createDock(): BrowserWindow {
+  const win = new BrowserWindow({
+    ...dockBounds(dockWorkArea(), dock.side, dock.collapsed),
+    // macOS: a non-activating panel; with focusable false and showInactive it never takes focus from the expert's app.
+    ...(process.platform === "darwin" ? { type: "panel" as const } : {}),
+    transparent: true,
+    frame: false,
+    hasShadow: false,
+    resizable: false,
+    maximizable: false,
+    minimizable: false,
+    fullscreenable: false,
+    focusable: false,
+    skipTaskbar: true,
+    show: false,
+    alwaysOnTop: true,
+    title: "AI Apprentice agent",
+    webPreferences: {
+      preload: path.join(here, "dockPreload.cjs"),
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
+    },
+  });
+  win.setAlwaysOnTop(true, "floating");
+  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  // Like the overlays: keep the dock out of the whole-monitor frames sent to vision.
+  win.setContentProtection(true);
+  win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  win.webContents.on("will-navigate", (e) => e.preventDefault());
+  win.webContents.on("did-finish-load", pushDock);
+  win.on("closed", () => {
+    if (dockWin === win) dockWin = null;
+  });
+  void win.loadFile(path.join(here, "..", "static", "dock.html"));
+  win.once("ready-to-show", () => {
+    if (currentSurfaces().dock) win.showInactive();
+  });
+  return win;
+}
+
+/** Show, place or hide the dock per the mode rules (dock.mts). Called from pushView and on display changes. */
+function syncDock(): void {
+  if (!dockOn) return;
+  const want = currentSurfaces().dock;
+  if (!want) {
+    if (dockWin && !dockWin.isDestroyed() && dockWin.isVisible()) dockWin.hide();
+    return;
+  }
+  if (!dockWin || dockWin.isDestroyed()) {
+    dockWin = createDock();
+    return;
+  }
+  dockWin.setBounds(dockBounds(dockWorkArea(), dock.side, dock.collapsed));
+  if (!dockWin.isVisible()) dockWin.showInactive();
+  pushDock();
+}
+
+function pushDock(): void {
+  if (!dockWin || dockWin.isDestroyed()) return;
+  const now = Date.now();
+  const live = expireBuddy(buddy, now);
+  const view = buddyView(buddy, now, { enabled: true, paused });
+  dockWin.webContents.send(
+    "dock-state",
+    dockViewModel({ state: dock, session, mode: view.mode, target: view.target?.style ?? null, say: live.say?.text ?? null, paused }),
+  );
+}
+
 function dispatch(action: BuddyAction): void {
   buddy = reduceBuddy(buddy, action, Date.now());
   pushView();
@@ -189,7 +323,11 @@ function localSay(text: string): void {
 
 function pushView(): void {
   const now = Date.now();
-  const view = buddyView(buddy, now, { enabled: buddyOn(), paused });
+  const surf = currentSurfaces();
+  const view = buddyView(buddy, now, { enabled: buddyOn() && surf.buddy, paused });
+  // Teach with an agent: the buddy is drawn with the agent avatar (no agent or COMPANION_DOCK=0: the orb).
+  const agent = dockOn && session?.mode === "teach" ? session.agent : undefined;
+  const avatar = agent ? avatarFor(agent.avatar, avatarState(view.mode, view.target?.style ?? null)) : null;
   const primary = screen.getPrimaryDisplay();
   const display = primaryDisplay();
   for (const [id, win] of overlays) {
@@ -198,18 +336,20 @@ function pushView(): void {
     // Rects are normalised to the primary display, so halos and pointing targets draw only there.
     win.webContents.send("buddy-view", {
       ...view,
+      avatar,
       target: isPrimary && view.target ? { ...view.target, rect: mapRect(view.target.rect, display) } : null,
       halos: isPrimary ? view.halos.map((h) => ({ ...h, rect: mapRect(h.rect, display) })) : [],
     });
   }
   updateCursorLoop();
+  syncDock();
   pushPanel();
 }
 
 let cursorTimer: NodeJS.Timeout | null = null;
 function updateCursorLoop(): void {
   const live = expireBuddy(buddy, Date.now());
-  const need = cursorPollNeeded({ enabled: buddyOn(), visible: overlays.size > 0, paused, paired, sayActive: live.say !== null });
+  const need = cursorPollNeeded({ enabled: buddyOn() && currentSurfaces().buddy, visible: overlays.size > 0, paused, paired, sayActive: live.say !== null });
   if (need && !cursorTimer) cursorTimer = setInterval(pushCursor, CURSOR_POLL_MS);
   if (!need && cursorTimer) {
     clearInterval(cursorTimer);
@@ -276,6 +416,7 @@ function syncOverlays(): void {
     if (win) win.setBounds(d.bounds);
     else overlays.set(d.id, createOverlay(d));
   }
+  // pushView also re-places the dock on the (possibly new) primary display's work area.
   pushView();
 }
 
@@ -285,6 +426,7 @@ function setPaused(next: boolean): void {
     talk.cancel();
     stopHook();
     aggregator.reset(Date.now());
+    frontApp = "";
     dispatch({ type: "clear" });
   } else {
     appTracker.reset();
@@ -411,6 +553,21 @@ function togglePanel(): void {
 
 const fromPanel = (e: Electron.IpcMainEvent) => panel !== null && !panel.isDestroyed() && e.sender === panel.webContents;
 
+const fromDock = (e: Electron.IpcMainEvent) => dockWin !== null && !dockWin.isDestroyed() && e.sender === dockWin.webContents;
+
+ipcMain.on("dock-action", (e, action: unknown) => {
+  if (fromDock(e) && isPanelAction(action)) onShortcut(action);
+});
+ipcMain.on("dock-collapse", (e, on: unknown) => {
+  if (!fromDock(e) || typeof on !== "boolean") return;
+  dispatchDock({ type: "collapse", collapsed: on });
+  try {
+    fs.writeFileSync(dockPrefsPath(), serializeDockPrefs({ collapsed: on }), { mode: 0o600 });
+  } catch (err) {
+    log(`dock prefs not saved: ${String(err)}`);
+  }
+});
+
 ipcMain.on("panel-hide", (e) => {
   if (fromPanel(e)) hidePanel();
 });
@@ -499,6 +656,11 @@ async function boot(): Promise<void> {
   // Windows has no menu on left click: toggle the panel (the context menu stays on right click).
   if (process.platform === "win32") tray.on("click", () => togglePanel());
   rebuildMenu();
+  try {
+    dock = initialDock(parseDockPrefs(fs.readFileSync(dockPrefsPath(), "utf8")).collapsed);
+  } catch {
+    dock = initialDock();
+  }
   syncOverlays();
   screen.on("display-added", syncOverlays);
   screen.on("display-removed", syncOverlays);
@@ -526,6 +688,9 @@ async function boot(): Promise<void> {
             talk.cancel();
             session = null;
             buddy = initialBuddy();
+            frontApp = "";
+            // Unpair: dock hidden (no session) and its feed cleared.
+            dock = reduceDock(dock, { type: "reset" });
           }
           pushView();
           rebuildMenu();
@@ -537,7 +702,14 @@ async function boot(): Promise<void> {
         },
         onSession(next) {
           session = next;
-          pushPanel();
+          // A new session (agent, mode or title change) clears the feed and the page's dock override.
+          dock = reduceDock(dock, { type: "session", key: sessionKey(next) });
+          pushView();
+        },
+        onDock(msg) {
+          if (msg.type === "dock.show") dispatchDock({ type: "show", side: msg.side });
+          else if (msg.type === "dock.hide") dispatchDock({ type: "hide" });
+          else dispatchDock({ type: "learned", kind: msg.kind, text: msg.text });
         },
       });
       log(`listening on ws://127.0.0.1:${port.port}`);

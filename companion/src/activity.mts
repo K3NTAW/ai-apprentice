@@ -1,6 +1,8 @@
 // Activity aggregation into 500 ms windows. Electron-free.
 // PRIVACY: the aggregator only ever sees the event KIND. Key codes, characters and positions
 // are dropped at the adapter boundary (toInputKind) and never reach this module's state.
+// Keydown keycodes and modifier flags are read ONLY by chord.mts (shortcut chords, protocol v3), which
+// returns a chord string or null and keeps no key history; nothing from it reaches this module.
 import type { ActivityMessage } from "./protocol.mjs";
 
 export const WINDOW_MS = 500;

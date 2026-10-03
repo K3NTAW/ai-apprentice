@@ -2,13 +2,14 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src data:" />
     <link rel="stylesheet" href="overlay.css" />
   </head>
   <body>
     <div id="root"></div>
-    <div id="buddy" class="buddy idle hidden"><span class="core"></span><span class="ring"></span><span class="dot d1"></span><span class="dot d2"></span><span class="dot d3"></span></div>
+    <div id="buddy" class="buddy idle hidden"><span class="core"></span><span class="ring"></span><span class="dot d1"></span><span class="dot d2"></span><span class="dot d3"></span><img id="avatar" class="avatar" alt="" draggable="false" /></div>
     <div id="say" class="bubble say hidden"></div>
+    <script src="avatarSrc.js"></script>
     <script src="overlay.js"></script>
   </body>
 </html>
