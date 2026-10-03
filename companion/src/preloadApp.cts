@@ -11,7 +11,7 @@ const EVENT_TYPES = ["status", "activity", "app", "chord", "shortcut"];
 const WINDOW_ACTIONS = ["step-aside", "restore", "focus"];
 
 // First-run setup screen (local file only): save the pasted URL. Main re-checks the sender and https.
-if (typeof location !== "undefined" && location.protocol === "file:") {
+if ((globalThis as { location?: { protocol?: string } }).location?.protocol === "file:") {
   contextBridge.exposeInMainWorld("apprenticeSetup", {
     save(url: string): Promise<{ ok: boolean; reason?: string }> {
       return ipcRenderer.invoke("setup-save-url", String(url));
