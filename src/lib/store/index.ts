@@ -1,7 +1,7 @@
 // Local session store: JSON files under DATA_DIR (default ./data), one directory per session.
 // Server only. Writes are serialised per session and land atomically (temp file + rename).
 import { randomBytes } from "node:crypto";
-import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { redactText, type RedactOptions } from "@/lib/redact";
 import {
@@ -114,12 +114,12 @@ async function writeSession(s: Session): Promise<void> {
   await rename(tmp, file);
 }
 
-async function mutate(id: string, fn: (s: Session) => void): Promise<Session> {
+async function mutate(id: string, fn: (s: Session) => void | Promise<void>): Promise<Session> {
   assertId(id);
   return enqueue(id, async () => {
     const s = await readSession(id);
     if (!s) throw new SessionNotFoundError(id);
-    fn(s);
+    await fn(s);
     await writeSession(s);
     return s;
   });
@@ -216,7 +216,7 @@ export function upsertQA(id: string, qa: QAPair): Promise<Session> {
  * Rejects with InvalidOffRecordRangeError when to < from; stored ranges stay untouched.
  */
 export function setOffRecord(id: string, range: { from: number; to?: number }): Promise<Session> {
-  return mutate(id, (s) => {
+  return mutate(id, async (s) => {
     if (range.to !== undefined && range.to < range.from) throw new InvalidOffRecordRangeError(range);
     const open = s.off_record_ranges.find((r) => r.to === undefined);
     if (range.to === undefined) {
@@ -234,6 +234,11 @@ export function setOffRecord(id: string, range: { from: number; to?: number }): 
     }
     s.events = s.events.filter((e) => !inRange(e.t, closed));
     s.transcript = s.transcript.filter((e) => !inRange(e.t, closed));
+    if (s.frames) {
+      const purge = s.frames.filter((f) => inRange(f.t, closed));
+      for (const f of purge) await rm(framePath(id, f.name), { force: true });
+      s.frames = s.frames.filter((f) => !inRange(f.t, closed));
+    }
   });
 }
 
@@ -246,6 +251,34 @@ export function saveWorkMap(id: string, workmap: WorkMap): Promise<Session> {
 export function endSession(id: string): Promise<Session> {
   return mutate(id, (s) => {
     s.ended_at ??= new Date().toISOString();
+  });
+}
+
+export function frameName(t: number): string {
+  return `${String(Math.floor(t)).padStart(4, "0")}.jpg`;
+}
+
+export type SaveFrameResult = { stored: true; name: string } | { stored: false; reason: "off_record" };
+
+/**
+ * Writes one frame captured at t and records {name, t} on the session so off-record purges can find it.
+ * Skips the write when t is inside an off-record range or a range is open.
+ * Without a session.json the frame is written unrecorded (no ranges can apply).
+ */
+export function saveFrame(id: string, t: number, data: Buffer): Promise<SaveFrameResult> {
+  assertId(id);
+  const name = frameName(t);
+  return enqueue(id, async (): Promise<SaveFrameResult> => {
+    const s = await readSession(id);
+    if (s && (hasOpenRange(s) || isOffRecord(s, t))) return { stored: false, reason: "off_record" };
+    const file = framePath(id, name);
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(file, data);
+    if (s) {
+      s.frames = [...(s.frames ?? []).filter((f) => f.name !== name), { name, t }];
+      await writeSession(s);
+    }
+    return { stored: true, name };
   });
 }
 

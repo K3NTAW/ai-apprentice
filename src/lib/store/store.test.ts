@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -13,6 +13,8 @@ import {
   InvalidOffRecordRangeError,
   getSession,
   listSessions,
+  readFrame,
+  saveFrame,
   setOffRecord,
   upsertQA,
 } from "./index";
@@ -170,6 +172,56 @@ describe("frames route", () => {
     ]) {
       expect([400, 404]).toContain((await call(id, name)).status);
     }
+  });
+});
+
+describe("frames and off the record", () => {
+  const jpg = Buffer.from([0xff, 0xd8, 0xff]);
+  const onDisk = (id: string, name: string) =>
+    access(path.join(dir, "sessions", id, "frames", name)).then(
+      () => true,
+      () => false,
+    );
+  const call = (id: string, name: string) =>
+    getFrame(new Request("http://x/"), { params: Promise.resolve({ id, name }) });
+
+  it("does not write frames inside an open or closed range and writes frames outside", async () => {
+    const s = await createSession({ kind: "capture" });
+    await setOffRecord(s.id, { from: 10, to: 20 });
+    expect(await saveFrame(s.id, 15, jpg)).toEqual({ stored: false, reason: "off_record" });
+    expect(await onDisk(s.id, "0015.jpg")).toBe(false);
+    expect(await saveFrame(s.id, 25, jpg)).toEqual({ stored: true, name: "0025.jpg" });
+    expect(await onDisk(s.id, "0025.jpg")).toBe(true);
+
+    await setOffRecord(s.id, { from: 30 });
+    expect((await saveFrame(s.id, 31, jpg)).stored).toBe(false);
+    expect((await saveFrame(s.id, 5, jpg)).stored).toBe(false);
+    expect(await onDisk(s.id, "0031.jpg")).toBe(false);
+    expect(await onDisk(s.id, "0005.jpg")).toBe(false);
+    expect((await getSession(s.id))?.frames).toEqual([{ name: "0025.jpg", t: 25 }]);
+  });
+
+  it("closing a range deletes stored frames inside it and keeps the rest", async () => {
+    const s = await createSession({ kind: "capture" });
+    for (const t of [5, 12.5, 18, 25]) await saveFrame(s.id, t, jpg);
+    await setOffRecord(s.id, { from: 10 });
+    await setOffRecord(s.id, { from: 10, to: 20 });
+    expect(await onDisk(s.id, "0005.jpg")).toBe(true);
+    expect(await onDisk(s.id, "0012.jpg")).toBe(false);
+    expect(await onDisk(s.id, "0018.jpg")).toBe(false);
+    expect(await onDisk(s.id, "0025.jpg")).toBe(true);
+    expect((await getSession(s.id))?.frames?.map((f) => f.t)).toEqual([5, 25]);
+    expect(await readFrame(s.id, "0012.jpg")).toBeNull();
+    expect((await call(s.id, "0012.jpg")).status).toBe(404);
+    expect((await call(s.id, "0018.jpg")).status).toBe(404);
+    expect((await call(s.id, "0025.jpg")).status).toBe(200);
+  });
+
+  it("returns 404 for a frame that was never stored", async () => {
+    const s = await createSession({ kind: "capture" });
+    await setOffRecord(s.id, { from: 0, to: 10 });
+    await saveFrame(s.id, 3, jpg);
+    expect((await call(s.id, "0003.jpg")).status).toBe(404);
   });
 });
 

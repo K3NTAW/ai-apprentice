@@ -1,6 +1,6 @@
 // POST /api/vision: store one frame, then ask the vision model for new events.
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
+// Frames inside an off-record range are neither stored nor sent to the model.
+import { saveFrame } from "@/lib/store";
 import { ScreenEventSchema, type VisionEvent } from "@/lib/types";
 import { describeFrame } from "@/lib/perception/vision";
 
@@ -25,13 +25,11 @@ export async function POST(req: Request): Promise<Response> {
   if (!prev.success) return bad("invalid previous");
 
   const jpegBase64 = frame.replace(/^data:image\/\w+;base64,/, "");
-  const name = `${String(Math.floor(t)).padStart(4, "0")}.jpg`;
-  const dir = path.join(process.cwd(), "data", "sessions", session_id, "frames");
-  await mkdir(dir, { recursive: true });
-  await writeFile(path.join(dir, name), Buffer.from(jpegBase64, "base64"));
+  const saved = await saveFrame(session_id, t, Buffer.from(jpegBase64, "base64"));
+  if (!saved.stored) return Response.json({ events: [], skipped: saved.reason });
 
   const events: VisionEvent[] = process.env.ANTHROPIC_API_KEY
     ? await describeFrame({ jpegBase64, previousEvents: prev.data })
     : [];
-  return Response.json({ events, frame_ref: `frames/${name}` });
+  return Response.json({ events, frame_ref: `frames/${saved.name}` });
 }

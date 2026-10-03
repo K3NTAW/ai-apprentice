@@ -157,6 +157,8 @@ export const SessionSchema = z.object({
   qa: z.array(QAPairSchema),
   workmap: WorkMapSchema.optional(),
   off_record_ranges: z.array(z.object({ from: z.number(), to: z.number().optional() })),
+  // Stored frame files with their capture time, so off-record purges can find them. Optional for older sessions.
+  frames: z.array(z.object({ name: z.string(), t: z.number() })).optional(),
 });
 export type Session = z.infer<typeof SessionSchema>;
 
