@@ -1,292 +1,97 @@
-// Local session store: JSON files under DATA_DIR (default ./data), one directory per session.
-// Server only. Writes are serialised per session and land atomically (temp file + rename).
-import { randomBytes } from "node:crypto";
-import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import path from "node:path";
-import { redactText, type RedactOptions } from "@/lib/redact";
-import {
-  newId,
-  SessionSchema,
-  type QAPair,
-  type ScreenEvent,
-  type Session,
-  type TranscriptEntry,
-  type WorkMap,
-} from "@/lib/types";
+// Session store entry point. getStore picks the backend from appMode(); server only.
+import { appMode } from "@/lib/supabase/env";
+import type { QAPair, ScreenEvent, Session, TranscriptEntry, WorkMap } from "@/lib/types";
+import { fileStore } from "./file";
+import { createSupabaseStore } from "./supabase";
+import type { SaveFrameResult, SessionStore, SessionSummary, StoreContext } from "./types";
 
-export type SessionSummary = {
-  id: string;
-  kind: Session["kind"];
-  started_at: string;
-  ended_at?: string;
-  expert?: string;
-  counts: { events: number; transcript: number; qa: number };
-  has_workmap: boolean;
-};
+export {
+  frameName,
+  InvalidOffRecordRangeError,
+  InvalidSessionIdError,
+  isValidFrameName,
+  isValidSessionId,
+  SessionNotFoundError,
+} from "./types";
+export type { OffRecordRange, SaveFrameResult, SessionStore, SessionSummary, StoreContext } from "./types";
+export { dataDir, fileStore, framePath } from "./file";
+export { createSupabaseStore } from "./supabase";
 
-export type OffRecordRange = Session["off_record_ranges"][number];
-
-const ID_RE = /^[a-zA-Z0-9_-]+$/;
-const FRAME_RE = /^[0-9a-zA-Z_-]+\.jpg$/;
-
-export class InvalidSessionIdError extends Error {
-  constructor(id: string) {
-    super(`invalid session id: ${JSON.stringify(id)}`);
-    this.name = "InvalidSessionIdError";
-  }
+export function getStore(ctx?: StoreContext): SessionStore {
+  const mode = appMode();
+  if (mode === "local") return fileStore;
+  if (mode === "misconfigured") throw new Error("supabase_not_configured");
+  if (!ctx || !ctx.supabase) throw new Error("store_context_required");
+  return createSupabaseStore(ctx.supabase, ctx);
 }
 
-export class SessionNotFoundError extends Error {
-  constructor(id: string) {
-    super(`session not found: ${id}`);
-    this.name = "SessionNotFoundError";
-  }
-}
-
-export class InvalidOffRecordRangeError extends Error {
-  constructor(range: { from: number; to?: number }) {
-    super(`invalid off-record range: to (${range.to}) is before from (${range.from})`);
-    this.name = "InvalidOffRecordRangeError";
-  }
-}
-
-export function isValidSessionId(id: string): boolean {
-  return ID_RE.test(id);
-}
-
-export function isValidFrameName(name: string): boolean {
-  return FRAME_RE.test(name);
-}
-
-function assertId(id: string): void {
-  if (typeof id !== "string" || !ID_RE.test(id)) throw new InvalidSessionIdError(String(id));
-}
-
-export function dataDir(): string {
-  return process.env.DATA_DIR || path.join(process.cwd(), "data");
-}
-
-const sessionsDir = () => path.join(dataDir(), "sessions");
-const sessionDir = (id: string) => path.join(sessionsDir(), id);
-const sessionFile = (id: string) => path.join(sessionDir(id), "session.json");
-
-export function framePath(id: string, name: string): string {
-  assertId(id);
-  if (!FRAME_RE.test(name)) throw new Error(`invalid frame name: ${JSON.stringify(name)}`);
-  return path.join(sessionDir(id), "frames", name);
-}
-
-// Per-session write queue: each mutation runs after the previous one settles.
-// Kept on globalThis because route handlers are bundled separately and would otherwise each get their own Map.
-const QUEUES_KEY = Symbol.for("apprentice.store.writeQueues");
-const queues: Map<string, Promise<unknown>> = ((globalThis as Record<symbol, unknown>)[QUEUES_KEY] ??= new Map<
-  string,
-  Promise<unknown>
->()) as Map<string, Promise<unknown>>;
-
-function enqueue<T>(id: string, fn: () => Promise<T>): Promise<T> {
-  const prev = queues.get(id) ?? Promise.resolve();
-  const run = prev.then(fn, fn);
-  const tail = run.catch(() => undefined);
-  queues.set(id, tail);
-  void tail.then(() => {
-    if (queues.get(id) === tail) queues.delete(id);
-  });
-  return run;
-}
-
-async function readSession(id: string): Promise<Session | null> {
-  let raw: string;
-  try {
-    raw = await readFile(sessionFile(id), "utf8");
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
-    throw err;
-  }
-  return SessionSchema.parse(JSON.parse(raw));
-}
-
-async function writeSession(s: Session): Promise<void> {
-  const file = sessionFile(s.id);
-  await mkdir(path.dirname(file), { recursive: true });
-  const tmp = `${file}.${randomBytes(6).toString("hex")}.tmp`;
-  await writeFile(tmp, JSON.stringify(s, null, 2));
-  await rename(tmp, file);
-}
-
-async function mutate(id: string, fn: (s: Session) => void | Promise<void>): Promise<Session> {
-  assertId(id);
-  return enqueue(id, async () => {
-    const s = await readSession(id);
-    if (!s) throw new SessionNotFoundError(id);
-    await fn(s);
-    await writeSession(s);
-    return s;
-  });
-}
-
-const hasOpenRange = (s: Session) => s.off_record_ranges.some((r) => r.to === undefined);
-const inRange = (t: number, r: OffRecordRange) => t >= r.from && (r.to === undefined || t <= r.to);
-const isOffRecord = (s: Session, t: number) => s.off_record_ranges.some((r) => inRange(t, r));
-
-function redactOpts(s: Session): RedactOptions {
-  const first = s.expert?.trim().split(/\s+/)[0];
-  return first ? { keepNames: [first] } : {};
+// Top-level wrappers over fileStore so existing routes keep compiling until Launch D moves them to getStore(ctx).
+// Known interim state: between this task and Launch D the routes fail loudly in supabase mode
+// (file_store_not_allowed) and never write to the local filesystem.
+// Async so the guard rejects instead of throwing synchronously; the fileStore call still starts synchronously.
+function assertLocal(): void {
+  if (appMode() !== "local") throw new Error("file_store_not_allowed");
 }
 
 export async function createSession(input: { kind: Session["kind"]; expert?: string }): Promise<Session> {
-  const s: Session = {
-    id: newId("s"),
-    kind: input.kind,
-    started_at: new Date().toISOString(),
-    ...(input.expert ? { expert: input.expert } : {}),
-    events: [],
-    transcript: [],
-    qa: [],
-    off_record_ranges: [],
-  };
-  await enqueue(s.id, () => writeSession(s));
-  return s;
+  assertLocal();
+  return fileStore.createSession(input);
 }
 
 export async function getSession(id: string): Promise<Session | null> {
-  assertId(id);
-  return readSession(id);
+  assertLocal();
+  return fileStore.getSession(id);
 }
 
 export async function listSessions(): Promise<SessionSummary[]> {
-  let ids: string[];
-  try {
-    ids = await readdir(sessionsDir());
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
-    throw err;
-  }
-  const out: SessionSummary[] = [];
-  for (const id of ids.filter(isValidSessionId)) {
-    const s = await readSession(id).catch(() => null);
-    if (!s) continue;
-    out.push({
-      id: s.id,
-      kind: s.kind,
-      started_at: s.started_at,
-      ended_at: s.ended_at,
-      expert: s.expert,
-      counts: { events: s.events.length, transcript: s.transcript.length, qa: s.qa.length },
-      has_workmap: s.workmap !== undefined,
-    });
-  }
-  return out.sort((a, b) => b.started_at.localeCompare(a.started_at));
+  assertLocal();
+  return fileStore.listSessions();
 }
 
-export function appendEvents(id: string, events: ScreenEvent[]): Promise<Session> {
-  return mutate(id, (s) => {
-    if (hasOpenRange(s)) return;
-    s.events.push(...events.filter((e) => !isOffRecord(s, e.t)));
-  });
+export async function appendEvents(id: string, events: ScreenEvent[]): Promise<Session> {
+  assertLocal();
+  return fileStore.appendEvents(id, events);
 }
 
-export function appendTranscript(id: string, entries: TranscriptEntry[]): Promise<Session> {
-  return mutate(id, (s) => {
-    if (hasOpenRange(s)) return;
-    const opts = redactOpts(s);
-    for (const e of entries) {
-      if (isOffRecord(s, e.t)) continue;
-      s.transcript.push({ ...e, text: redactText(e.text, opts).text, redacted: true });
-    }
-  });
+export async function appendTranscript(id: string, entries: TranscriptEntry[]): Promise<Session> {
+  assertLocal();
+  return fileStore.appendTranscript(id, entries);
 }
 
-export function upsertQA(id: string, qa: QAPair): Promise<Session> {
-  return mutate(id, (s) => {
-    const opts = redactOpts(s);
-    const clean: QAPair = {
-      ...qa,
-      question: redactText(qa.question, opts).text,
-      ...(qa.answer !== undefined ? { answer: redactText(qa.answer, opts).text } : {}),
-    };
-    const i = s.qa.findIndex((q) => q.id === qa.id);
-    if (i >= 0) s.qa[i] = clean;
-    else s.qa.push(clean);
-  });
+export async function upsertQA(id: string, qa: QAPair): Promise<Session> {
+  assertLocal();
+  return fileStore.upsertQA(id, qa);
 }
 
 /**
  * Opens a range ({from}) or closes one ({from, to}). Data already stored inside a closed range is purged.
  * Rejects with InvalidOffRecordRangeError when to < from; stored ranges stay untouched.
  */
-export function setOffRecord(id: string, range: { from: number; to?: number }): Promise<Session> {
-  return mutate(id, async (s) => {
-    if (range.to !== undefined && range.to < range.from) throw new InvalidOffRecordRangeError(range);
-    const open = s.off_record_ranges.find((r) => r.to === undefined);
-    if (range.to === undefined) {
-      if (!open) s.off_record_ranges.push({ from: range.from });
-      return;
-    }
-    let closed: OffRecordRange;
-    if (open) {
-      open.from = Math.min(open.from, range.from);
-      open.to = range.to;
-      closed = open;
-    } else {
-      closed = { from: range.from, to: range.to };
-      s.off_record_ranges.push(closed);
-    }
-    s.events = s.events.filter((e) => !inRange(e.t, closed));
-    s.transcript = s.transcript.filter((e) => !inRange(e.t, closed));
-    if (s.frames) {
-      const purge = s.frames.filter((f) => inRange(f.t, closed));
-      for (const f of purge) await rm(framePath(id, f.name), { force: true });
-      s.frames = s.frames.filter((f) => !inRange(f.t, closed));
-    }
-  });
+export async function setOffRecord(id: string, range: { from: number; to?: number }): Promise<Session> {
+  assertLocal();
+  return fileStore.setOffRecord(id, range);
 }
 
-export function saveWorkMap(id: string, workmap: WorkMap): Promise<Session> {
-  return mutate(id, (s) => {
-    s.workmap = workmap;
-  });
+export async function saveWorkMap(id: string, workmap: WorkMap): Promise<Session> {
+  assertLocal();
+  return fileStore.saveWorkMap(id, workmap);
 }
 
-export function endSession(id: string): Promise<Session> {
-  return mutate(id, (s) => {
-    s.ended_at ??= new Date().toISOString();
-  });
+export async function endSession(id: string): Promise<Session> {
+  assertLocal();
+  return fileStore.endSession(id);
 }
-
-export function frameName(t: number): string {
-  return `${String(Math.floor(t)).padStart(4, "0")}.jpg`;
-}
-
-export type SaveFrameResult = { stored: true; name: string } | { stored: false; reason: "off_record" };
 
 /**
  * Writes one frame captured at t and records {name, t} on the session so off-record purges can find it.
  * Skips the write when t is inside an off-record range or a range is open.
- * Without a session.json the frame is written unrecorded (no ranges can apply).
  */
-export function saveFrame(id: string, t: number, data: Buffer): Promise<SaveFrameResult> {
-  assertId(id);
-  const name = frameName(t);
-  return enqueue(id, async (): Promise<SaveFrameResult> => {
-    const s = await readSession(id);
-    if (s && (hasOpenRange(s) || isOffRecord(s, t))) return { stored: false, reason: "off_record" };
-    const file = framePath(id, name);
-    await mkdir(path.dirname(file), { recursive: true });
-    await writeFile(file, data);
-    if (s) {
-      s.frames = [...(s.frames ?? []).filter((f) => f.name !== name), { name, t }];
-      await writeSession(s);
-    }
-    return { stored: true, name };
-  });
+export async function saveFrame(id: string, t: number, data: Buffer): Promise<SaveFrameResult> {
+  assertLocal();
+  return fileStore.saveFrame(id, t, data);
 }
 
 export async function readFrame(id: string, name: string): Promise<Buffer | null> {
-  try {
-    return await readFile(framePath(id, name));
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
-    throw err;
-  }
+  assertLocal();
+  return fileStore.readFrame(id, name);
 }
