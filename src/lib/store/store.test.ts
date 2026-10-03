@@ -161,7 +161,7 @@ describe("frames route", () => {
     const res = await call(s.id, "f_001.jpg");
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toBe("image/jpeg");
-    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(res.headers.get("cache-control")).toBe("private, no-store");
     expect((await call(s.id, "missing.jpg")).status).toBe(404);
   });
 
