@@ -13,7 +13,7 @@ describe("ShellHeader", () => {
         ["/agents", "Agents"],
         ["/learn", "Learn"],
         ["/workspace", "Workspace"],
-        ["/capture#companion", "Install companion"],
+        ["/capture#companion", "Get the desktop app"],
       ]) {
         expect(html).toContain(`href="${href}"`);
         expect(html).toContain(`>${label}</a>`);

@@ -82,7 +82,7 @@ export type CompanionClientOptions = {
   random?: () => number;
 };
 
-type Listeners = {
+export type CompanionListeners = {
   status: (s: CompanionStatus, permissions: CompanionPermissions | null) => void;
   activity: (a: CompanionActivityMsg) => void;
   app: (a: CompanionAppMsg) => void;
@@ -97,6 +97,54 @@ const clamp01 = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? M
 const clampRect = (r: HaloRect): HaloRect => ({ x: clamp01(r.x), y: clamp01(r.y), w: clamp01(r.w), h: clamp01(r.h) });
 const ttl = (v: unknown) => (typeof v === "number" && Number.isFinite(v) && v > 0 ? Math.round(v) : undefined);
 const count = (v: number) => (Number.isFinite(v) && v > 0 ? Math.floor(v) : 0);
+
+/** Web -> companion message shapes, shared by the WebSocket client and the bridge transport (transport.ts). */
+export const outgoing = {
+  halo(id: string, rect: HaloRect, text?: string): Record<string, unknown> {
+    const msg: Record<string, unknown> = { type: "overlay.halo", id: String(id), rect: clampRect(rect) };
+    if (typeof text === "string" && text) msg.text = text.slice(0, HALO_TEXT_MAX);
+    return msg;
+  },
+  clearHalo: (id?: string) => (id === undefined ? { type: "overlay.clear" } : { type: "overlay.clear", id: String(id) }),
+  buddyState: (state: BuddyState) => ({ type: "buddy.state", state }),
+  /** Null when the text is empty. */
+  buddySay(text: string, ttlMs?: number): Record<string, unknown> | null {
+    const t = String(text ?? "").trim().slice(0, SAY_TEXT_MAX);
+    if (!t) return null;
+    const ms = ttl(ttlMs);
+    return ms === undefined ? { type: "buddy.say", text: t } : { type: "buddy.say", text: t, ttl_ms: ms };
+  },
+  buddyPoint(p: BuddyPoint): Record<string, unknown> {
+    const msg: Record<string, unknown> = { type: "buddy.point", id: String(p.id), rect: clampRect(p.rect), style: p.style };
+    if (typeof p.text === "string" && p.text) msg.text = p.text.slice(0, HALO_TEXT_MAX);
+    const ms = ttl(p.ttl_ms);
+    if (ms !== undefined) msg.ttl_ms = ms;
+    return msg;
+  },
+  buddyClear: (id?: string) => (id === undefined ? { type: "buddy.clear" } : { type: "buddy.clear", id: String(id) }),
+  /** The normalised session.state fields (without "type"). */
+  sessionState(s: SessionState): SessionState {
+    return {
+      mode: s.mode,
+      title: String(s.title ?? ""),
+      expert: String(s.expert ?? ""),
+      asked: count(s.asked),
+      guardrails: count(s.guardrails),
+      last_question: String(s.last_question ?? "").slice(0, SAY_TEXT_MAX),
+      last_answer: String(s.last_answer ?? "").slice(0, SAY_TEXT_MAX),
+      off_record: Boolean(s.off_record),
+      app_url: String(s.app_url ?? ""),
+      ...(validSessionAgent(s.agent) ? { agent: s.agent } : {}),
+    };
+  },
+  dockSide: (side: DockSide = "right"): DockSide => (side === "left" ? "left" : "right"),
+  /** Null when the text is empty or the kind unknown. */
+  dockLearned(kind: DockLearnedKind, text: string): Record<string, unknown> | null {
+    const t = String(text ?? "").trim().slice(0, DOCK_TEXT_MAX);
+    if (!t || !["step", "shortcut", "guardrail"].includes(kind)) return null;
+    return { type: "dock.learned", kind, text: t };
+  },
+};
 
 /** Validates one incoming frame; malformed frames return null and are ignored. */
 export function parseCompanionMessage(raw: unknown): CompanionMessage | null {
@@ -169,7 +217,7 @@ export function createCompanionClient({
       if (typeof WebSocket === "undefined") throw new Error("no WebSocket");
       return new WebSocket(u) as unknown as SocketLike;
     });
-  const listeners: { [K in keyof Listeners]: Set<Listeners[K]> } = {
+  const listeners: { [K in keyof CompanionListeners]: Set<CompanionListeners[K]> } = {
     status: new Set(),
     activity: new Set(),
     app: new Set(),
@@ -349,7 +397,7 @@ export function createCompanionClient({
     version: () => version,
     hasCode: () => code !== null,
     isPaired: () => status === "paired",
-    on<K extends keyof Listeners>(kind: K, fn: Listeners[K]): () => void {
+    on<K extends keyof CompanionListeners>(kind: K, fn: CompanionListeners[K]): () => void {
       listeners[kind].add(fn);
       return () => {
         listeners[kind].delete(fn);
@@ -357,55 +405,36 @@ export function createCompanionClient({
     },
     /** Draws a halo over any app. No-op returning false while not paired. */
     showHalo(id: string, rect: HaloRect, text?: string): boolean {
-      const msg: Record<string, unknown> = { type: "overlay.halo", id: String(id), rect: clampRect(rect) };
-      if (typeof text === "string" && text) msg.text = text.slice(0, HALO_TEXT_MAX);
-      return send(msg);
+      return send(outgoing.halo(id, rect, text));
     },
     clearHalo(id?: string): boolean {
-      return send(id === undefined ? { type: "overlay.clear" } : { type: "overlay.clear", id: String(id) });
+      return send(outgoing.clearHalo(id));
     },
     /** Buddy presence. Remembered and resent on pairing; false while not paired. */
     buddyState(state: BuddyState): boolean {
       lastBuddy = state;
-      return send({ type: "buddy.state", state });
+      return send(outgoing.buddyState(state));
     },
     /** Caption next to the buddy (agent lines only), clipped to 280 chars. */
     buddySay(text: string, ttlMs?: number): boolean {
-      const t = String(text ?? "").trim().slice(0, SAY_TEXT_MAX);
-      if (!t) return false;
-      const ms = ttl(ttlMs);
-      return send(ms === undefined ? { type: "buddy.say", text: t } : { type: "buddy.say", text: t, ttl_ms: ms });
+      const msg = outgoing.buddySay(text, ttlMs);
+      return msg ? send(msg) : false;
     },
     /** 'glance' flies to the rect briefly; 'stop' stays with halo and bubble until buddyClear. */
     buddyPoint(p: BuddyPoint): boolean {
-      const msg: Record<string, unknown> = { type: "buddy.point", id: String(p.id), rect: clampRect(p.rect), style: p.style };
-      if (typeof p.text === "string" && p.text) msg.text = p.text.slice(0, HALO_TEXT_MAX);
-      const ms = ttl(p.ttl_ms);
-      if (ms !== undefined) msg.ttl_ms = ms;
-      return send(msg);
+      return send(outgoing.buddyPoint(p));
     },
     buddyClear(id?: string): boolean {
-      return send(id === undefined ? { type: "buddy.clear" } : { type: "buddy.clear", id: String(id) });
+      return send(outgoing.buddyClear(id));
     },
     /** Session summary for the companion panel. Remembered and resent on pairing. */
     sessionState(s: SessionState): boolean {
-      lastSession = {
-        mode: s.mode,
-        title: String(s.title ?? ""),
-        expert: String(s.expert ?? ""),
-        asked: count(s.asked),
-        guardrails: count(s.guardrails),
-        last_question: String(s.last_question ?? "").slice(0, SAY_TEXT_MAX),
-        last_answer: String(s.last_answer ?? "").slice(0, SAY_TEXT_MAX),
-        off_record: Boolean(s.off_record),
-        app_url: String(s.app_url ?? ""),
-        ...(validSessionAgent(s.agent) ? { agent: s.agent } : {}),
-      };
+      lastSession = outgoing.sessionState(s);
       return send({ type: "session.state", ...lastSession });
     },
     /** Docks the agent at the side of the screen. Remembered and resent on pairing until dockHide. */
     dockShow(side: DockSide = "right"): boolean {
-      lastDock = side === "left" ? "left" : "right";
+      lastDock = outgoing.dockSide(side);
       return send({ type: "dock.show", side: lastDock });
     },
     dockHide(): boolean {
@@ -414,9 +443,8 @@ export function createCompanionClient({
     },
     /** One line in the dock's 'What I learned' feed, clipped to 140 chars. Not resent. */
     dockLearned(kind: DockLearnedKind, text: string): boolean {
-      const t = String(text ?? "").trim().slice(0, DOCK_TEXT_MAX);
-      if (!t || !["step", "shortcut", "guardrail"].includes(kind)) return false;
-      return send({ type: "dock.learned", kind, text: t });
+      const msg = outgoing.dockLearned(kind, text);
+      return msg ? send(msg) : false;
     },
     dispose() {
       // Clean-up: the dock goes away with the page.

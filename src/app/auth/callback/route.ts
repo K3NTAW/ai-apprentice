@@ -3,7 +3,7 @@
 // returned redirect response itself, so they never depend on implicit cookie merging.
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { bootstrapMemberships, readMemberships } from "@/lib/auth/context";
+import { bootstrapAfterSignIn } from "@/lib/auth/signIn";
 import { WS_COOKIE, wsCookieOptions } from "@/lib/auth/cookies";
 import { safeNext, type LoginErrorCode } from "@/lib/auth/redirect";
 import { appMode, publicSupabaseEnv } from "@/lib/supabase/env";
@@ -53,20 +53,10 @@ export async function GET(request: NextRequest): Promise<Response> {
   }
   if (!userId) return withCookies(fail("link_invalid"));
 
-  // Same rule as getRequestContext: a membership read error is not zero memberships.
-  const before = await readMemberships(supabase, userId);
-  if (!before.ok) return withCookies(fail("workspace_setup_failed"));
-  const boot = await bootstrapMemberships(supabase);
-  if (!boot.ok || boot.memberships.length === 0) return withCookies(fail("workspace_setup_failed"));
+  const boot = await bootstrapAfterSignIn(supabase, userId);
+  if (!boot.ok) return withCookies(fail("workspace_setup_failed"));
 
   const res = withCookies(redirectTo(next));
-  // An accepted invite adds a workspace the user was not in before; land there.
-  // Deterministic pick: the lowest workspace_id among the new ones.
-  const known = new Set(before.memberships.map((m) => m.workspaceId));
-  const added = boot.memberships
-    .map((m) => m.workspaceId)
-    .filter((id) => !known.has(id))
-    .sort();
-  if (added.length > 0) res.cookies.set(WS_COOKIE, added[0], wsCookieOptions());
+  if (boot.wsCookie) res.cookies.set(WS_COOKIE, boot.wsCookie, wsCookieOptions());
   return res;
 }

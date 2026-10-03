@@ -3,7 +3,8 @@
 // Capture page (pivot): a session console on the left watches the expert's real screen (any app);
 // the voice side panel stays on the right. The desktop companion, when paired, adds typing/pointer
 // activity and frontmost-app events, mirrors the session on its buddy and panel, and its shortcuts drive
-// the controls. Voice is optional: when it cannot start, the loop runs in text mode and questions show in the panel.
+// the controls. One-app D2: the companion is a transport (desktop app bridge, opt-in WebSocket or none); in the
+// app Start also shares the screen without a picker and the window steps aside until End. Voice is optional: when it cannot start, the loop runs in text mode and questions show in the panel.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createActivityTracker } from "@/lib/perception/activity";
@@ -22,13 +23,10 @@ import {
 import { createCaptureSession, createHttpCaptureApi, loadAgent } from "@/lib/capture/httpApi";
 import { buildSessionAgent } from "@/lib/companion/agentState";
 import { SHORTCUT_LEARNING } from "@/lib/companion/chord";
-import {
-  createCompanionClient,
-  type CompanionClient,
-  type CompanionPermissions,
-  type CompanionStatus,
-  type ShortcutAction,
-} from "@/lib/companion/client";
+import type { CompanionPermissions, CompanionStatus, ShortcutAction } from "@/lib/companion/client";
+import { selectTransport, type CompanionTransport, type TransportHost } from "@/lib/companion/transport";
+import { createStepAside } from "@/lib/companion/stepAside";
+import { bindCaptureTransport, captureCompanionSink } from "@/lib/capture/companionWiring";
 import { routeShortcut } from "@/lib/companion/shortcuts";
 import AgentHeader from "@/components/agents/AgentHeader";
 import { agentBlocker, useAgent } from "@/components/agents/useAgent";
@@ -85,15 +83,18 @@ function viewOf(c: CaptureController): View {
   };
 }
 
-export default function CaptureApp({ agentParam = null }: { agentParam?: string | null }) {
+/** transport: injected for tests; otherwise selected on mount (bridge, opt-in WebSocket or none). */
+export type CaptureAppProps = { agentParam?: string | null; transport?: CompanionTransport };
+
+export default function CaptureApp({ agentParam = null, transport }: CaptureAppProps) {
   return (
     <VoiceProvider>
-      <CaptureInner agentParam={agentParam} />
+      <CaptureInner agentParam={agentParam} transport={transport} />
     </VoiceProvider>
   );
 }
 
-function CaptureInner({ agentParam }: { agentParam: string | null }) {
+function CaptureInner({ agentParam, transport }: { agentParam: string | null; transport?: CompanionTransport }) {
   const router = useRouter();
   const agentLoad = useAgent(agentParam);
   const [expert, setExpert] = useState("Sabine");
@@ -114,7 +115,9 @@ function CaptureInner({ agentParam }: { agentParam: string | null }) {
   const loopRef = useRef<Loop | null>(null);
   const voiceModeRef = useRef(false);
   const captureRef = useRef<CaptureHandle | null>(null);
-  const companionRef = useRef<CompanionClient | null>(null);
+  const companionRef = useRef<CompanionTransport | null>(null);
+  const stepAsideRef = useRef(createStepAside(() => companionRef.current));
+  const [host, setHost] = useState<TransportHost>("detecting");
   const shortcutRef = useRef<(a: ShortcutAction) => void>(() => {});
   const [companionStatus, setCompanionStatus] = useState<CompanionStatus>("not connected");
   const [companionPerms, setCompanionPerms] = useState<CompanionPermissions | null>(null);
@@ -139,29 +142,31 @@ function CaptureInner({ agentParam }: { agentParam: string | null }) {
     agentRef.current = agent;
   });
 
-  // Desktop companion: optional. Its activity and app events reach the controller only while a session runs;
+  // Desktop companion: optional. Selected in an effect ("detecting" until then, so SSR never shows the browser
+  // panel inside the app). Its activity and app events reach the controller only while a session runs;
   // the controller drops them while off the record.
   useEffect(() => {
-    const client = createCompanionClient();
-    companionRef.current = client;
-    const offs = [
-      client.on("status", (s, perms) => {
+    const t = transport ?? selectTransport();
+    companionRef.current = t;
+    const stepAside = stepAsideRef.current;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the transport is picked on the client only ("detecting" before).
+    setHost(t.kind);
+    const off = bindCaptureTransport(t, {
+      ctrl: () => loopRef.current?.ctrl ?? null,
+      onStatus: (s, perms) => {
         setCompanionStatus(s);
         setCompanionPerms(perms);
-        if (s !== "paired") loopRef.current?.ctrl.onCompanionDisconnected();
-      }),
-      client.on("activity", (a) => loopRef.current?.ctrl.onCompanionActivity(a)),
-      client.on("app", (a) => loopRef.current?.ctrl.onCompanionApp(a)),
-      client.on("shortcut", (a) => shortcutRef.current(a)),
-      client.on("chord", (c) => loopRef.current?.ctrl.onCompanionChord(c)),
-    ];
-    client.connect();
+      },
+      onShortcut: (a) => shortcutRef.current(a),
+    });
+    t.connect();
     return () => {
-      for (const off of offs) off();
-      client.dispose();
+      stepAside.restore();
+      off();
+      t.dispose();
       companionRef.current = null;
     };
-  }, []);
+  }, [transport]);
 
   useEffect(() => {
     loopRef.current?.ctrl.setAgent({ status: textMode ? null : agent.status, mode: textMode ? null : agentMode });
@@ -223,17 +228,8 @@ function CaptureInner({ agentParam }: { agentParam: string | null }) {
       },
       isSpeaking: () => voiceModeRef.current && agentRef.current.isSpeaking,
     };
-    // Reads the ref on every call: the companion client may be re-created while the session runs.
-    const buddy: CaptureCompanion = {
-      buddyState: (s) => companionRef.current?.buddyState(s) ?? false,
-      buddySay: (text, ttl) => companionRef.current?.buddySay(text, ttl) ?? false,
-      buddyPoint: (p) => companionRef.current?.buddyPoint(p) ?? false,
-      buddyClear: (id) => companionRef.current?.buddyClear(id) ?? false,
-      sessionState: (st) => companionRef.current?.sessionState(st) ?? false,
-      dockShow: (side) => companionRef.current?.dockShow(side) ?? false,
-      dockHide: () => companionRef.current?.dockHide() ?? false,
-      dockLearned: (kind, text) => companionRef.current?.dockLearned(kind, text) ?? false,
-    };
+    // Reads the ref on every call: the transport may be re-created while the session runs.
+    const buddy: CaptureCompanion = captureCompanionSink(() => companionRef.current);
     // Agent missing or avatar render failed: session.state goes out without an agent (logged once).
     const sessionAgent = buildSessionAgent(await loadAgent(agentId));
     const ctrl = createCaptureController({
@@ -254,6 +250,8 @@ function CaptureInner({ agentParam }: { agentParam: string | null }) {
     loopRef.current = { ctrl, bus, activity, getT, sessionId, startedAt: t0 };
     ctrl.start();
     setRunning(true);
+    // In the desktop app the screen share is part of Start: no picker, then the window steps aside.
+    if (companionRef.current?.kind === "bridge") void toggleShare();
 
     try {
       await agentRef.current.start({ dynamicVariables: { expert: name } });
@@ -285,6 +283,7 @@ function CaptureInner({ agentParam }: { agentParam: string | null }) {
       loop.ctrl.setCapture(null);
       setSharing(false);
       setShareWarning(null);
+      stepAsideRef.current.restore();
     };
     if (captureRef.current) {
       captureRef.current.stop();
@@ -292,7 +291,7 @@ function CaptureInner({ agentParam }: { agentParam: string | null }) {
       return;
     }
     try {
-      const handle = await startScreenCapture({
+      const handle = await stepAsideRef.current.share(() => startScreenCapture({
         getT: loop.getT,
         onFrame: (f) => void loop.ctrl.onFrame(f),
         onFrameChange: () => loop.activity.noteFrameChange(),
@@ -300,7 +299,13 @@ function CaptureInner({ agentParam }: { agentParam: string | null }) {
         onEnded: () => {
           if (captureRef.current === handle) clear();
         },
-      });
+      }));
+      if (loopRef.current !== loop) {
+        // Ended while getDisplayMedia was pending.
+        handle.stop();
+        stepAsideRef.current.restore();
+        return;
+      }
       captureRef.current = handle;
       loop.ctrl.setCapture(handle);
       setSharing(true);
@@ -310,6 +315,7 @@ function CaptureInner({ agentParam }: { agentParam: string | null }) {
           : null,
       );
     } catch (err) {
+      stepAsideRef.current.restore();
       setNotice(
         `Screen share not started (${err instanceof Error ? err.message : String(err)}). Capture still works from speech and the desktop companion.`,
       );
@@ -322,6 +328,7 @@ function CaptureInner({ agentParam }: { agentParam: string | null }) {
     loop.ctrl.stop();
     captureRef.current?.stop();
     captureRef.current = null;
+    stepAsideRef.current.restore();
     setSharing(false);
     setShareWarning(null);
     if (voiceModeRef.current) void agentRef.current.stop();
@@ -367,6 +374,7 @@ function CaptureInner({ agentParam }: { agentParam: string | null }) {
           guardrailAsked={view.guardrailAsked}
           savedForDebrief={view.debrief}
           feed={view.feed}
+          host={host}
           companion={{
             status: companionStatus,
             permissions: companionPerms,

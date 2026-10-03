@@ -2,12 +2,14 @@
 // Renders as a left sidebar from md width up and as a top bar at phone width.
 import Link from "next/link";
 import type { Role } from "@/lib/auth/context";
+import HideInApp from "./HideInApp";
 
 export const NAV_LINKS = [
   { href: "/agents", label: "Agents" },
   { href: "/learn", label: "Learn" },
   { href: "/workspace", label: "Workspace" },
-  { href: "/capture#companion", label: "Install companion" },
+  // The 'Get the desktop app' panel on /capture; hidden inside the desktop app.
+  { href: "/capture#companion", label: "Get the desktop app", browserOnly: true },
 ] as const;
 
 export type ShellUser = {
@@ -27,11 +29,14 @@ export default function ShellHeader({ user }: { user: ShellUser | null }) {
         AI Apprentice
       </Link>
       <nav className="flex flex-wrap gap-4 md:flex-col md:gap-1">
-        {NAV_LINKS.map((l) => (
-          <Link key={l.href} href={l.href} className="rounded-lg text-muted hover:text-fg md:px-3 md:py-2 md:hover:bg-panel-2">
-            {l.label}
-          </Link>
-        ))}
+        {NAV_LINKS.map((l) => {
+          const link = (
+            <Link key={l.href} href={l.href} className="rounded-lg text-muted hover:text-fg md:px-3 md:py-2 md:hover:bg-panel-2">
+              {l.label}
+            </Link>
+          );
+          return "browserOnly" in l ? <HideInApp key={l.href}>{link}</HideInApp> : link;
+        })}
       </nav>
       <div className="ml-auto flex flex-wrap items-center gap-3 md:mt-auto md:ml-0 md:flex-col md:items-start">
         {user && canCapture(user.role) && (

@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import type { ScreenEvent } from "@/lib/types";
 import CaptureConsole, { type CaptureConsoleProps } from "./CaptureConsole";
 import CompanionCard, { COMPANION_README, missingPermissions } from "./CompanionCard";
+import { desktopDownloads, GetDesktopApp } from "./DesktopPanel";
 
 const noop = () => {};
 const ev: ScreenEvent = {
@@ -100,5 +101,36 @@ describe("sandbox ERP is gone", () => {
       .filter((f) => needles.some((n) => readFileSync(f, "utf8").includes(n)))
       .map((f) => relative(root, f));
     expect(hits).toEqual([]);
+  });
+});
+
+describe("desktop app vs browser (one-app D2)", () => {
+  it("in the desktop app no pairing card renders, only 'Running in AI Apprentice' with the permission state", () => {
+    const html = renderToStaticMarkup(
+      <CaptureConsole {...props({ host: "bridge", companion: { status: "paired", permissions: { input: true, screen: false, accessibility: true }, onPair: () => true } })} />,
+    );
+    expect(html).not.toContain('data-testid="companion-card"');
+    expect(html).not.toContain("Pairing code");
+    expect(html).toContain("Running in AI Apprentice");
+    expect(html).toContain("Missing permissions: Screen Recording");
+    expect(html).not.toContain("Get the desktop app");
+  });
+
+  it("in a browser the 'Get the desktop app' panel shows on the #companion anchor; links only when set", () => {
+    const html = renderToStaticMarkup(<CaptureConsole {...props({ host: "none" })} />);
+    expect(html).toContain("Get the desktop app");
+    expect(html).toContain('id="companion"');
+    expect(html).not.toContain('data-testid="companion-card"');
+    expect(html).not.toContain("Download for");
+    const links = renderToStaticMarkup(<GetDesktopApp downloads={desktopDownloads({ mac: "https://dl.example/mac.dmg", win: "javascript:alert(1)" })} />);
+    expect(links).toContain('href="https://dl.example/mac.dmg"');
+    expect(links).not.toContain("Download for Windows");
+  });
+
+  it("while detecting (SSR) neither the panel nor the card renders; the WebSocket opt-in keeps the card", () => {
+    const detecting = renderToStaticMarkup(<CaptureConsole {...props({ host: "detecting" })} />);
+    expect(detecting).not.toContain("Get the desktop app");
+    expect(detecting).not.toContain('data-testid="companion-card"');
+    expect(renderToStaticMarkup(<CaptureConsole {...props({ host: "websocket" })} />)).toContain('data-testid="companion-card"');
   });
 });

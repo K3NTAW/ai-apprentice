@@ -2,7 +2,9 @@
 
 // Teach console (presentational): Work Map picker, controls, companion pairing (the Capture card),
 // current step, tutor transcript, the active stop with the expert's moment, and the mastery result.
-import CompanionCard, { type CompanionCardProps } from "@/components/capture/CompanionCard";
+import type { CompanionCardProps } from "@/components/capture/CompanionCard";
+import CompanionSlot from "@/components/capture/DesktopPanel";
+import type { TransportHost } from "@/lib/companion/transport";
 import type { Intervention, InterventionStats } from "@/lib/teach/intervention";
 import type { MasterySummary } from "@/lib/teach/mastery";
 import type { WorkMap, WorkMapStep } from "@/lib/types";
@@ -25,6 +27,8 @@ export type TeachConsoleProps = {
   notice: string | null;
   textMode: boolean;
   companion: CompanionCardProps;
+  /** Which companion transport runs: bridge (desktop app), websocket (opt-in), none (browser), detecting. Default websocket. */
+  host?: TransportHost;
   currentStep: WorkMapStep | null;
   transcript: TeachLine[];
   intervention: Intervention | null;
@@ -94,8 +98,8 @@ export default function TeachConsole(p: TeachConsoleProps) {
       <p className="text-xs text-slate-500">Share the whole screen: the tutor watches your real apps and stops a risky change before you save it.</p>
       {p.shareWarning && <p className="text-sm text-amber-700">{p.shareWarning}</p>}
       {p.notice && <p className="text-sm text-amber-700">{p.notice}</p>}
-      <CompanionCard {...p.companion} />
-      {p.companion.status !== "paired" && (
+      <CompanionSlot host={p.host ?? "websocket"} companion={p.companion} />
+      {(p.host ?? "websocket") === "websocket" && p.companion.status !== "paired" && (
         <p className="text-xs text-slate-500">Companion not paired: the tutor stops by voice only, no halo over the app.</p>
       )}
 

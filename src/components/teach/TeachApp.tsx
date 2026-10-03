@@ -4,13 +4,17 @@
 // screen and pairs the desktop companion. Frames -> /api/vision events -> step match -> prediction prompts at
 // natural pauses and guardrail stops by voice and the companion buddy ('stop' point) before the save.
 // The buddy also mirrors the tutor (state, captions, glances) and the companion shortcuts drive the controls. Finish stores Session.teach.
+// One-app D2: the companion is a transport (desktop app bridge, opt-in WebSocket or none); in the app Start
+// also shares the screen without a picker and the window steps aside until Finish.
 // Rollback: revert this task's commit; the page then shows the previous placeholder.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { startScreenCapture, type CaptureHandle, type CapturedFrame } from "@/lib/perception/capture";
-import { createCompanionClient, type CompanionClient, type CompanionPermissions, type CompanionStatus } from "@/lib/companion/client";
+import type { CompanionPermissions, CompanionStatus, ShortcutAction } from "@/lib/companion/client";
+import { selectTransport, type CompanionTransport, type TransportHost } from "@/lib/companion/transport";
+import { createStepAside } from "@/lib/companion/stepAside";
 import { buddyStateFor } from "@/lib/companion/buddyState";
 import { routeShortcut } from "@/lib/companion/shortcuts";
-import { stopPointSink, teachShortcutControls } from "@/lib/teach/companionBridge";
+import { bindTeachTransport, stopPointSink, teachShortcutControls } from "@/lib/teach/companionBridge";
 import { COMPANION_STALE_MS, MIN_SILENCE_MS, effectiveActivity } from "@/lib/voice/askGate";
 import { buildGuardrailStopTurn, buildMasteryTurn, buildPredictTurn } from "@/lib/voice/prompts";
 import { useVoiceAgent, VoiceProvider, type UseVoiceAgentOptions } from "@/lib/voice/useVoiceAgent";
@@ -27,7 +31,8 @@ import { checkTeachSource, teachSessionBody } from "./agentSource";
 import TeachConsole, { type TeachConsoleProps, type TeachLine } from "./TeachConsole";
 
 /** agentParam: ?agent, the agent of the new teach session. sessionId: ?session, the source Work Map capture session. */
-export type TeachAppProps = { sessionId: string | null; localMode: boolean; agentParam?: string | null };
+/** transport: injected for tests; otherwise selected on mount (bridge, opt-in WebSocket or none). */
+export type TeachAppProps = { sessionId: string | null; localMode: boolean; agentParam?: string | null; transport?: CompanionTransport };
 
 const NO_STATS: InterventionStats = { interventions: 0, active: 0, decideCalls: 0, decideFailures: 0, lastDecideError: null, capped: false };
 const PREDICT_QUESTION = "What would you do next?";
@@ -69,7 +74,7 @@ export default function TeachApp(props: TeachAppProps) {
   );
 }
 
-function TeachInner({ sessionId, localMode, agentParam = null }: TeachAppProps) {
+function TeachInner({ sessionId, localMode, agentParam = null, transport }: TeachAppProps) {
   const agentLoad = useAgent(agentParam);
   const agentId = agentLoad.status === "ok" ? agentLoad.agent.id : null;
   const [sourceCheck, setSourceCheck] = useState<{ key: string; error: string | null } | null>(null);
@@ -104,7 +109,10 @@ function TeachInner({ sessionId, localMode, agentParam = null }: TeachAppProps) 
   const masteryRef = useRef<MasteryState>({});
   const captureRef = useRef<CaptureHandle | null>(null);
   const monitorRef = useRef(true);
-  const companionRef = useRef<CompanionClient | null>(null);
+  const companionRef = useRef<CompanionTransport | null>(null);
+  const stepAsideRef = useRef(createStepAside(() => companionRef.current));
+  const [host, setHost] = useState<TransportHost>("detecting");
+  const shortcutFnRef = useRef<(a: ShortcutAction) => void>(() => {});
   const companionActivity = useRef<{ typing: boolean; idle_ms: number; at: number } | null>(null);
   const voiceModeRef = useRef(false);
   const talkingRef = useRef(false);
@@ -194,33 +202,40 @@ function TeachInner({ sessionId, localMode, agentParam = null }: TeachAppProps) 
     };
   }, [selected]);
 
-  // Desktop companion: halo over any app plus typing/idle counts for the pause check.
+  // Desktop companion: halo over any app plus typing/idle counts for the pause check. Selected in an effect
+  // ("detecting" until then). Activity and chords are used only while a teach session runs.
   useEffect(() => {
-    const client = createCompanionClient();
-    companionRef.current = client;
-    const offs = [
-      client.on("status", (s, perms) => {
+    const t = transport ?? selectTransport();
+    companionRef.current = t;
+    const stepAside = stepAsideRef.current;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the transport is picked on the client only ("detecting" before).
+    setHost(t.kind);
+    const off = bindTeachTransport(t, {
+      active: () => loopRef.current !== null,
+      onStatus: (s, perms) => {
         setCompanionStatus(s);
         setCompanionPerms(perms);
         if (s !== "paired") loopRef.current?.engine.clearAll("disconnect");
-      }),
-      client.on("activity", (a) => {
+      },
+      onActivity: (a) => {
         companionActivity.current = { typing: a.typing, idle_ms: a.idle_ms, at: Date.now() };
-      }),
-      client.on("chord", (c) => {
+      },
+      onChord: (c) => {
         const loop = loopRef.current;
         if (SHORTCUT_LEARNING && loop && !loop.paused) loop.coach.noteChord(c.chord);
-      }),
-    ];
-    client.connect();
+      },
+      onShortcut: (a) => shortcutFnRef.current(a),
+    });
+    t.connect();
     return () => {
       loopRef.current?.engine.clearAll("unmount");
       captureRef.current?.stop();
-      for (const off of offs) off();
-      client.dispose();
+      stepAside.restore();
+      off();
+      t.dispose();
       companionRef.current = null;
     };
-  }, []);
+  }, [transport]);
 
   function onIntervene(iv: Intervention) {
     const loop = loopRef.current;
@@ -343,6 +358,8 @@ function TeachInner({ sessionId, localMode, agentParam = null }: TeachAppProps) 
       lastStopAt: -Infinity,
     };
     setRunning(true);
+    // In the desktop app the screen share is part of Start: no picker, then the window steps aside.
+    if (companionRef.current?.kind === "bridge") void toggleShare();
     try {
       await agentRef.current.start({ dynamicVariables: { expert: workmap.expert, work_map: JSON.stringify(workmap) } });
       voiceModeRef.current = true;
@@ -363,6 +380,7 @@ function TeachInner({ sessionId, localMode, agentParam = null }: TeachAppProps) 
       setSharing(false);
       setShareWarning(null);
       loop.engine.clearAll("pause");
+      stepAsideRef.current.restore();
     };
     if (captureRef.current) {
       captureRef.current.stop();
@@ -370,7 +388,7 @@ function TeachInner({ sessionId, localMode, agentParam = null }: TeachAppProps) 
       return;
     }
     try {
-      const handle = await startScreenCapture({
+      const handle = await stepAsideRef.current.share(() => startScreenCapture({
         getT: () => (Date.now() - loop.t0) / 1000,
         onFrame: (f) => void onFrame(loop, f),
         onFrameChange: () => {
@@ -379,13 +397,20 @@ function TeachInner({ sessionId, localMode, agentParam = null }: TeachAppProps) 
         onEnded: () => {
           if (captureRef.current === handle) clear();
         },
-      });
+      }));
+      if (loopRef.current !== loop) {
+        // Finished while getDisplayMedia was pending.
+        handle.stop();
+        stepAsideRef.current.restore();
+        return;
+      }
       captureRef.current = handle;
       // Halo rects map to the primary display only when the whole monitor is shared.
       monitorRef.current = !handle.displaySurface || handle.displaySurface === "monitor";
       setSharing(true);
       setShareWarning(monitorRef.current ? null : MONITOR_WARNING);
     } catch (err) {
+      stepAsideRef.current.restore();
       setNotice(`Screen share not started (${err instanceof Error ? err.message : String(err)}).`);
     }
   }
@@ -410,6 +435,7 @@ function TeachInner({ sessionId, localMode, agentParam = null }: TeachAppProps) 
     loop.engine.clearAll("end");
     captureRef.current?.stop();
     captureRef.current = null;
+    stepAsideRef.current.restore();
     setSharing(false);
     setRunning(false);
     const s = summary(masteryRef.current, loop.workmap.steps);
@@ -454,7 +480,9 @@ function TeachInner({ sessionId, localMode, agentParam = null }: TeachAppProps) 
       startedAt: () => loopRef.current?.t0 ?? null,
     });
   });
-  useEffect(() => companionRef.current?.on("shortcut", (a) => routeShortcut(a, shortcutRef.current)), []);
+  useEffect(() => {
+    shortcutFnRef.current = (a) => routeShortcut(a, shortcutRef.current);
+  }, []);
 
   const buddyState = buddyStateFor({
     active: running,
@@ -506,6 +534,7 @@ function TeachInner({ sessionId, localMode, agentParam = null }: TeachAppProps) 
       shareWarning={shareWarning}
       notice={notice}
       textMode={textMode}
+      host={host}
       companion={{ status: companionStatus, permissions: companionPerms, onPair: (code) => companionRef.current?.pair(code) ?? false }}
       currentStep={currentStep}
       transcript={transcript}

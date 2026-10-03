@@ -33,6 +33,11 @@ Supabase dashboard, Authentication:
 - URL Configuration, Redirect URLs: add `https://<domain>/auth/callback`
   (add the Preview URL pattern too if you log in on preview deployments, e.g. `https://*-<team>.vercel.app/auth/callback`)
 - Sign In / Providers, Email: enabled, magic link on.
+- Emails, Templates, Magic Link: the template must include `{{ .Token }}` (the one-time code) next to
+  `{{ .ConfirmationURL }}`. The desktop app signs in with the code (login page, 'Email me a code', then
+  `/auth/verify`); the browser accepts both. Example body:
+  `<p>Your sign-in code: {{ .Token }}</p><p><a href="{{ .ConfirmationURL }}">Or sign in with this link</a></p>`.
+  The code length follows Auth settings, Email OTP length (default 6); the login form accepts 6 to 10 digits.
 
 `<domain>` is the production domain on Vercel (custom domain or `<project>.vercel.app`).
 
@@ -56,6 +61,9 @@ Vercel project, Settings, Environment Variables. Set each for **Production** and
 | ANTHROPIC_API_KEY | Anthropic API key (vision, Work Map synthesis) |
 | JEV_API_KEY | JEV API key |
 | DECIDE_PROVIDER | optional, forces the decide provider: jev, llm or heuristic |
+| NEXT_PUBLIC_DESKTOP_DOWNLOAD_MAC | optional, https download link for the macOS desktop app ('Get the desktop app' panel; hidden when unset) |
+| NEXT_PUBLIC_DESKTOP_DOWNLOAD_WIN | optional, https download link for the Windows desktop app |
+| NEXT_PUBLIC_COMPANION_WS | optional, `1` turns on the old local WebSocket companion in the browser (default off; per browser: localStorage `ai-apprentice.companion.ws` = `1`) |
 | VISION_MODEL | optional, overrides the vision model |
 
 NEXT_PUBLIC_* values are inlined at build time, so redeploy after changing them.

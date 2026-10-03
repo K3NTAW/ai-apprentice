@@ -85,3 +85,18 @@ describe("Teach console", () => {
     expect(decideStatus({ ...base.stats, capped: true })).toContain("usage cap reached");
   });
 });
+
+describe("Teach console in the desktop app vs a browser (one-app D2)", () => {
+  it("desktop app: no pairing card and no 'not paired' note", () => {
+    const html = renderToStaticMarkup(<TeachConsole {...base} host="bridge" />);
+    expect(html).not.toContain('data-testid="companion-card"');
+    expect(html).toContain("Running in AI Apprentice");
+    expect(html).not.toContain("Companion not paired");
+  });
+
+  it("browser: the 'Get the desktop app' panel", () => {
+    const html = renderToStaticMarkup(<TeachConsole {...base} host="none" companion={{ ...base.companion, status: "not connected" }} />);
+    expect(html).toContain("Get the desktop app");
+    expect(html).not.toContain('data-testid="companion-card"');
+  });
+});

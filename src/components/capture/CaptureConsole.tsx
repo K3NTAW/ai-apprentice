@@ -4,7 +4,9 @@
 // Expert name, Start, Share screen, End task, Pause / off the record, the live feed, counter and last question.
 import type { ScreenEvent } from "@/lib/types";
 import { describeEvent } from "@/lib/voice/prompts";
-import CompanionCard, { type CompanionCardProps } from "./CompanionCard";
+import type { TransportHost } from "@/lib/companion/transport";
+import type { CompanionCardProps } from "./CompanionCard";
+import CompanionSlot from "./DesktopPanel";
 
 export type CaptureConsoleProps = {
   running: boolean;
@@ -20,6 +22,8 @@ export type CaptureConsoleProps = {
   savedForDebrief: number;
   feed: ScreenEvent[];
   companion: CompanionCardProps;
+  /** Which companion transport runs: bridge (desktop app), websocket (opt-in), none (browser), detecting. Default websocket. */
+  host?: TransportHost;
   onExpertChange(name: string): void;
   onStart(): void;
   onEnd(): void;
@@ -92,7 +96,7 @@ export default function CaptureConsole(p: CaptureConsoleProps) {
         )}
       </section>
 
-      <CompanionCard {...p.companion} />
+      <CompanionSlot host={p.host ?? "websocket"} companion={p.companion} />
 
       <section className="flex flex-col gap-2 rounded border border-slate-200 bg-white p-3">
         <div data-testid="question-counter" className="text-xs text-slate-600">
