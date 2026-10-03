@@ -3,7 +3,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "@/app/api/vision/route";
-import { createSession, getSession, setOffRecord } from "@/lib/store";
+import { fileStore } from "@/lib/store";
+
+const createSession = fileStore.createSession.bind(fileStore);
+const getSession = fileStore.getSession.bind(fileStore);
+const setOffRecord = fileStore.setOffRecord.bind(fileStore);
 
 const describeFrame = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/perception/vision", () => ({ describeFrame }));

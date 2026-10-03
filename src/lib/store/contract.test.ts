@@ -6,7 +6,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { entry, event, qaPair, runStoreContract } from "./contract";
 import { FakeSupabase } from "./fakeSupabase";
-import { createSession, fileStore, getStore } from "./index";
+import { fileStore, getStore } from "./index";
 import { createSupabaseStore } from "./supabase";
 import { frameName, SessionNotFoundError } from "./types";
 
@@ -209,13 +209,5 @@ describe("getStore", () => {
   it("throws supabase_not_configured when misconfigured", () => {
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "http://supabase.test.invalid");
     expect(() => getStore(ctx())).toThrow("supabase_not_configured");
-  });
-
-  it("top-level wrappers reject outside local mode", async () => {
-    stubSupabase();
-    await expect(createSession({ kind: "capture" })).rejects.toThrow("file_store_not_allowed");
-    vi.unstubAllEnvs();
-    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "http://supabase.test.invalid");
-    await expect(createSession({ kind: "capture" })).rejects.toThrow("file_store_not_allowed");
   });
 });

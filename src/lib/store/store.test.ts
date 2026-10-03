@@ -5,19 +5,20 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { GET as getFrame } from "@/app/api/session/[id]/frames/[name]/route";
 import { POST as postOffRecord } from "@/app/api/session/[id]/off-record/route";
 import type { ScreenEvent, TranscriptEntry } from "@/lib/types";
-import {
-  appendEvents,
-  appendTranscript,
-  createSession,
-  endSession,
-  InvalidOffRecordRangeError,
-  getSession,
-  listSessions,
-  readFrame,
-  saveFrame,
-  setOffRecord,
-  upsertQA,
-} from "./index";
+import { fileStore, InvalidOffRecordRangeError } from "./index";
+
+// The file store directly; the top-level wrappers in ./index were removed in T-0068.
+const appendEvents = fileStore.appendEvents.bind(fileStore);
+const appendTranscript = fileStore.appendTranscript.bind(fileStore);
+const createSession = fileStore.createSession.bind(fileStore);
+const endSession = fileStore.endSession.bind(fileStore);
+const getSession = fileStore.getSession.bind(fileStore);
+const listSessions = fileStore.listSessions.bind(fileStore);
+const readFrame = fileStore.readFrame.bind(fileStore);
+const saveFrame = fileStore.saveFrame.bind(fileStore);
+const setOffRecord = fileStore.setOffRecord.bind(fileStore);
+const upsertQA = fileStore.upsertQA.bind(fileStore);
+
 
 let dir: string;
 const prevDataDir = process.env.DATA_DIR;
@@ -137,7 +138,7 @@ describe("store", () => {
     const again = await import("./index");
     expect(g[key]).toBe(first);
     const s = await createSession({ kind: "capture" });
-    const pending = again.endSession(s.id);
+    const pending = again.fileStore.endSession(s.id);
     expect((first as Map<string, unknown>).has(s.id)).toBe(true);
     await pending;
   });
