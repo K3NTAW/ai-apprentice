@@ -71,3 +71,25 @@ describe("event bus", () => {
     expect(calls).toBe(0);
   });
 });
+
+describe("os events", () => {
+  const sw = { type: "app_switched" as const, entity: { kind: "app", id: "Microsoft Outlook" }, app: "Microsoft Outlook" };
+
+  it("an os app_switched within 1 s replaces the vision twin", () => {
+    const bus = createEventBus({ now: () => 0 });
+    const [v] = bus.publishVision([sw], 10);
+    const seen: (string | undefined)[] = [];
+    bus.subscribe((_e, replaces) => seen.push(replaces));
+    const os = bus.publishOs(sw, 10.6)!;
+    expect(os.source).toBe("os");
+    expect(seen).toEqual([v.id]);
+    expect(bus.all().map((e) => e.source)).toEqual(["os"]);
+  });
+
+  it("a vision app_switched within 1 s of an os one is dropped; later ones are kept", () => {
+    const bus = createEventBus({ now: () => 0 });
+    bus.publishOs(sw, 10);
+    expect(bus.publishVision([sw], 10.8)).toEqual([]);
+    expect(bus.publishVision([sw], 12)).toHaveLength(1);
+  });
+});

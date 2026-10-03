@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   DECISION_QUESTIONS,
   ScreenEventSchema,
+  SessionSchema,
+  TEACH_LIST_MAX,
   WorkMapSchema,
   newId,
 } from "./types";
@@ -77,6 +79,63 @@ describe("types", () => {
     );
     expect(DECISION_QUESTIONS.event_class.options).toEqual(["routine", "judgment_call", "possible_guardrail"]);
     expect(DECISION_QUESTIONS.ask_timing.options).toEqual(["ask_now", "wait", "save_for_debrief"]);
+  });
+
+  it("parses an app-agnostic event with app, window, rect and each new type", () => {
+    const ev = {
+      id: "ev_1",
+      t: 3,
+      source: "vision",
+      type: "item_sent",
+      entity: { kind: "email", id: "Offer Q3" },
+      app: "Microsoft Outlook",
+      window: "Offer Q3 - Message",
+      rect: { x: 0.1, y: 0.2, w: 0.3, h: 0.05 },
+      field: "forward",
+      to: "controller@example.com",
+    };
+    expect(ScreenEventSchema.parse(ev)).toEqual(ev);
+    for (const type of ["app_switched", "text_entered", "item_created", "item_sent", "item_deleted", "navigated"]) {
+      expect(ScreenEventSchema.safeParse({ ...ev, type }).success).toBe(true);
+    }
+    expect(ScreenEventSchema.safeParse({ ...ev, source: "os", type: "app_switched" }).success).toBe(true);
+    expect(ScreenEventSchema.safeParse({ ...ev, rect: { x: 0, y: 0, w: 1, h: 1 } }).success).toBe(true);
+  });
+
+  it("rejects a rect outside 0..1 or reaching past the frame edge", () => {
+    const base = { ...screenEventExample, app: "Microsoft PowerPoint" };
+    for (const rect of [
+      { x: -0.1, y: 0, w: 0.2, h: 0.2 },
+      { x: 0.2, y: 0.2, w: 1.2, h: 0.1 },
+      { x: 0.9, y: 0.1, w: 0.2, h: 0.1 },
+      { x: 0.1, y: 0.95, w: 0.1, h: 0.1 },
+    ]) {
+      expect(ScreenEventSchema.safeParse({ ...base, rect }).success).toBe(false);
+    }
+  });
+
+  // Regression guard: a session stored before the pivot has none of the new fields.
+  const storedSession = {
+    id: "s_old",
+    kind: "capture",
+    started_at: "2026-09-30T08:00:00.000Z",
+    events: [screenEventExample],
+    transcript: [],
+    qa: [],
+    off_record_ranges: [],
+  };
+
+  it("still parses a stored session without the new fields", () => {
+    expect(SessionSchema.parse(storedSession)).toEqual(storedSession);
+  });
+
+  it("parses Session.teach and caps its lists", () => {
+    const teach = { workmap_session_id: "s_old", mastered: ["1", "2"], practice: ["3"], interventions: 2, finished_at: "2026-10-03T21:00:00.000Z" };
+    const s = SessionSchema.parse({ ...storedSession, kind: "teach", teach });
+    expect(s.teach).toEqual(teach);
+    expect(SessionSchema.safeParse({ ...storedSession, teach: { ...teach, interventions: -1 } }).success).toBe(false);
+    const long = Array.from({ length: TEACH_LIST_MAX + 1 }, (_, i) => String(i));
+    expect(SessionSchema.safeParse({ ...storedSession, teach: { ...teach, mastered: long } }).success).toBe(false);
   });
 
   it("newId prefixes a short random id", () => {

@@ -1,11 +1,13 @@
 // Browser-only screen capture loop: getDisplayMedia -> video -> canvas -> JPEG.
+import { encodeWithinLimit, FRAME_MAX_WIDTH, scaledSize } from "./frame";
 import { hasChanged } from "./frameDiff";
 
 export type CapturedFrame = { jpegBase64: string; t: number; changed: boolean };
 
 export type CaptureOptions = {
   intervalMs?: number;
-  maxEdge?: number;
+  /** Frames are downscaled to at most this width, aspect kept. */
+  maxWidth?: number;
   onFrame: (f: CapturedFrame) => void;
   getT: () => number;
   onFrameChange?: () => void;
@@ -22,7 +24,7 @@ const DIFF_WIDTH = 160;
 
 export async function startScreenCapture({
   intervalMs = 1500,
-  maxEdge = 1280,
+  maxWidth = FRAME_MAX_WIDTH,
   onFrame,
   getT,
   onFrameChange,
@@ -58,11 +60,14 @@ export async function startScreenCapture({
     previous = pixels;
     if (!changed) return;
     onFrameChange?.();
-    const scale = Math.min(1, maxEdge / Math.max(w, h));
-    full.width = Math.round(w * scale);
-    full.height = Math.round(h * scale);
+    const size = scaledSize(w, h, maxWidth);
+    full.width = size.width;
+    full.height = size.height;
     fullCtx.drawImage(video, 0, 0, full.width, full.height);
-    const jpegBase64 = full.toDataURL("image/jpeg", 0.8).replace(/^data:image\/jpeg;base64,/, "");
+    const jpegBase64 = encodeWithinLimit((q) =>
+      full.toDataURL("image/jpeg", q).replace(/^data:image\/jpeg;base64,/, ""),
+    );
+    if (jpegBase64 === null) return;
     onFrame({ jpegBase64, t: getT(), changed });
   };
 

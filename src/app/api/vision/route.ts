@@ -1,7 +1,9 @@
 // POST /api/vision: store one frame, then ask the vision model for new events.
 // Frames inside an off-record range are neither stored nor sent to the model.
 import { ScreenEventSchema, type VisionEvent } from "@/lib/types";
-import { describeFrame } from "@/lib/perception/vision";
+import { MAX_FRAME_BODY_BYTES } from "@/lib/perception/frame";
+import { redactScreenEvent } from "@/lib/perception/redactEvent";
+import { describeFrame, VISION_CONTEXT_EVENTS } from "@/lib/perception/vision";
 import { consumeUsage } from "@/lib/usage";
 import { type Api, requireCreatorOrOwner, withApi } from "../session/_http";
 
@@ -12,7 +14,8 @@ export const maxDuration = 60;
 const SESSION_ID = /^[a-zA-Z0-9_-]+$/;
 
 // Request bodies over 2 MB answer 413 before any model or storage call (Vercel caps bodies at 4.5 MB).
-export const MAX_FRAME_BODY_BYTES = 2 * 1024 * 1024;
+// The client keeps frames under it: 1600 px wide at quality 0.7, one retry at 0.5 (lib/perception/frame).
+export { MAX_FRAME_BODY_BYTES };
 
 const tooLarge = () => Response.json({ error: "frame_too_large" }, { status: 413 });
 
@@ -58,7 +61,8 @@ async function visionFor(api: Api, req: Request): Promise<Response> {
   if (!saved.stored) return Response.json({ events: [], skipped: saved.reason });
 
   const events: VisionEvent[] = process.env.ANTHROPIC_API_KEY
-    ? await describeFrame({ jpegBase64, previousEvents: prev.data })
+    ? await describeFrame({ jpegBase64, previousEvents: prev.data.slice(-VISION_CONTEXT_EVENTS) })
     : [];
-  return Response.json({ events, frame_ref: `frames/${saved.name}` });
+  // Redact app, window, from and to before the client stores them (off-record frames never get here).
+  return Response.json({ events: events.map(redactScreenEvent), frame_ref: `frames/${saved.name}` });
 }
