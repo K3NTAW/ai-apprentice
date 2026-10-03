@@ -10,8 +10,11 @@ Requires Node 22+ and macOS (Apple silicon or Intel).
 
 ```sh
 cd companion
-npm install        # downloads Electron, installs native deps for Electron (install-app-deps)
+npm install        # installs deps, then builds native deps for Electron (install-app-deps)
 ```
+
+npm 11 runs install scripts only for packages listed in `allowScripts` in `package.json`. Only
+`electron`, `uiohook-napi` and `get-windows` are allowed. Electron downloads its binary on first use.
 
 ## Run in development
 

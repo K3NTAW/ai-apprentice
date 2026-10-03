@@ -28,19 +28,35 @@
   "build": {
     "appId": "app.aiapprentice.companion",
     "productName": "AI Apprentice Companion",
-    "directories": { "output": "release" },
-    "files": ["dist/**", "static/**", "package.json"],
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "static/**",
+      "package.json"
+    ],
     "asar": true,
-    "asarUnpack": ["node_modules/uiohook-napi/**", "node_modules/get-windows/**"],
+    "asarUnpack": [
+      "node_modules/uiohook-napi/**",
+      "node_modules/get-windows/**"
+    ],
     "npmRebuild": true,
     "mac": {
       "category": "public.app-category.productivity",
-      "target": ["dir"],
+      "target": [
+        "dir"
+      ],
       "identity": null,
       "extendInfo": {
         "LSUIElement": true,
         "NSScreenCaptureUsageDescription": "Reads the frontmost window title for the paired AI Apprentice page."
       }
     }
+  },
+  "allowScripts": {
+    "electron@44.5.1": true,
+    "get-windows@9.3.0": true,
+    "uiohook-napi@1.5.5": true
   }
 }

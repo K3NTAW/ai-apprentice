@@ -161,7 +161,9 @@ function createOverlay(): void {
   overlay.webContents.on("will-navigate", (e) => e.preventDefault());
   void overlay.loadFile(path.join(here, "..", "static", "overlay.html"));
   overlay.once("ready-to-show", () => overlay?.showInactive());
-  for (const ev of ["display-added", "display-removed", "display-metrics-changed"] as const) screen.on(ev, placeOverlay);
+  screen.on("display-added", placeOverlay);
+  screen.on("display-removed", placeOverlay);
+  screen.on("display-metrics-changed", placeOverlay);
 }
 
 function setPaused(next: boolean): void {
