@@ -2,16 +2,18 @@
   "name": "ai-apprentice-companion",
   "version": "0.1.0",
   "private": true,
-  "description": "AI Apprentice desktop companion (macOS and Windows tray app): cursor buddy, floating panel, shortcuts, activity counts, frontmost app, halo overlay, local WebSocket.",
+  "description": "AI Apprentice desktop app (macOS and Windows): the control room in its own window, plus cursor buddy, side dock, floating panel, shortcuts, activity counts, frontmost app and halo overlay, talking to the page over a preload bridge.",
   "type": "module",
   "main": "dist/main.mjs",
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "npm run build && electron .",
     "test": "vitest run",
-    "package": "npm run build && electron-builder --mac dir",
+    "package": "npm run build && electron-builder --mac",
     "postinstall": "electron-builder install-app-deps",
-    "package:win": "npm run build && electron-builder --win nsis --x64"
+    "package:win": "npm run build && electron-builder --win nsis --x64",
+    "package:dir": "npm run build && electron-builder --mac dir",
+    "make-icon": "node scripts/make-icon.mjs"
   },
   "dependencies": {
     "get-windows": "^9.3.0",
@@ -28,13 +30,15 @@
   },
   "build": {
     "appId": "app.aiapprentice.companion",
-    "productName": "AI Apprentice Companion",
+    "productName": "AI Apprentice",
     "directories": {
-      "output": "release"
+      "output": "release",
+      "buildResources": "assets"
     },
     "files": [
       "dist/**",
       "static/**",
+      "app.config.json",
       "package.json"
     ],
     "asar": true,
@@ -46,12 +50,29 @@
     "mac": {
       "category": "public.app-category.productivity",
       "target": [
-        "dir"
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        },
+        {
+          "target": "dir",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
       ],
+      "icon": "assets/icon.icns",
       "identity": null,
+      "hardenedRuntime": true,
+      "entitlements": "assets/entitlements.mac.plist",
+      "entitlementsInherit": "assets/entitlements.mac.plist",
       "extendInfo": {
-        "LSUIElement": true,
-        "NSScreenCaptureUsageDescription": "Reads the frontmost window title for the paired AI Apprentice page."
+        "NSMicrophoneUsageDescription": "AI Apprentice listens while you talk to your agent (push to talk).",
+        "NSScreenCaptureUsageDescription": "AI Apprentice sees your screen while you train or learn, so the agent can follow your work and point at things."
       }
     },
     "win": {

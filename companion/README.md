@@ -1,10 +1,72 @@
-# AI Apprentice Companion (macOS and Windows)
+# AI Apprentice (desktop app, macOS and Windows)
 
-Tray app that gives the AI Apprentice web app what a browser cannot: global typing and pointer
-activity counts, the frontmost app and window title, a cursor buddy that talks and points at things
-over any app, global push-to-talk shortcuts, a small floating panel, the agent side dock (Capture) and
-the agent avatar as the cursor buddy (Teach).
-It talks only to the paired web page over a local WebSocket on `127.0.0.1`.
+One desktop app. The user installs and opens **AI Apprentice**, signs in, and does everything in it:
+control room, training, teaching. The main window loads the control-room web app (the same Next.js
+app we deploy). The companion features run in the same Electron process: global typing and pointer
+activity counts, the frontmost app and window title, keyboard chords, a cursor buddy that talks and
+points over any app, global push-to-talk shortcuts, a floating panel, and the agent side dock. They
+talk to the page through a preload bridge (`window.apprentice`), not a local WebSocket, so there is
+no pairing code and no screen-share picker.
+
+The local WebSocket server and the pairing code flow are still there, opt-in only: `COMPANION_WS=1`.
+
+## First run
+
+1. Install (below) and open **AI Apprentice**. The main window opens at about 1280x820 (min
+   960x640) and remembers its size and position (`window-state.json` in userData; a corrupt file or
+   a position on a display that is gone falls back to the default size). The tray icon stays.
+2. Sign in inside the window. Sign-in uses the **email one-time code** (enter the 6-digit code from
+   the email in the app): magic links and OAuth would open in the system browser, outside the app.
+   The web login page owns that change (code entry next to the magic link); this app needs nothing
+   else because the Supabase session cookie lives in the app's own persistent session.
+3. Grant the macOS permissions when asked (see `macOS permissions`).
+4. Pick an agent and start training or teaching. When it starts, the page calls
+   `window.apprentice.window('step-aside')` and the main window minimises so you work in your own
+   apps; `restore` brings it back when the task ends (only if the app stepped it aside), `focus`
+   always brings it forward.
+
+Closing the window hides it (the app keeps running in the tray, the Dock icon goes away while no
+window is visible). `Open AI Apprentice` in the tray menu (or a second launch, or clicking the Dock
+icon) brings it back. Quit with Cmd+Q or `Quit` in the tray menu.
+
+## Where the app loads from (APP_URL)
+
+- `APP_URL` env var wins (e.g. `APP_URL=https://staging.example.com npm run dev`).
+- Otherwise a packaged build reads `appUrl` from `companion/app.config.json` (shipped in the app),
+  and a dev run (`npm run dev`) uses `http://localhost:3000`.
+- `https` only (`http` only for localhost / 127.0.0.1), no userinfo. An invalid value shows an error
+  page; there is no silent fallback.
+
+Origin allowlist for the main window (navigation, the bridge, microphone, screen capture):
+packaged builds allow the APP_URL origin only; dev builds also allow `http://localhost:3000` and the
+Vercel preview patterns. `COMPANION_ALLOWED_ORIGINS` adds entries (explicit opt-in). Links to other
+origins open in the system browser (https only); `window.open` never opens an app window.
+
+## Bridge (window.apprentice)
+
+Exposed by `src/preloadApp.cts` only when main answers the preload's hello: the sender must be the
+main window's main frame on an allowlisted origin. Otherwise nothing is exposed.
+
+```ts
+window.apprentice = {
+  version, platform,                       // 'darwin' | 'win32' | 'linux'
+  on(type, handler) -> unsubscribe,        // 'status' | 'activity' | 'app' | 'chord' | 'shortcut'
+  send(message),                           // buddy.*, overlay.halo/clear, dock.*, session.state
+  window(action),                          // 'step-aside' | 'restore' | 'focus'
+}
+```
+
+Payloads are the protocol v1-v3 messages. `send` is validated in main with the protocol parser and
+invalid messages are dropped. The last `status` is replayed to a new `status` subscriber. A page is
+"connected" from its hello until it navigates away, reloads, crashes or the window is destroyed;
+then session, buddy, dock and halos are reset and the next hello re-syncs status.
+
+Screen frames: `navigator.mediaDevices.getDisplayMedia()` from the allowlisted page is answered with
+the primary screen (video only, no picker). The overlay (buddy, bubble, halo), dock and panel windows
+use `setContentProtection(true)`, so they never appear in captured frames.
+
+Pure, Electron-free modules (unit-tested): `bridge.mts`, `permissionsGrant.mts`, `windowActions.mts`,
+`appConfig.mts`; `main.mts` only wires them.
 
 ## Install
 
@@ -171,19 +233,39 @@ Residual risk: on Windows there is no such OS flag; a chord typed in a password 
 `Ctrl+V`) is sent as the chord name only, never the characters. The classifier takes the check as an
 injected function, so a future native check plugs in; a throw counts as secure (nothing sent).
 
-## Package a local unsigned .app
+## Package
 
 ```sh
-npm run package    # electron-builder --mac dir -> release/mac*/AI Apprentice Companion.app
+npm run package      # electron-builder --mac: dmg + dir, arm64 and x64 -> release/
+npm run package:dir  # dir only (faster)
+npm run make-icon    # regenerates assets/icon.icns (macOS iconutil)
 ```
 
-The app is unsigned. Before first launch remove the quarantine flag:
+productName is `AI Apprentice`; the bundle id stays `app.aiapprentice.companion`, so macOS keeps the
+permissions granted to the old app where the signature allows it. userData stays in the old folder
+(`AI Apprentice Companion`, dev: `ai-apprentice-companion`), so settings, dock prefs and window
+state survive the rename.
+
+The app is **not signed or notarized** (`identity: null`; entitlements in
+`assets/entitlements.mac.plist` incl. `com.apple.security.device.audio-input` apply once it is
+signed). Before first launch remove the quarantine flag:
 
 ```sh
-xattr -dr com.apple.quarantine "release/mac-arm64/AI Apprentice Companion.app"
+xattr -dr com.apple.quarantine "release/mac-arm64/AI Apprentice.app"
 ```
 
-(or right-click the app, Open, then confirm). `LSUIElement` is set, so there is no dock icon.
+(or right-click the app, Open, then confirm). Unsigned builds get a new code identity each build,
+so macOS may keep showing a permission as granted while it does not apply. Reset and re-grant:
+
+```sh
+tccutil reset ScreenCapture app.aiapprentice.companion
+tccutil reset Microphone app.aiapprentice.companion
+tccutil reset Accessibility app.aiapprentice.companion
+tccutil reset ListenEvent app.aiapprentice.companion
+```
+
+The app shows a Dock icon while its window is visible (`LSUIElement` is gone) and has an
+application menu with Edit roles (copy and paste work in the page).
 
 ## Windows
 
@@ -211,8 +293,10 @@ or your terminal) under:
 2. **Input Monitoring**: required by macOS for global key and mouse events. Grant it in System
    Settings > Privacy & Security > Input Monitoring: click `+`, add the companion (in dev: `Electron`
    or your terminal), switch it on, then quit and relaunch the companion.
-3. **Screen Recording**: required for window titles (without it titles are empty). Screen frames
-   are never captured by the companion.
+3. **Screen Recording**: now **required for capture**: the app answers the page's screen capture
+   with the primary screen (no picker), and macOS delivers frames only with this permission. Also
+   used for window titles. Without it training and teaching cannot see the screen.
+4. **Microphone**: asked on first push-to-talk (`NSMicrophoneUsageDescription`).
 
 The tray menu lists what is missing and each item opens the right pane. Permissions are polled
 every 2 s; a change re-sends `status` and starts the hook once Accessibility is granted. Restart the
@@ -325,6 +409,11 @@ Invalid messages are ignored with a log line. Halos are cleared on disconnect, o
 - Single-instance lock: a second launch quits immediately.
 
 ## Rollback
+
+Desktop-app behaviour: `COMPANION_WS=1` brings back the local WebSocket server, the pairing code
+in the tray and panel, and the old pairing flow from a browser tab (events then go to both the page
+and the WebSocket client). Nothing in the window, single-instance or lock code deletes pairing or
+settings files.
 
 Buddy problems on a machine: set `COMPANION_BUDDY=0` or untick `Cursor buddy` in the panel. That
 falls back to the halo-only overlay and does not block Capture. Dock or avatar problems:
