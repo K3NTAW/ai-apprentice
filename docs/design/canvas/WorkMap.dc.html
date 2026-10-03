@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Work Map</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;family=Instrument+Serif:ital@0;1&amp;display=swap">
+<style>
+body{margin:0}
+.aa{--bg:#050505;--s1:#121212;--s2:#1C1C1C;--s3:#2A2A2A;--ln:rgba(255,255,255,.08);--ln2:rgba(255,255,255,.14);--tx:#FFFFFF;--mu:#9E9E9E;--fa:#858585;--ac:#4280FF;--ac2:#7AA6FF;--acs:rgba(66,128,255,.12);--pb:#FFFFFF;--pf:#0A0A0A;--cmp:#1F1F21;--am:#F5A524;--ams:rgba(245,165,36,.15);--gr:#3FCF8E;--grs:rgba(63,207,142,.14);--rd:#FF6B6B;--rds:rgba(255,107,107,.14);--vi:#B39DFF;--vis:rgba(179,157,255,.15);--te:#3DD6C2;--tes:rgba(61,214,194,.14);--co:#FF8A65;--cos:rgba(255,138,101,.16);--sh:0 24px 64px rgba(0,0,0,.55);background:var(--bg);color:var(--tx);font-family:Geist,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;color-scheme:dark}
+.aa.lt{--bg:#FFFFFF;--s1:#F7F7F7;--s2:#F0F0F0;--s3:#E4E4E4;--ln:rgba(0,0,0,.08);--ln2:rgba(0,0,0,.14);--tx:#0A0A0A;--mu:#5E5E5E;--fa:#757575;--ac:#1F5FFF;--ac2:#1F5FFF;--acs:rgba(31,95,255,.08);--pb:#0A0A0A;--pf:#FFFFFF;--cmp:#F2F2F2;--am:#A86400;--ams:rgba(245,165,36,.18);--gr:#13784B;--grs:rgba(19,120,75,.11);--rd:#C93030;--rds:rgba(201,48,48,.09);--vi:#6346D1;--vis:rgba(99,70,209,.10);--te:#0B7468;--tes:rgba(11,116,104,.10);--co:#B93E0E;--cos:rgba(185,62,14,.09);--sh:0 20px 50px rgba(14,18,28,.12);color-scheme:light}
+.aa *,.aa *::before,.aa *::after{box-sizing:border-box}
+.aa h1,.aa h2,.aa h3,.aa p{margin:0}
+.aa a{color:var(--ac2)}
+.t1{font-size:32px;line-height:1.1;letter-spacing:-.025em;font-weight:600;text-wrap:balance}
+.t2{font-size:24px;line-height:1.2;letter-spacing:-.02em;font-weight:600;text-wrap:balance}
+.t3{font-size:16px;line-height:1.35;letter-spacing:-.01em;font-weight:600}
+.sm{font-size:13px}.xs{font-size:12px}.mu{color:var(--mu)}.fa{color:var(--fa)}
+.eb{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--mu);font-weight:500}
+.mono{font-family:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace;font-variant-numeric:tabular-nums}
+.card{background:var(--s1);border:1px solid var(--ln);border-radius:16px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:40px;padding:0 18px;border-radius:999px;font-family:inherit;font-size:14px;font-weight:500;border:1px solid transparent;cursor:pointer;text-decoration:none;white-space:nowrap;line-height:1}
+.bp{background:var(--pb);color:var(--pf)}.bs{background:var(--s2);border-color:var(--ln2);color:var(--tx)}.bg{background:transparent;color:var(--mu)}
+.aa a.btn.bp{color:var(--pf)}.aa a.btn.bs{color:var(--tx)}
+.bsm{height:32px;padding:0 12px;font-size:13px}
+.btn:focus-visible,.dotb:focus-visible{outline:2px solid var(--ac2);outline-offset:2px}
+.bdg{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 9px;border-radius:999px;font-size:12px;font-weight:500;white-space:nowrap;line-height:1}
+.bdg::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.k-lim{background:var(--tes);color:var(--te)}.k-exc{background:var(--vis);color:var(--vi)}.k-stop{background:var(--cos);color:var(--co)}.k-jc{background:var(--ams);color:var(--am)}.k-ok{background:var(--grs);color:var(--gr)}.k-pend{background:var(--s3);color:var(--mu)}.k-ac{background:var(--acs);color:var(--ac2)}
+.ic{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.bar{position:relative;height:8px;border-radius:99px;background:var(--s3)}
+.bar i{position:absolute;left:0;top:0;bottom:0;border-radius:99px;background:var(--ac);display:block}
+.bar i.lo{background:var(--am)}
+.bar b{position:absolute;left:75%;top:-5px;bottom:-5px;width:2px;border-radius:2px;background:var(--tx);opacity:.6;display:block}
+.dotb{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;gap:10px;padding:8px 4px 12px;border:0;background:none;color:var(--mu);font-family:inherit;cursor:pointer;border-radius:12px;text-align:center}
+.dotb:hover{background:var(--s2)}
+.quote{font-family:"Instrument Serif",Georgia,serif;font-style:italic;font-size:38px;line-height:1.12;letter-spacing:-.005em;font-weight:400;text-wrap:balance}
+</style>
+</helmet>
+<div class="aa {{lt}}" style="min-height: 900px; display: flex; flex-wrap: wrap; background: var(--bg)">
+<div style="flex: 1 0 248px; border-right: 1px solid var(--ln)">
+<dc-import name="Sidebar" active="agents" theme="{{theme}}" hint-size="248px,900px"></dc-import>
+</div>
+<main style="flex: 999 1 560px; min-width: 0; padding: 28px 40px 56px; display: flex; flex-direction: column; gap: 22px">
+<div style="display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap">
+<div style="display: flex; flex-direction: column; gap: 8px; min-width: 0">
+<a class="sm" href="Agent.dc.html" style="color: var(--mu); text-decoration: none">Agents / Pip / Work Map</a>
+<h1 class="t1">Code incoming supplier invoices</h1>
+<div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap">
+<span class="t3" style="font-weight: 500">7 steps · <span style="color: var(--am)">3 judgment calls</span> · 4 guardrails</span>
+<span class="bdg k-ok">Confirmed by Sabine · 2026-10-02</span>
+</div>
+</div>
+<div style="display: flex; gap: 8px; flex-wrap: wrap">
+<button class="btn bs" type="button"><svg class="ic" viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"></path></svg>Export guardrails</button>
+<a class="btn bp" href="Teach.dc.html"><svg class="ic" viewBox="0 0 24 24"><path d="M3 7.5 12 4l9 3.5-9 3.5z"></path><path d="M7 9.5V15c0 1.5 2.5 3 5 3s5-1.5 5-3V9.5"></path></svg>Open in Teach</a>
+</div>
+</div>
+
+<div class="card" style="padding: 20px 16px 8px; overflow-x: auto">
+<div style="position: relative; min-width: 760px">
+<div style="position: absolute; left: 7%; right: 7%; top: 26px; height: 2px; background: var(--ln2)"></div>
+<div style="display: flex; position: relative" role="tablist" aria-label="Steps">
+<sc-for list="{{ steps }}" as="s" hint-placeholder-count="7">
+<button class="dotb" type="button" role="tab" aria-selected="{{s.sel}}" onClick="{{s.pick}}" style="background: {{s.bgSel}}">
+<span style="height: 36px; display: flex; align-items: center; justify-content: center"><span style="width: {{s.d}}px; height: {{s.d}}px; border-radius: 50%; background: {{s.fill}}; box-shadow: {{s.ring}}"></span></span>
+<span class="mono xs" style="color: {{s.numC}}">{{s.n}} · {{s.t}}</span>
+<span class="sm" style="color: {{s.labC}}; font-weight: 500; line-height: 1.3">{{s.short}}</span>
+<span class="xs" style="color: {{s.gC}}">{{s.gLabel}}</span>
+</button>
+</sc-for>
+</div>
+</div>
+<div class="xs mu" style="display: flex; gap: 18px; flex-wrap: wrap; padding: 12px 8px 8px; border-top: 1px solid var(--ln); margin-top: 8px; min-width: 760px">
+<span style="display: inline-flex; align-items: center; gap: 6px"><span style="width: 12px; height: 12px; border-radius: 50%; background: var(--ac)"></span>Step</span>
+<span style="display: inline-flex; align-items: center; gap: 6px"><span style="width: 18px; height: 18px; border-radius: 50%; background: var(--am)"></span>Judgment call</span>
+<span style="display: inline-flex; align-items: center; gap: 6px"><span style="width: 12px; height: 12px; border-radius: 50%; background: var(--ac); box-shadow: 0 0 0 3px var(--s1), 0 0 0 5px var(--tx)"></span>Selected</span>
+<span>Click a step to see the screen moment and the reason</span>
+</div>
+</div>
+
+<div class="card" style="padding: 0; display: flex; flex-wrap: wrap; overflow: hidden">
+<div style="flex: 1 1 420px; min-width: 0; padding: 28px; display: flex; flex-direction: column; gap: 18px; border-right: 1px solid var(--ln)">
+<div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap">
+<span class="eb">Step {{cur.n}} of 7</span>
+<span style="display: flex; gap: 6px"><span class="{{cur.kindCls}}">{{cur.kind}}</span><span class="bdg k-pend">{{cur.app}}</span></span>
+</div>
+<h2 class="t2">{{cur.title}}</h2>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="aspect-ratio: 16 / 10; max-width: 100%; border-radius: 12px; border: 1px solid var(--ln2); background: #EEF0F4; position: relative; overflow: hidden">
+<div style="position: absolute; left: 0; right: 0; top: 0; height: 9%; background: #E2E5EA; border-bottom: 1px solid #D3D7DE"></div>
+<div style="position: absolute; left: 4%; top: 15%; right: 4%; height: 7%; background: #FFFFFF; border: 1px solid #D3D7DE"></div>
+<div style="position: absolute; left: 4%; top: 25%; right: 4%; bottom: 8%; background: #FFFFFF; border: 1px solid #D3D7DE; display: grid; grid-template-rows: repeat(6, 1fr)">
+<div style="border-bottom: 1px solid #E5E8ED; background: #F4F5F7"></div>
+<div style="border-bottom: 1px solid #E5E8ED"></div>
+<div style="border-bottom: 1px solid #E5E8ED"></div>
+<div style="border-bottom: 1px solid #E5E8ED; background: #EAF0FF"></div>
+<div style="border-bottom: 1px solid #E5E8ED"></div>
+<div></div>
+</div>
+<div style="position: absolute; left: 8%; top: 52%; width: 22%; height: 3%; background: #C9CED6; border-radius: 2px"></div>
+<div style="position: absolute; left: 36%; top: 52%; width: 14%; height: 3%; background: #C9CED6; border-radius: 2px"></div>
+<div class="mono" style="position: absolute; left: 55%; top: 48.5%; width: 15%; height: 10%; border: 2px solid #1F5EFF; background: #FFFFFF; color: #0E1117; font-size: 12px; display: flex; align-items: center; padding-left: 6px">{{cur.cell}}</div>
+<svg width="16" height="22" viewBox="0 0 16 22" style="position: absolute; left: 66%; top: 56%" aria-hidden="true"><path d="M1 1v17l4.5-4 3 6.5 3-1.4-3-6.4H14z" fill="#0E1117" stroke="#FFFFFF" stroke-width="1.2"></path></svg>
+<span class="mono" style="position: absolute; left: 10px; bottom: 10px; padding: 3px 8px; border-radius: 6px; background: rgba(10,11,14,.82); color: #FFFFFF; font-size: 12px">{{cur.t}}</span>
+<span style="position: absolute; right: 10px; bottom: 10px; padding: 3px 8px; border-radius: 6px; background: rgba(10,11,14,.82); color: #FFFFFF; font-size: 12px">Names redacted</span>
+</div>
+<div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap">
+<button class="btn bs bsm" type="button"><svg class="ic" viewBox="0 0 24 24" style="width: 14px; height: 14px"><path d="M8 5v14l11-7z"></path></svg>Replay screen moment <span class="mono">{{cur.t}}</span></button>
+<span class="xs fa">8 s clip around the moment</span>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding-top: 6px; border-top: 1px solid var(--ln)">
+<span class="eb">Decision</span>
+<p style="font-size: 15px">{{cur.decision}}</p>
+</div>
+</div>
+
+<div style="flex: 1 1 420px; min-width: 0; padding: 28px; display: flex; flex-direction: column; gap: 24px">
+<div style="display: flex; flex-direction: column; gap: 10px">
+<span class="eb">Reason, in Sabine's words</span>
+<p class="quote">"{{cur.reason}}"</p>
+<span class="sm mu">Sabine · {{cur.src}}</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<span class="eb">Guardrails</span>
+<sc-if value="{{ cur.hasG }}" hint-placeholder-val="{{ true }}">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<sc-for list="{{ cur.g }}" as="g" hint-placeholder-count="2">
+<div style="display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: 12px; background: var(--s2)"><span class="{{g.cls}}" style="flex: none">{{g.kind}}</span><span class="sm">{{g.text}}</span></div>
+</sc-for>
+</div>
+</sc-if>
+<sc-if value="{{ cur.noG }}" hint-placeholder-val="{{ false }}">
+<span class="sm fa">No guardrail on this step.</span>
+</sc-if>
+</div>
+<div style="display: flex; flex-direction: column; gap: 14px">
+<span class="eb">Understanding</span>
+<div style="display: flex; flex-direction: column; gap: 7px"><div class="sm" style="display: flex; justify-content: space-between"><span>Knows why</span><span class="mono">{{cur.s1}}%</span></div><div class="bar"><i class="{{cur.c1}}" style="width: {{cur.s1}}%"></i><b></b></div></div>
+<div style="display: flex; flex-direction: column; gap: 7px"><div class="sm" style="display: flex; justify-content: space-between"><span>Knows when to stop</span><span class="mono">{{cur.s2}}%</span></div><div class="bar"><i class="{{cur.c2}}" style="width: {{cur.s2}}%"></i><b></b></div></div>
+<span class="xs fa">Line marks 75%</span>
+</div>
+<div style="display: flex; justify-content: space-between; gap: 8px; margin-top: auto; flex-wrap: wrap">
+<button class="btn bg bsm" type="button" onClick="{{prev}}"><svg class="ic" viewBox="0 0 24 24" style="width: 14px; height: 14px"><path d="M15 6l-6 6 6 6"></path></svg>Previous step</button>
+<button class="btn bs bsm" type="button" onClick="{{next}}">Next step<svg class="ic" viewBox="0 0 24 24" style="width: 14px; height: 14px"><path d="m9 6 6 6-6 6"></path></svg></button>
+</div>
+</div>
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"$preview":{"width":1440,"height":1160}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const light = this.props.theme === 'light';
+    const st = this.state || {};
+    const idx = st.i === undefined ? 3 : st.i;
+    const G = {
+      lim: ['Limit', 'bdg k-lim'], exc: ['Exception', 'bdg k-exc'], stop: ['Stop and ask', 'bdg k-stop']
+    };
+    const gr = (k, text) => ({ kind: G[k][0], cls: G[k][1], text });
+    const data = [
+      { short: 'Open the invoice mail', title: 'Open the invoice mail and the PDF', app: 'Outlook', t: '00:00', jc: false, cell: 'INV-4517.pdf',
+        decision: 'Opened the supplier mail and the attached PDF side by side before touching the spreadsheet.',
+        reason: 'I never code from the mail text. The PDF is the invoice.', src: 'debrief', g: [], s1: 95, s2: 90 },
+      { short: 'Check for a duplicate', title: 'Check for a duplicate', app: 'Outlook', t: '01:48', jc: true, cell: '4517',
+        decision: 'Searched the invoice number, then the supplier name over the last 60 days.',
+        reason: 'Alpen billed us for December twice last year. If it looks familiar, I stop.', src: 'live question at 01:52',
+        g: [gr('stop', 'Same supplier, similar amount, within 30 days: stop and ask the controller.')], s1: 84, s2: 76 },
+      { short: 'Read the line items', title: 'Read the line items', app: 'PDF', t: '02:20', jc: false, cell: 'SD-40',
+        decision: 'Checked quantity, unit price and the delivery note number on the PDF.',
+        reason: "If the delivery note is missing, the warehouse hasn't confirmed it yet.", src: 'debrief', g: [], s1: 90, s2: 88 },
+      { short: 'Code to a cost center', title: 'Code the invoice to a cost center', app: 'Excel', t: '03:12', jc: true, cell: '0400',
+        decision: 'Changed the cost center for the €7,200 servo drive unit from 4711 opex to 0400 capex.',
+        reason: 'Equipment over €5,000 is always capex.', src: 'live question at 03:15',
+        g: [gr('lim', 'Equipment over €5,000 goes to capex 0400, never to opex 4711.'), gr('stop', "Machine or spare part unclear: ask Urs in controlling, don't guess.")], s1: 92, s2: 78 },
+      { short: 'Forward to the controller', title: 'Forward to the controller', app: 'Outlook', t: '04:40', jc: false, cell: '7,200.00',
+        decision: 'Forwarded invoice 4517 to the controller before posting it.',
+        reason: "Over five thousand, the controller sees it before it's booked. Not after.", src: 'live question at 04:44', g: [], s1: 88, s2: 81 },
+      { short: 'Second approval, Czech subsidiary', title: 'Second approval for the Czech subsidiary', app: 'Excel', t: '05:40', jc: true, cell: 'P. Novák',
+        decision: 'Added Pavel as second approver on invoice 4502 from Novak Logistika, Brno.',
+        reason: "Brno always gets Pavel's second signature. Even for a 50 euro invoice.", src: 'debrief, follow-up 2',
+        g: [gr('exc', 'Czech subsidiary: second approval at any amount.')], s1: 81, s2: 72 },
+      { short: 'Post and file', title: 'Post in the ERP and file the PDF', app: 'Browser', t: '06:55', jc: false, cell: '20418',
+        decision: 'Posted the invoice in the ERP and filed the PDF under the supplier number.',
+        reason: "If it's not filed under the supplier number, nobody finds it in the audit.", src: 'debrief', g: [], s1: 94, s2: 90 }
+    ];
+    const steps = data.map((s, i) => {
+      const sel = i === idx;
+      return {
+        n: i + 1, t: s.t, short: s.short, sel: sel ? 'true' : 'false',
+        d: s.jc ? 24 : 14,
+        fill: s.jc ? 'var(--am)' : 'var(--ac)',
+        ring: sel ? '0 0 0 4px var(--s1), 0 0 0 6px var(--tx)' : '0 0 0 4px var(--s1)',
+        bgSel: sel ? 'var(--s2)' : 'transparent',
+        numC: sel ? 'var(--tx)' : 'var(--fa)', labC: sel ? 'var(--tx)' : 'var(--mu)',
+        gLabel: s.g.length ? s.g.length + (s.g.length > 1 ? ' guardrails' : ' guardrail') : (s.jc ? 'Judgment call' : ' '),
+        gC: s.g.length ? 'var(--co)' : 'var(--fa)',
+        pick: () => this.setState({ i })
+      };
+    });
+    const c = data[idx];
+    const cur = Object.assign({}, c, {
+      n: idx + 1, hasG: c.g.length > 0, noG: c.g.length === 0,
+      kind: c.jc ? 'Judgment call' : 'Step', kindCls: c.jc ? 'bdg k-jc' : 'bdg k-ac',
+      c1: c.s1 < 75 ? 'lo' : '', c2: c.s2 < 75 ? 'lo' : ''
+    });
+    return {
+      lt: light ? 'lt' : '', theme: light ? 'light' : 'dark', steps, cur,
+      prev: () => this.setState({ i: Math.max(0, idx - 1) }),
+      next: () => this.setState({ i: Math.min(6, idx + 1) })
+    };
+  }
+}
+</script>
+</body>
+</html>

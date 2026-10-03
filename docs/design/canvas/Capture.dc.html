@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Capture console</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;family=Instrument+Serif:ital@0;1&amp;display=swap">
+<style>
+body{margin:0}
+.aa{--bg:#050505;--s1:#121212;--s2:#1C1C1C;--s3:#2A2A2A;--ln:rgba(255,255,255,.08);--ln2:rgba(255,255,255,.14);--tx:#FFFFFF;--mu:#9E9E9E;--fa:#858585;--ac:#4280FF;--ac2:#7AA6FF;--acs:rgba(66,128,255,.12);--pb:#FFFFFF;--pf:#0A0A0A;--cmp:#1F1F21;--am:#F5A524;--ams:rgba(245,165,36,.15);--gr:#3FCF8E;--grs:rgba(63,207,142,.14);--rd:#FF6B6B;--rds:rgba(255,107,107,.14);--vi:#B39DFF;--vis:rgba(179,157,255,.15);--te:#3DD6C2;--tes:rgba(61,214,194,.14);--co:#FF8A65;--cos:rgba(255,138,101,.16);--stage:linear-gradient(180deg, #232327 0%, #0A0A0C 100%);--sh:0 24px 64px rgba(0,0,0,.55);background:var(--bg);color:var(--tx);font-family:Geist,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;color-scheme:dark}
+.aa *,.aa *::before,.aa *::after{box-sizing:border-box}
+.aa h1,.aa h2,.aa h3,.aa p{margin:0}
+.aa a{color:var(--ac2)}
+.t1{font-size:32px;line-height:1.1;letter-spacing:-.025em;font-weight:600}
+.t2{font-size:22px;line-height:1.25;letter-spacing:-.02em;font-weight:600}
+.t3{font-size:16px;line-height:1.35;letter-spacing:-.01em;font-weight:600}
+.sm{font-size:13px}.xs{font-size:12px}.mu{color:var(--mu)}.fa{color:var(--fa)}
+.eb{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--mu);font-weight:500}
+.mono{font-family:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace;font-variant-numeric:tabular-nums}
+.card{background:var(--s1);border:1px solid var(--ln);border-radius:16px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:40px;padding:0 18px;border-radius:999px;font-family:inherit;font-size:14px;font-weight:500;border:1px solid transparent;cursor:pointer;text-decoration:none;white-space:nowrap;line-height:1}
+.bp{background:var(--pb);color:var(--pf)}.bs{background:var(--s2);border-color:var(--ln2);color:var(--tx)}.bg{background:transparent;color:var(--mu)}.bd{background:var(--rds);color:var(--rd)}
+.aa a.btn.bp{color:var(--pf)}.aa a.btn.bs{color:var(--tx)}.aa a.btn.bd{color:var(--rd)}
+.bsm{height:32px;padding:0 12px;font-size:13px}
+.btn:focus-visible,.code:focus-visible{outline:2px solid var(--ac2);outline-offset:2px}
+.bdg{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 9px;border-radius:999px;font-size:12px;font-weight:500;white-space:nowrap;line-height:1}
+.bdg::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.bdg.nd::before{display:none}
+.k-lim{background:var(--tes);color:var(--te)}.k-exc{background:var(--vis);color:var(--vi)}.k-stop{background:var(--cos);color:var(--co)}.k-jc{background:var(--ams);color:var(--am)}.k-ok{background:var(--grs);color:var(--gr)}.k-pend{background:var(--s3);color:var(--mu)}.k-ac{background:var(--acs);color:var(--ac2)}.k-rd{background:var(--rds);color:var(--rd)}
+.kc{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:6px;background:var(--s3);border:1px solid var(--ln2);border-bottom-width:2px;font-family:"Geist Mono",ui-monospace,Menlo,monospace;font-size:12px;font-weight:500;color:var(--tx);line-height:1}
+.ic{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.bub{background:var(--s2);border:1px solid var(--ln2);border-radius:18px 18px 18px 6px;padding:12px 16px}
+.rec{width:8px;height:8px;border-radius:50%;background:var(--rd);display:inline-block;flex:none;animation:aa-pulse 1.4s ease-in-out infinite}
+@keyframes aa-pulse{50%{opacity:.3}}
+.code{width:40px;height:48px;border-radius:10px;background:var(--s2);border:1px solid var(--ln2);color:var(--tx);font-family:"Geist Mono",ui-monospace,monospace;font-size:20px;text-align:center}
+.ev{display:grid;grid-template-columns:64px 92px minmax(0,1fr) auto;gap:14px;align-items:center;padding:12px 20px;border-top:1px solid var(--ln)}
+.app{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--mu)}
+.app i{width:8px;height:8px;border-radius:2px;display:inline-block}
+.red{display:inline-flex;align-items:center;height:20px;padding:0 6px;border-radius:5px;background:repeating-linear-gradient(135deg,var(--s3) 0 4px,var(--s2) 4px 8px);color:var(--mu);font-size:11px;font-family:"Geist Mono",ui-monospace,monospace}
+@media (prefers-reduced-motion:reduce){.aa *{animation:none!important}}
+</style>
+</helmet>
+<div class="aa" style="min-height: 900px; display: flex; flex-wrap: wrap; background: var(--bg)">
+<div style="flex: 1 0 248px; border-right: 1px solid var(--ln)">
+<dc-import name="Sidebar" active="agents" hint-size="248px,900px"></dc-import>
+</div>
+<main style="flex: 999 1 560px; min-width: 0; padding: 28px 40px 56px; display: flex; flex-direction: column; gap: 22px">
+<div style="display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<a class="sm" href="Agent.dc.html" style="color: var(--mu); text-decoration: none">Agents / Pip / Train</a>
+<div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap"><h1 class="t1">Training Pip</h1><span class="bdg nd k-rd" style="gap: 8px"><span class="rec"></span>Capturing · <span class="mono">12:48</span></span></div>
+<span class="mu">Task: Code incoming supplier invoices · Sabine Keller</span>
+</div>
+<div style="display: flex; gap: 8px; flex-wrap: wrap" role="group" aria-label="Capture controls">
+<button class="btn bs" type="button" disabled="{{ true }}" style="opacity: .5; cursor: default"><svg class="ic" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"></path></svg>Start</button>
+<button class="btn bs" type="button"><svg class="ic" viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"></path></svg>Pause</button>
+<button class="btn bs" type="button"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3l18 18"></path><path d="M10.6 6.1A10 10 0 0 1 12 6c5 0 9 6 9 6a17 17 0 0 1-3 3.5M6.6 6.6C4.2 8.2 3 12 3 12s4 6 9 6c1.6 0 3-.4 4.3-1"></path></svg>Off the record</button>
+<a class="btn bp" href="Debrief.dc.html"><svg class="ic" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg>End task</a>
+</div>
+</div>
+
+<div style="display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start">
+<div style="flex: 3 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 20px">
+
+<div class="card" style="padding: 24px; display: flex; gap: 22px; align-items: flex-start; flex-wrap: wrap; background: var(--stage)">
+<dc-import name="Avatar" shape="blob" face="smile" tone="#ECEAE5" accent="#3A4EFD" mood="listening" size="96" hint-size="96px,96px"></dc-import>
+<div style="flex: 1; min-width: 280px; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap"><span class="eb">Last question</span><span class="xs fa">Asked at a pause, after Enter in Excel · 14:05:14</span></div>
+<p class="t2">You moved that one to capex. What made you do that?</p>
+<div class="bub" style="border-radius: 18px 18px 6px 18px; align-self: flex-start; background: var(--s1)"><span class="xs mu" style="display: block; margin-bottom: 2px">Sabine · 6 s</span><span style="font-family: 'Instrument Serif', Georgia, serif; font-style: italic; font-size: 19px; line-height: 1.25">Equipment over €5,000 is always capex. The servo drive is a machine part we keep for years.</span></div>
+<div style="display: flex; gap: 8px; flex-wrap: wrap"><span class="bdg k-lim">Saved as guardrail · Limit</span><span class="bdg k-jc">Judgment call · step 4</span></div>
+</div>
+</div>
+
+<div class="card" style="padding: 0; overflow: hidden">
+<div style="display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; gap: 12px; flex-wrap: wrap">
+<h2 class="t3">Live events</h2>
+<span class="xs fa">Newest first · personal data is redacted before it is stored</span>
+</div>
+<div class="ev" style="background: var(--s2)"><span class="mono xs fa">14:07:40</span><span class="app"><i style="background: var(--fa)"></i>Companion</span><span class="mu">Off the record for 2 min 10 s · nothing captured</span><span class="bdg k-pend">Off the record</span></div>
+<div class="ev"><span class="mono xs fa">14:07:02</span><span class="app"><i style="background: #9D8CFF"></i>Browser</span><span>Opened ERP tab · supplier 20418</span><span></span></div>
+<div class="ev"><span class="mono xs fa">14:06:30</span><span class="app"><i style="background: #5CC8FF"></i>Outlook</span><span style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap">Forwarded mail to controller <span class="red">name redacted</span></span><span style="display: inline-flex; gap: 3px"><span class="kc">⌘</span><span class="kc">J</span></span></div>
+<div class="ev"><span class="mono xs fa">14:05:22</span><span class="app"><i style="background: var(--ac)"></i>Sabine</span><span>"Equipment over €5,000 is always capex."</span><span class="bdg k-lim">Limit</span></div>
+<div class="ev"><span class="mono xs fa">14:05:14</span><span class="app"><i style="background: #ECEAE5"></i>Pip asked</span><span>"You moved that one to capex. What made you do that?"</span><span class="bdg k-ac">Question 3</span></div>
+<div class="ev"><span class="mono xs fa">14:05:12</span><span class="app"><i style="background: #3FCF8E"></i>Excel</span><span>Changed cost center for invoice 4517: <span class="mono">4711</span> → <span class="mono">0400</span></span><span class="bdg k-jc">Judgment call</span></div>
+<div class="ev"><span class="mono xs fa">14:04:58</span><span class="app"><i style="background: #3FCF8E"></i>Excel</span><span>Filled down cost center for invoices 4471 to 4517</span><span style="display: inline-flex; gap: 3px"><span class="kc">⌘</span><span class="kc">D</span></span></div>
+<div class="ev"><span class="mono xs fa">14:03:05</span><span class="app"><i style="background: #3FCF8E"></i>Excel</span><span>Filtered export by supplier</span><span style="display: inline-flex; gap: 3px"><span class="kc">⌘</span><span class="kc">⇧</span><span class="kc">L</span></span></div>
+<div class="ev"><span class="mono xs fa">14:02:41</span><span class="app"><i style="background: #5CC8FF"></i>Outlook</span><span>Opened attachment INV-4517.pdf</span><span></span></div>
+</div>
+</div>
+
+<div style="flex: 2 1 340px; min-width: 0; display: flex; flex-direction: column; gap: 20px">
+
+<div class="card" style="padding: 22px; display: flex; flex-direction: column; gap: 16px">
+<span class="eb">Questions so far</span>
+<div style="display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap"><span class="mono" style="font-size: 40px; font-weight: 600; letter-spacing: -0.03em; line-height: 1">3</span><span class="t3" style="font-weight: 500">asked · <span style="color: var(--co)">1 about guardrails</span></span></div>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px">
+<div style="padding: 12px; border-radius: 12px; background: var(--s2)"><div class="mono t3">5</div><div class="xs fa">Steps seen</div></div>
+<div style="padding: 12px; border-radius: 12px; background: var(--s2)"><div class="mono t3">4</div><div class="xs fa">Shortcuts</div></div>
+<div style="padding: 12px; border-radius: 12px; background: var(--s2)"><div class="mono t3">2</div><div class="xs fa">Guardrails</div></div>
+</div>
+<div class="sm mu" style="display: flex; align-items: center; gap: 8px"><svg class="ic" viewBox="0 0 24 24" style="width: 16px; height: 16px"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>Next question allowed in <span class="mono" style="color: var(--tx)">1:20</span>, at the next pause</div>
+</div>
+
+<div class="card" style="padding: 22px; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; justify-content: space-between; align-items: center; gap: 10px"><h2 class="t3">Companion</h2><span class="bdg k-ok">Paired</span></div>
+<span class="sm mu">Sabine's MacBook Pro · macOS 15.6 · v0.9.2</span>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<span class="xs fa">Pair another device</span>
+<div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap">
+<input class="code" aria-label="Pairing digit 1"><input class="code" aria-label="Pairing digit 2"><input class="code" aria-label="Pairing digit 3"><span class="fa">·</span><input class="code" aria-label="Pairing digit 4"><input class="code" aria-label="Pairing digit 5"><input class="code" aria-label="Pairing digit 6">
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 0; border-top: 1px solid var(--ln)">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0"><span class="sm">Screen Recording</span><span class="bdg k-ok">Allowed</span></div>
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0; border-top: 1px solid var(--ln)"><span class="sm">Microphone</span><span class="bdg k-ok">Allowed</span></div>
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0; border-top: 1px solid var(--ln); flex-wrap: wrap"><span class="sm">Accessibility<span class="xs fa" style="display: block">Without it Pip cannot tell which field you typed in</span></span><span style="display: flex; gap: 8px; align-items: center"><span class="bdg k-rd">Missing</span><button class="btn bs bsm" type="button">Fix</button></span></div>
+</div>
+</div>
+
+<div class="card" style="padding: 22px; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; justify-content: space-between; align-items: center; gap: 10px"><h2 class="t3">Share entire screen</h2><span class="bdg k-ac">Sharing</span></div>
+<div style="aspect-ratio: 16 / 10; max-width: 100%; border-radius: 10px; border: 1px solid var(--ln2); background: #E9ECF1; position: relative; overflow: hidden">
+<div style="position: absolute; left: 0; right: 0; top: 0; height: 7%; background: #2A2E37"></div>
+<div style="position: absolute; left: 4%; top: 12%; width: 18%; bottom: 6%; background: #F6F7F9; border-radius: 3px"></div>
+<div style="position: absolute; left: 24%; top: 12%; width: 30%; bottom: 6%; background: #FFFFFF; border-radius: 3px"></div>
+<div style="position: absolute; left: 26%; top: 18%; width: 26%; height: 8%; background: #DCE6FF; border-radius: 2px"></div>
+<div style="position: absolute; left: 56%; top: 12%; right: 4%; bottom: 6%; background: #FFFFFF; border-radius: 3px"></div>
+<div style="position: absolute; right: 2%; top: 10%; width: 20%; bottom: 4%; background: #111318; border-radius: 4px"></div>
+</div>
+<span class="sm mu">Display 1 · 2560 × 1600 · windows from all apps</span>
+<div style="display: flex; gap: 8px; flex-wrap: wrap"><button class="btn bs bsm" type="button">Change screen</button><button class="btn bg bsm" type="button">Stop sharing</button></div>
+</div>
+
+</div>
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1160}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

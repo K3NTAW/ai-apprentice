@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mock desktop</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;family=Instrument+Serif:ital@0;1&amp;display=swap">
+<style>body{margin:0}.dk,.dk *{box-sizing:border-box}</style>
+</helmet>
+<div class="dk" style="position: relative; width: 1440px; height: 900px; overflow: hidden; font-family: Geist, ui-sans-serif, system-ui, -apple-system, sans-serif; font-size: 13px; line-height: 1.4; color: #1B1E24; background: radial-gradient(120% 90% at 20% 0%, #2A3550 0%, #161B27 55%, #0D1017 100%)">
+
+<div style="position: absolute; left: 0; top: 0; right: 0; height: 28px; background: rgba(18,20,26,.78); color: #E8EAEF; display: flex; align-items: center; gap: 18px; padding: 0 16px; font-size: 13px">
+<span style="width: 12px; height: 12px; border-radius: 4px; background: #E8EAEF; opacity: .85"></span>
+<span style="font-weight: 600">{{appName}}</span>
+<sc-for list="{{ menus }}" as="mi" hint-placeholder-count="6"><span style="opacity: .85">{{mi}}</span></sc-for>
+<span style="flex: 1"></span>
+<span title="AI Apprentice companion" style="display: inline-flex; align-items: center; gap: 6px"><span style="width: 14px; height: 14px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #FFFFFF, #ECEAE5 55%, #C2C0BB)"></span><span style="width: 6px; height: 6px; border-radius: 50%; background: {{recDot}}"></span></span>
+<span style="opacity: .85">Sat 4 Oct  14:05</span>
+</div>
+
+<div style="position: absolute; left: 40px; top: 52px; width: 1360px; height: 808px; border-radius: 12px; background: #FFFFFF; box-shadow: 0 30px 80px rgba(0,0,0,.45), 0 0 0 1px rgba(0,0,0,.2); overflow: hidden">
+
+<sc-if value="{{ isMail }}" hint-placeholder-val="{{ true }}">
+<div style="position: absolute; left: 0; top: 0; right: 0; height: 44px; background: #F3F4F6; border-bottom: 1px solid #E1E4E9; display: flex; align-items: center; gap: 8px; padding: 0 14px">
+<span style="width: 12px; height: 12px; border-radius: 50%; background: #FF5F57"></span><span style="width: 12px; height: 12px; border-radius: 50%; background: #FEBC2E"></span><span style="width: 12px; height: 12px; border-radius: 50%; background: #28C840"></span>
+<span style="margin-left: 200px; font-weight: 600; color: #3A3F48">Inbox · Accounts Payable</span>
+<span style="margin-left: auto; width: 260px; height: 28px; border-radius: 8px; background: #FFFFFF; border: 1px solid #DADDE3; color: #8A909C; display: flex; align-items: center; padding: 0 10px">Search</span>
+</div>
+<div style="position: absolute; left: 0; top: 44px; width: 200px; bottom: 0; background: #F6F7F9; border-right: 1px solid #E5E8ED; padding: 14px 10px; display: flex; flex-direction: column; gap: 2px">
+<span style="font-size: 11px; color: #8A909C; padding: 4px 10px">Mailboxes</span>
+<span style="padding: 6px 10px; border-radius: 6px; background: #E3E8F2; font-weight: 600; display: flex; justify-content: space-between">Inbox<span style="color: #5A6170">12</span></span>
+<span style="padding: 6px 10px; display: flex; justify-content: space-between">Invoices<span style="color: #8A909C">4</span></span>
+<span style="padding: 6px 10px">Controlling</span>
+<span style="padding: 6px 10px">Sent</span>
+<span style="padding: 6px 10px">Drafts</span>
+<span style="padding: 6px 10px">Archive</span>
+</div>
+<div style="position: absolute; left: 200px; top: 44px; width: 380px; bottom: 0; border-right: 1px solid #E5E8ED; display: flex; flex-direction: column">
+<sc-for list="{{ mails }}" as="m" hint-placeholder-count="6">
+<div style="padding: 12px 16px; border-bottom: 1px solid #EEF0F3; background: {{m.bg}}; display: flex; flex-direction: column; gap: 2px">
+<span style="display: flex; justify-content: space-between; gap: 8px"><span style="font-weight: 600">{{m.from}}</span><span style="color: #8A909C; font-size: 12px">{{m.t}}</span></span>
+<span style="font-weight: 500; color: #2A2E36">{{m.sub}}</span>
+<span style="color: #7A808C; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{m.pre}}</span>
+</div>
+</sc-for>
+</div>
+<div style="position: absolute; left: 580px; top: 44px; right: 0; bottom: 0; padding: 28px 36px; display: flex; flex-direction: column; gap: 18px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<span style="font-size: 20px; font-weight: 600; color: #15171C">Invoice 4517 · Servo drive unit SD-40</span>
+<span style="color: #5A6170">Krämer Antriebstechnik GmbH · to Accounts Payable · Sat 4 Oct 13:58</span>
+</div>
+<span style="align-self: flex-start; display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 8px; border: 1px solid #DADDE3; background: #F8F9FB"><span style="width: 22px; height: 26px; border-radius: 3px; background: #E5484D"></span><span style="display: flex; flex-direction: column"><span style="font-weight: 600">INV-4517.pdf</span><span style="color: #8A909C; font-size: 11px">182 KB</span></span></span>
+<div style="color: #2A2E36; font-size: 14px; line-height: 1.6; max-width: 560px; display: flex; flex-direction: column; gap: 12px">
+<p style="margin: 0">Guten Tag,</p>
+<p style="margin: 0">please find attached our invoice 4517 for one servo drive unit SD-40, delivery note LS-88213.</p>
+<p style="margin: 0">Amount due: EUR 7,200.00, payable within 30 days.</p>
+<p style="margin: 0">Kind regards<br>Accounts Receivable<br>Krämer Antriebstechnik GmbH</p>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isSheet }}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; left: 0; top: 0; right: 0; height: 44px; background: #F3F4F6; border-bottom: 1px solid #E1E4E9; display: flex; align-items: center; gap: 8px; padding: 0 14px">
+<span style="width: 12px; height: 12px; border-radius: 50%; background: #FF5F57"></span><span style="width: 12px; height: 12px; border-radius: 50%; background: #FEBC2E"></span><span style="width: 12px; height: 12px; border-radius: 50%; background: #28C840"></span>
+<span style="margin-left: 16px; font-weight: 600; color: #3A3F48">Invoice coding · October</span>
+<span style="color: #8A909C">Practice copy</span>
+</div>
+<div style="position: absolute; left: 0; top: 44px; right: 0; height: 44px; background: #FAFAFB; border-bottom: 1px solid #E5E8ED; display: flex; align-items: center; gap: 18px; padding: 0 16px; color: #4A505B">
+<span style="font-weight: 600">Home</span><span>Insert</span><span>Data</span><span>View</span>
+<span style="width: 1px; height: 20px; background: #DADDE3"></span>
+<span style="padding: 3px 8px; border: 1px solid #DADDE3; border-radius: 5px; background: #FFFFFF">Calibri 11</span>
+<span style="font-weight: 700">B</span><span style="font-style: italic">I</span><span style="text-decoration: underline">U</span>
+<span style="padding: 3px 8px; border: 1px solid #DADDE3; border-radius: 5px; background: #FFFFFF">Filter</span>
+</div>
+<div style="position: absolute; left: 0; top: 88px; right: 0; height: 36px; background: #FFFFFF; border-bottom: 1px solid #E5E8ED; display: flex; align-items: center; gap: 10px; padding: 0 12px">
+<span style="width: 56px; height: 24px; border: 1px solid #DADDE3; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px">{{ref}}</span>
+<span style="color: #8A909C; font-style: italic">fx</span>
+<span style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px">{{formula}}</span>
+</div>
+<div style="position: absolute; left: 0; top: 124px; right: 0; height: 28px; background: #F3F4F6; border-bottom: 1px solid #DADDE3; display: flex; font-size: 12px; color: #6A707C">
+<span style="width: 44px; border-right: 1px solid #DADDE3"></span>
+<span style="width: 100px; border-right: 1px solid #DADDE3; display: flex; align-items: center; justify-content: center">A</span>
+<span style="width: 240px; border-right: 1px solid #DADDE3; display: flex; align-items: center; justify-content: center">B</span>
+<span style="width: 240px; border-right: 1px solid #DADDE3; display: flex; align-items: center; justify-content: center">C</span>
+<span style="width: 130px; border-right: 1px solid #DADDE3; display: flex; align-items: center; justify-content: center">D</span>
+<span style="width: 130px; border-right: 1px solid #DADDE3; display: flex; align-items: center; justify-content: center; background: {{colE}}">E</span>
+<span style="width: 170px; border-right: 1px solid #DADDE3; display: flex; align-items: center; justify-content: center">F</span>
+<span style="width: 150px; border-right: 1px solid #DADDE3; display: flex; align-items: center; justify-content: center">G</span>
+<span style="flex: 1; display: flex; align-items: center; justify-content: center">H</span>
+</div>
+<div style="position: absolute; left: 0; top: 152px; right: 0; bottom: 0; display: flex; flex-direction: column">
+<sc-for list="{{ rows }}" as="r" hint-placeholder-count="18">
+<div style="height: 36px; flex: none; display: flex; border-bottom: 1px solid #ECEEF1; font-weight: {{r.w}}; background: {{r.bg}}">
+<span style="width: 44px; flex: none; background: #F3F4F6; border-right: 1px solid #DADDE3; color: #6A707C; font-size: 12px; display: flex; align-items: center; justify-content: center; font-weight: 400">{{r.i}}</span>
+<span style="width: 100px; flex: none; border-right: 1px solid #ECEEF1; padding: 0 10px; display: flex; align-items: center; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px">{{r.a}}</span>
+<span style="width: 240px; flex: none; border-right: 1px solid #ECEEF1; padding: 0 10px; display: flex; align-items: center">{{r.b}}</span>
+<span style="width: 240px; flex: none; border-right: 1px solid #ECEEF1; padding: 0 10px; display: flex; align-items: center">{{r.c}}</span>
+<span style="width: 130px; flex: none; border-right: 1px solid #ECEEF1; padding: 0 10px; display: flex; align-items: center; justify-content: flex-end; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px">{{r.d}}</span>
+<span style="width: 130px; flex: none; border-right: 1px solid #ECEEF1; padding: 0 10px; display: flex; align-items: center; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px">{{r.e}}</span>
+<span style="width: 170px; flex: none; border-right: 1px solid #ECEEF1; padding: 0 10px; display: flex; align-items: center">{{r.f}}</span>
+<span style="width: 150px; flex: none; border-right: 1px solid #ECEEF1; padding: 0 10px; display: flex; align-items: center; color: {{r.gc}}">{{r.g}}</span>
+<span style="flex: 1; padding: 0 10px; display: flex; align-items: center; color: #8A909C">{{r.h}}</span>
+</div>
+</sc-for>
+</div>
+<div style="position: absolute; left: 754px; top: 260px; width: 130px; height: 36px; border: 2px solid #2563EB; box-sizing: border-box; display: {{selShow}}"></div>
+</sc-if>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"app":{"editor":"enum","options":["mail","sheet"],"default":"mail"},"e4":{"editor":"text","default":""},"recording":{"editor":"boolean","default":true},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const app = this.props.app || 'mail';
+    const e4 = this.props.e4 || '';
+    const rec = !(this.props.recording === false || this.props.recording === 'false');
+    const isMail = app === 'mail';
+    const mails = [
+      { from: 'Krämer Antriebstechnik', t: '13:58', sub: 'Invoice 4517 · Servo drive unit SD-40', pre: 'Please find attached our invoice 4517 for one servo drive…', bg: '#E8EEFC' },
+      { from: 'Novak Logistika s.r.o.', t: '12:40', sub: 'Invoice 4502 · Freight Brno to Zug', pre: 'Faktura 4502, transport 28 Sep, payable in 30 days…', bg: '#FFFFFF' },
+      { from: 'Alpen Clean Services', t: '11:15', sub: 'Invoice 4523 · Facility cleaning December', pre: 'Monthly cleaning, December, as agreed. Please pay to…', bg: '#FFFFFF' },
+      { from: 'Bürohaus Meier AG', t: 'Fri', sub: 'Invoice 4471 · Office supplies Q4', pre: 'Thank you for your order. Attached the invoice for…', bg: '#FFFFFF' },
+      { from: 'Controlling', t: 'Fri', sub: 'Month-end cutoff is Wednesday 8 Oct', pre: 'All invoices received by Tuesday must be coded…', bg: '#FFFFFF' },
+      { from: 'Linea Telecom AG', t: 'Thu', sub: 'Invoice 4530 · Mobile plans October', pre: 'Your monthly invoice is ready. Total CHF 612.40…', bg: '#FFFFFF' }
+    ];
+    const empty = { a: '', b: '', c: '', d: '', e: '', f: '', g: '', h: '', gc: '#5A6170', w: 400, bg: '#FFFFFF' };
+    const data = [
+      { a: 'Invoice', b: 'Supplier', c: 'Description', d: 'Amount EUR', e: 'Cost center', f: 'Approver', g: 'Status', h: 'Note', w: 600, bg: '#F8F9FB' },
+      { a: '4471', b: 'Bürohaus Meier AG', c: 'Office supplies Q4', d: '1,284.50', e: '4711', f: 'L. Graf', g: 'Coded', gc: '#13784B' },
+      { a: '4502', b: 'Novak Logistika s.r.o.', c: 'Freight Brno to Zug', d: '3,960.00', e: '4711', f: 'L. Graf', g: 'Ready to post', gc: '#5A6170' },
+      { a: '4517', b: 'Krämer Antriebstechnik', c: 'Servo drive unit SD-40', d: '7,200.00', e: e4, f: '', g: 'Open', gc: '#A86400' },
+      { a: '4523', b: 'Alpen Clean Services', c: 'Facility cleaning Dec', d: '2,150.00', e: '', f: '', g: 'Open', gc: '#A86400' },
+      { a: '4530', b: 'Linea Telecom AG', c: 'Mobile plans Oct', d: '612.40', e: '', f: '', g: 'Open', gc: '#A86400' }
+    ];
+    const rows = [];
+    for (let i = 0; i < 18; i++) rows.push(Object.assign({}, empty, data[i] || {}, { i: i + 1 }));
+    return {
+      isMail, isSheet: !isMail, mails, rows,
+      appName: isMail ? 'Mail' : 'Sheets',
+      menus: isMail ? ['File', 'Edit', 'View', 'Mailbox', 'Message', 'Window', 'Help'] : ['File', 'Edit', 'View', 'Insert', 'Format', 'Data', 'Window', 'Help'],
+      ref: 'E4', formula: e4 || ' ',
+      colE: '#E3E8F2', selShow: e4 ? 'block' : 'none',
+      recDot: rec ? '#FF6B6B' : '#8A909C'
+    };
+  }
+}
+</script>
+</body>
+</html>

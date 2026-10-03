@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Landing, phone</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;family=Instrument+Serif:ital@0;1&amp;display=swap">
+<style>
+body{margin:0}
+.aa{--bg:#050505;--s1:#121212;--s2:#1C1C1C;--s3:#2A2A2A;--ln:rgba(255,255,255,.08);--ln2:rgba(255,255,255,.14);--tx:#FFFFFF;--mu:#9E9E9E;--fa:#858585;--ac:#4280FF;--ac2:#7AA6FF;--acs:rgba(66,128,255,.12);--pb:#FFFFFF;--pf:#0A0A0A;--cmp:#1F1F21;--am:#F5A524;--ams:rgba(245,165,36,.15);--gr:#3FCF8E;--grs:rgba(63,207,142,.14);--rd:#FF6B6B;--rds:rgba(255,107,107,.14);--vi:#B39DFF;--vis:rgba(179,157,255,.15);--te:#3DD6C2;--tes:rgba(61,214,194,.14);--co:#FF8A65;--cos:rgba(255,138,101,.16);--sh:0 24px 64px rgba(0,0,0,.55);background:var(--bg);color:var(--tx);font-family:Geist,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;color-scheme:dark}
+.aa *,.aa *::before,.aa *::after{box-sizing:border-box}
+.aa h1,.aa h2,.aa h3,.aa p{margin:0}
+.t1{font-size:28px;line-height:1.12;letter-spacing:-.025em;font-weight:600;text-wrap:balance}
+.t3{font-size:16px;line-height:1.35;letter-spacing:-.01em;font-weight:600}
+.sm{font-size:13px}.xs{font-size:12px}.mu{color:var(--mu)}.fa{color:var(--fa)}
+.eb{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--mu);font-weight:500}
+.mono{font-family:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace;font-variant-numeric:tabular-nums}
+.card{background:var(--s1);border:1px solid var(--ln);border-radius:16px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:48px;padding:0 20px;border-radius:999px;font-family:inherit;font-size:15px;font-weight:500;border:1px solid transparent;cursor:pointer;text-decoration:none;white-space:nowrap;line-height:1}
+.aa a.btn{color:var(--tx)}.aa a.bp{background:var(--pb);color:var(--pf)}.bs{background:var(--s2);border-color:var(--ln2)}
+.btn:focus-visible{outline:2px solid var(--ac2);outline-offset:2px}
+.bdg{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 9px;border-radius:999px;font-size:12px;font-weight:500;white-space:nowrap;line-height:1}
+.bdg::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.k-lim{background:var(--tes);color:var(--te)}.k-exc{background:var(--vis);color:var(--vi)}.k-stop{background:var(--cos);color:var(--co)}.k-jc{background:var(--ams);color:var(--am)}.k-ok{background:var(--grs);color:var(--gr)}.k-pend{background:var(--s3);color:var(--mu)}.k-ac{background:var(--acs);color:var(--ac2)}
+.bub{background:var(--s2);border:1px solid var(--ln2);border-radius:18px 18px 18px 6px;padding:10px 14px}
+.ic{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.q{display:flex;flex-direction:column;gap:6px;padding:18px 0;border-top:1px solid var(--ln)}
+</style>
+</helmet>
+<div class="aa" style="width: 390px; min-height: 2500px; background: var(--bg)">
+<header style="padding: 16px 20px; display: flex; align-items: center; justify-content: space-between">
+<span style="display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 16px"><svg width="26" height="26" viewBox="0 0 28 28" aria-hidden="true"><rect width="28" height="28" rx="9" fill="#3A4EFD"></rect><circle cx="11" cy="14" r="5" fill="#FFFFFF"></circle><circle cx="19.5" cy="17" r="3" fill="#FFFFFF" opacity=".7"></circle></svg>AI Apprentice</span>
+<button type="button" aria-label="Open menu" style="width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--ln2); background: var(--s2); color: var(--tx); display: inline-flex; align-items: center; justify-content: center"><svg class="ic" viewBox="0 0 24 24"><path d="M4 8h16M4 16h16"></path></svg></button>
+</header>
+
+<section style="padding: 28px 20px 40px; display: flex; flex-direction: column; gap: 20px">
+<span class="bdg k-ac" style="align-self: flex-start">For teams whose experts are about to retire</span>
+<h1 style="font-size: 42px; line-height: 1.04; letter-spacing: -0.035em; font-weight: 600; text-wrap: balance">Keep the judgment when the expert retires.</h1>
+<p class="mu" style="font-size: 16px; line-height: 1.55">Train an agent while you do your real work. It asks short spoken questions at natural pauses, then teaches the next person on their own screen.</p>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<a class="btn bp" href="Login.dc.html">Sign in</a>
+<a class="btn bs" href="#how-m">See how it works</a>
+</div>
+</section>
+
+<section style="padding: 0 20px 48px; display: flex; flex-direction: column; gap: 10px">
+<div class="card" style="padding: 14px; display: flex; flex-direction: column; gap: 10px">
+<div class="xs mono mu" style="display: flex; justify-content: space-between"><span>Invoice 4517 · Krämer</span><span>€7,200.00</span></div>
+<div style="display: flex; align-items: center; gap: 8px"><span class="xs fa">Cost center</span><span class="mono xs fa" style="text-decoration: line-through">4711</span><span class="mono xs" style="padding: 2px 7px; border-radius: 6px; border: 1px solid var(--ac); color: var(--ac2)">0400</span></div>
+</div>
+<div style="display: flex; align-items: flex-end; gap: 10px">
+<dc-import name="Avatar" shape="blob" face="curious" tone="#ECEAE5" accent="#3A4EFD" mood="asking" size="72" hint-size="72px,72px"></dc-import>
+<div class="bub" style="font-size: 14px">You moved that one to capex. What made you do that?</div>
+</div>
+<div class="bub" style="align-self: flex-end; border-radius: 18px 18px 6px 18px; background: var(--s3); border-color: transparent; color: var(--tx); font-size: 14px">Equipment over €5,000 is always capex.</div>
+</section>
+
+<section id="how-m" style="padding: 40px 20px; border-top: 1px solid var(--ln); display: flex; flex-direction: column; gap: 16px">
+<span class="eb">How it works</span>
+<h2 class="t1">Train, Map, Teach.</h2>
+<div class="card" style="padding: 20px; display: flex; flex-direction: column; gap: 8px"><span class="mono xs fa">1</span><h3 class="t3">Train</h3><p class="mu">The expert works as usual. The agent stays quiet while they type and asks one short question at a pause.</p></div>
+<div class="card" style="padding: 20px; display: flex; flex-direction: column; gap: 8px"><span class="mono xs fa">2</span><h3 class="t3">Map</h3><p class="mu">A spoken debrief closes the gaps. The agent explains it back, the expert confirms. Out comes a Work Map.</p></div>
+<div class="card" style="padding: 20px; display: flex; flex-direction: column; gap: 8px"><span class="mono xs fa">3</span><h3 class="t3">Teach</h3><p class="mu">A new hire picks the agent. It sits by their cursor and stops them where the expert would have stopped.</p></div>
+</section>
+
+<section style="padding: 40px 20px; border-top: 1px solid var(--ln); display: flex; flex-direction: column; gap: 8px">
+<span class="eb">The Apprentice Test</span>
+<h2 class="t1" style="margin-bottom: 12px">Five questions any good apprentice has to answer.</h2>
+<div class="q"><h3 class="t3">1 · When to ask</h3><p class="mu">At natural pauses. Never while you type. At most one question every two minutes.</p></div>
+<div class="q"><h3 class="t3">2 · What to ask</h3><p class="mu">The why behind a decision. Guardrails first: limits, exceptions, when to stop and ask.</p><span style="display: flex; gap: 6px; flex-wrap: wrap"><span class="bdg k-lim">Limit</span><span class="bdg k-exc">Exception</span><span class="bdg k-stop">Stop and ask</span></span></div>
+<div class="q"><h3 class="t3">3 · When it has understood</h3><p class="mu">It explains the process back and you confirm. Every step scores at least 75%.</p></div>
+<div class="q"><h3 class="t3">4 · Whether the new hire learned</h3><p class="mu">Every step ends as Mastered or Practice next.</p><span style="display: flex; gap: 6px"><span class="bdg k-ok">Mastered</span><span class="bdg k-jc">Practice next</span></span></div>
+<div class="q" style="border-bottom: 1px solid var(--ln)"><h3 class="t3">5 · Trust</h3><p class="mu">Say "off the record" and capture stops. Personal data is redacted before storage.</p></div>
+</section>
+
+<section style="padding: 8px 20px 48px">
+<div class="card" style="padding: 24px; display: flex; flex-direction: column; gap: 14px">
+<span style="width: 44px; height: 44px; border-radius: 12px; background: var(--s2); display: inline-flex; align-items: center; justify-content: center; color: var(--ac2)"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3 5 6v6c0 4.5 3 7.5 7 9 4-1.5 7-4.5 7-9V6z"></path><path d="m9 12 2 2 4-4"></path></svg></span>
+<h2 class="t3" style="font-size: 20px">Off the record, whenever you say it.</h2>
+<p class="mu">Capture stops the moment you say it. Nobody learns from a step until the expert confirms it.</p>
+<a class="btn bp" href="Login.dc.html">Sign in</a>
+</div>
+</section>
+<footer class="xs fa" style="padding: 20px; border-top: 1px solid var(--ln)">AI Apprentice · hackathon build, October 2026</footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":2500}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

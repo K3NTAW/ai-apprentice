@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Debrief</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;family=Instrument+Serif:ital@0;1&amp;display=swap">
+<style>
+body{margin:0}
+.aa{--bg:#050505;--s1:#121212;--s2:#1C1C1C;--s3:#2A2A2A;--ln:rgba(255,255,255,.08);--ln2:rgba(255,255,255,.14);--tx:#FFFFFF;--mu:#9E9E9E;--fa:#858585;--ac:#4280FF;--ac2:#7AA6FF;--acs:rgba(66,128,255,.12);--pb:#FFFFFF;--pf:#0A0A0A;--cmp:#1F1F21;--am:#F5A524;--ams:rgba(245,165,36,.15);--gr:#3FCF8E;--grs:rgba(63,207,142,.14);--rd:#FF6B6B;--rds:rgba(255,107,107,.14);--stage:linear-gradient(180deg, #232327 0%, #0A0A0C 100%);--sh:0 24px 64px rgba(0,0,0,.55);background:var(--bg);color:var(--tx);font-family:Geist,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;color-scheme:dark}
+.aa *,.aa *::before,.aa *::after{box-sizing:border-box}
+.aa h1,.aa h2,.aa h3,.aa p{margin:0}
+.aa a{color:var(--ac2)}
+.t1{font-size:32px;line-height:1.1;letter-spacing:-.025em;font-weight:600}
+.t2{font-size:26px;line-height:1.25;letter-spacing:-.02em;font-weight:600;text-wrap:balance}
+.t3{font-size:16px;line-height:1.35;letter-spacing:-.01em;font-weight:600}
+.sm{font-size:13px}.xs{font-size:12px}.mu{color:var(--mu)}.fa{color:var(--fa)}
+.eb{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--mu);font-weight:500}
+.mono{font-family:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace;font-variant-numeric:tabular-nums}
+.card{background:var(--s1);border:1px solid var(--ln);border-radius:16px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:40px;padding:0 18px;border-radius:999px;font-family:inherit;font-size:14px;font-weight:500;border:1px solid transparent;cursor:pointer;text-decoration:none;white-space:nowrap;line-height:1}
+.bp{background:var(--pb);color:var(--pf)}.bs{background:var(--s2);border-color:var(--ln2);color:var(--tx)}.bg{background:transparent;color:var(--mu)}
+.aa a.btn.bp{color:var(--pf)}.aa a.btn.bs{color:var(--tx)}
+.bl{height:48px;padding:0 22px;font-size:15px}.bsm{height:32px;padding:0 12px;font-size:13px}
+.btn:focus-visible{outline:2px solid var(--ac2);outline-offset:2px}
+.bdg{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 9px;border-radius:999px;font-size:12px;font-weight:500;white-space:nowrap;line-height:1}
+.bdg::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.bdg.nd::before{display:none}
+.k-jc{background:var(--ams);color:var(--am)}.k-ok{background:var(--grs);color:var(--gr)}.k-pend{background:var(--s3);color:var(--mu)}.k-ac{background:var(--acs);color:var(--ac2)}
+.ic{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.bub{background:var(--s2);border:1px solid var(--ln2);border-radius:18px 18px 6px 18px;padding:12px 16px}
+.bar{position:relative;height:8px;border-radius:99px;background:var(--s3)}
+.bar i{position:absolute;left:0;top:0;bottom:0;border-radius:99px;background:var(--ac);display:block}
+.bar i.lo{background:var(--am)}
+.bar i.was{background:var(--tx);opacity:.14}
+.bar b{position:absolute;left:75%;top:-5px;bottom:-5px;width:2px;border-radius:2px;background:var(--tx);opacity:.6;display:block}
+.wv{width:4px;border-radius:2px;background:var(--ac2);display:inline-block;animation:aa-wv 1s ease-in-out infinite}
+@keyframes aa-wv{50%{transform:scaleY(.4)}}
+@media (prefers-reduced-motion:reduce){.aa *{animation:none!important}}
+</style>
+</helmet>
+<div class="aa" style="min-height: 900px; display: flex; flex-wrap: wrap; background: var(--bg)">
+<div style="flex: 1 0 248px; border-right: 1px solid var(--ln)">
+<dc-import name="Sidebar" active="agents" hint-size="248px,900px"></dc-import>
+</div>
+<main style="flex: 999 1 560px; min-width: 0; padding: 28px 40px 56px; display: flex; flex-direction: column; gap: 22px">
+<div style="display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<a class="sm" href="Agent.dc.html" style="color: var(--mu); text-decoration: none">Agents / Pip / Debrief</a>
+<h1 class="t1">Debrief</h1>
+<span class="mu">Code incoming supplier invoices · task ended 14:31 · 29 min captured · 2 min off the record</span>
+</div>
+<button class="btn bg" type="button">Finish later</button>
+</div>
+
+<div style="display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start">
+<div style="flex: 3 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 20px">
+
+<div class="card" style="padding: 28px; display: flex; flex-direction: column; gap: 22px; background: var(--stage)">
+<div style="display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: center">
+<span class="bdg nd k-ac">Follow-up 2 of at least 3</span>
+<span class="xs fa">Pip asks until every step is above 75%</span>
+</div>
+<div style="display: flex; gap: 22px; align-items: flex-start; flex-wrap: wrap">
+<dc-import name="Avatar" shape="blob" face="smile" tone="#ECEAE5" accent="#3A4EFD" mood="talking" size="112" hint-size="112px,112px"></dc-import>
+<div style="flex: 1; min-width: 280px; display: flex; flex-direction: column; gap: 10px">
+<p class="t2">"On invoice 4502 you added Pavel as a second approver. Is that for every Czech invoice, or only above an amount?"</p>
+<span class="sm mu">About step 6 · Second approval for the Czech subsidiary · you did this once, at 05:40</span>
+</div>
+</div>
+<div class="bub" style="align-self: flex-end; max-width: 560px"><span class="xs mu" style="display: block; margin-bottom: 4px">Sabine · answering</span>Every Czech invoice. Even fifty euros. Brno has its own audit and they check every single one<span class="mu">…</span></div>
+<div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap">
+<button class="btn bp bl" type="button" aria-label="Stop answering"><svg class="ic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3"></path></svg>Listening</button>
+<span style="display: inline-flex; align-items: center; gap: 3px; height: 28px" aria-hidden="true"><span class="wv" style="height: 10px"></span><span class="wv" style="height: 22px; animation-delay: .1s"></span><span class="wv" style="height: 16px; animation-delay: .2s"></span><span class="wv" style="height: 26px; animation-delay: .3s"></span><span class="wv" style="height: 12px; animation-delay: .4s"></span><span class="wv" style="height: 20px; animation-delay: .5s"></span><span class="wv" style="height: 8px; animation-delay: .6s"></span></span>
+<span class="sm mu">Pause for 2 s to finish</span>
+<span style="flex: 1"></span>
+<button class="btn bg bsm" type="button">Skip this one</button>
+</div>
+</div>
+
+<div class="card" style="padding: 28px; display: flex; flex-direction: column; gap: 18px">
+<div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap">
+<div style="display: flex; align-items: center; gap: 10px"><span class="eb">Teach-back</span><span class="bdg nd k-pend mono">~45 s spoken</span></div>
+<button class="btn bs bsm" type="button"><svg class="ic" viewBox="0 0 24 24" style="width: 14px; height: 14px"><path d="M8 5v14l11-7z"></path></svg>Play again</button>
+</div>
+<p style="font-size: 17px; line-height: 1.65; max-width: 62ch">Here is how I understood it. When an invoice comes in, you open the mail and the PDF side by side and search the invoice number first, because Alpen billed December twice last year. You read the line items. Equipment over €5,000 goes to capex 0400, everything else to opex 4711, and if you can't tell a machine from a spare part, you ask Urs. Anything over €5,000 goes to the controller before you post it. Invoices for the Czech subsidiary always get Pavel's second approval, at any amount. Then you post in the ERP and file the PDF under the supplier number.</p>
+<div style="display: flex; gap: 10px; flex-wrap: wrap; padding-top: 4px">
+<a class="btn bp bl" href="WorkMap.dc.html"><svg class="ic" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"></path></svg>Yes, that is how it works</a>
+<button class="btn bs bl" type="button">Not quite</button>
+</div>
+<span class="xs fa">"Not quite" lets you say what is wrong. Pip asks one more question and tries again.</span>
+</div>
+</div>
+
+<div class="card" style="flex: 2 1 340px; min-width: 0; padding: 24px; display: flex; flex-direction: column; gap: 18px">
+<div style="display: flex; flex-direction: column; gap: 4px">
+<h2 class="t3">Understanding per step</h2>
+<span class="sm mu">Rises as you answer. The line marks 75%, the bar to clear.</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 16px">
+<sc-for list="{{ steps }}" as="s" hint-placeholder-count="7">
+<div style="display: flex; flex-direction: column; gap: 7px">
+<div style="display: flex; justify-content: space-between; gap: 10px; align-items: baseline">
+<span class="sm" style="min-width: 0"><span class="mono fa">{{s.n}}</span>  {{s.nm}}</span>
+<span class="mono sm" style="white-space: nowrap"><span style="color: {{s.dc}}">{{s.delta}}</span>  {{s.v}}%</span>
+</div>
+<div class="bar"><i class="{{s.cls}}" style="width: {{s.v}}%; clip-path: inset(0 0 0 {{s.wasPct}}%)"></i><i class="{{s.cls}}" style="width: {{s.was}}%; opacity: .55"></i><b></b></div>
+</div>
+</sc-for>
+</div>
+<div style="display: flex; gap: 14px; flex-wrap: wrap; padding-top: 14px; border-top: 1px solid var(--ln)" class="xs mu">
+<span style="display: inline-flex; align-items: center; gap: 6px"><span style="width: 14px; height: 6px; border-radius: 3px; background: var(--ac); opacity: .55"></span>Before debrief</span>
+<span style="display: inline-flex; align-items: center; gap: 6px"><span style="width: 14px; height: 6px; border-radius: 3px; background: var(--ac)"></span>Gained now</span>
+<span style="display: inline-flex; align-items: center; gap: 6px"><span style="width: 14px; height: 6px; border-radius: 3px; background: var(--am)"></span>Below 75%</span>
+</div>
+<span class="sm" style="padding: 12px 14px; border-radius: 12px; background: var(--ams); color: var(--am)">2 steps still below 75%. One more answer should clear step 6.</span>
+</div>
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1160}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const raw = [
+      ['1', 'Open the invoice mail', 82, 95],
+      ['2', 'Check for a duplicate', 51, 74],
+      ['3', 'Read the line items', 88, 90],
+      ['4', 'Code to a cost center', 70, 92],
+      ['5', 'Forward to the controller', 64, 88],
+      ['6', 'Second approval, Czech subsidiary', 38, 71],
+      ['7', 'Post and file', 79, 72]
+    ];
+    const steps = raw.map(([n, nm, was, v]) => {
+      const now = Math.max(v, was);
+      return { n, nm, was, v: now, wasPct: Math.round((was / now) * 100), delta: now > was ? '+' + (now - was) : '±0', dc: now > was ? 'var(--gr)' : 'var(--fa)', cls: now < 75 ? 'lo' : '' };
+    });
+    return { steps };
+  }
+}
+</script>
+</body>
+</html>

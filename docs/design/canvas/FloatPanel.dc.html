@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Floating panel</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;family=Instrument+Serif:ital@0;1&amp;display=swap">
+<style>
+body{margin:0}
+.gl{--tx:#111111;--mu:#626262;--fa:#8C8C8C;--ln:rgba(0,0,0,.08);--s2:rgba(0,0,0,.04);--bl:#0F7FFF;--gr:#13784B;--grs:rgba(19,120,75,.12);color:var(--tx);font-family:Geist,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased;color-scheme:light}
+.gl *,.gl *::before,.gl *::after{box-sizing:border-box}
+.gl p{margin:0}
+.glass{background:rgba(251,251,251,.88);-webkit-backdrop-filter:blur(28px) saturate(1.5);backdrop-filter:blur(28px) saturate(1.5);border:1px solid rgba(255,255,255,.7);box-shadow:0 10px 24px #0000001f,0 40px 100px rgba(0,0,0,.3),inset 0 1px 1px #fffc}
+.pill{background:#FFFFFF;border:1px solid rgba(0,0,0,.06);box-shadow:0 4px 12px rgba(0,0,0,.06),inset 0 1px 1px #fffc}
+.xs{font-size:12px}.mu{color:var(--mu)}.fa{color:var(--fa)}
+.eb{font-size:12px;color:var(--mu);font-weight:500}
+.mono{font-family:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace;font-variant-numeric:tabular-nums}
+.serif{font-family:"Instrument Serif",Georgia,serif;font-style:italic;font-weight:400}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:36px;padding:0 14px;border-radius:999px;font-family:inherit;font-size:13px;font-weight:500;border:1px solid transparent;cursor:pointer;white-space:nowrap;line-height:1}
+.bk{background:#111111;color:#FFFFFF;box-shadow:inset 0 1px 1px rgba(255,255,255,.25),0 4px 10px rgba(0,0,0,.18)}
+.bw{background:#FFFFFF;color:#111111;border-color:rgba(0,0,0,.1);box-shadow:inset 0 1px 1px #fffc,0 1px 2px rgba(0,0,0,.06)}
+.bt{background:transparent;color:var(--mu)}
+.btn:focus-visible{outline:2px solid var(--bl);outline-offset:2px}
+.kc{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:6px;background:#FFFFFF;border:1px solid rgba(0,0,0,.12);border-bottom-width:2px;font-family:"Geist Mono",ui-monospace,Menlo,monospace;font-size:12px;font-weight:500;color:#111111;line-height:1}
+.ic{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.seg{display:flex;padding:3px;border-radius:999px;background:rgba(0,0,0,.06)}
+.seg button{flex:1;height:32px;border-radius:999px;border:0;background:none;color:var(--mu);font-family:inherit;font-size:13px;font-weight:500;cursor:pointer}
+.seg button.on{background:#FFFFFF;color:var(--tx);box-shadow:0 1px 3px rgba(0,0,0,.12),inset 0 1px 1px #fffc}
+.row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;border-top:1px solid var(--ln)}
+.ok{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 9px;border-radius:999px;font-size:12px;font-weight:500;background:var(--grs);color:var(--gr)}
+</style>
+</helmet>
+<div style="position: relative; width: 1440px; height: 900px; overflow: hidden">
+<dc-import name="Desktop" app="mail" hint-size="1440px,900px"></dc-import>
+<div style="position: absolute; inset: 0; background: rgba(10,12,18,.18)"></div>
+
+<section class="gl glass" aria-label="AI Apprentice panel" style="position: absolute; left: 460px; top: 76px; width: 520px; border-radius: 28px; padding: 22px; display: flex; flex-direction: column; gap: 16px">
+<div style="display: flex; align-items: center; gap: 14px">
+<span style="width: 56px; height: 56px; border-radius: 17px; background: linear-gradient(180deg, #2C2C31, #0A0A0C); display: flex; align-items: center; justify-content: center; flex: none"><dc-import name="Avatar" shape="blob" face="smile" tone="#ECEAE5" accent="#0F7FFF" mood="idle" size="48" hint-size="48px,48px"></dc-import></span>
+<div style="display: flex; flex-direction: column; min-width: 0; flex: 1"><span style="font-size: 18px; font-weight: 600; letter-spacing: -0.01em">Pip</span><span class="xs mu">ai apprentice · Sabine's MacBook Pro</span></div>
+<span style="display: inline-flex; gap: 3px"><span class="kc">⌥</span><span class="kc">⇧</span><span class="kc">A</span></span>
+<button class="btn bw" type="button" aria-label="Close panel" style="width: 32px; height: 32px; padding: 0"><svg class="ic" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"></path></svg></button>
+</div>
+
+<div class="seg" role="radiogroup" aria-label="Mode"><button class="on" type="button" role="radio" aria-checked="true">Train</button><button type="button" role="radio" aria-checked="false">Teach</button><button type="button" role="radio" aria-checked="false">Off the record</button></div>
+
+<div class="pill" style="border-radius: 18px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; justify-content: space-between; align-items: center; gap: 10px"><span class="eb">session</span><span class="xs mono mu" style="display: inline-flex; align-items: center; gap: 6px"><span style="width: 7px; height: 7px; border-radius: 50%; background: #E5484D"></span>12:48</span></div>
+<span style="font-weight: 600; font-size: 14px">Code incoming supplier invoices</span>
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; padding-top: 4px">
+<span style="display: flex; flex-direction: column"><span class="mono" style="font-size: 17px; font-weight: 600">5</span><span class="xs fa">steps</span></span>
+<span style="display: flex; flex-direction: column"><span class="mono" style="font-size: 17px; font-weight: 600">4</span><span class="xs fa">shortcuts</span></span>
+<span style="display: flex; flex-direction: column"><span class="mono" style="font-size: 17px; font-weight: 600">2</span><span class="xs fa">guardrails</span></span>
+<span style="display: flex; flex-direction: column"><span class="mono" style="font-size: 17px; font-weight: 600">3 · 1</span><span class="xs fa">asked · guardrail</span></span>
+</div>
+</div>
+
+<div class="pill" style="border-radius: 18px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px">
+<span class="eb">last question · 14:05</span>
+<p style="font-size: 15px; font-weight: 500">You moved that one to capex. What made you do that?</p>
+<p class="serif" style="font-size: 20px; line-height: 1.2; color: #0F7FFF">"Equipment over €5,000 is always capex."</p>
+<span class="xs mu">Sabine · saved as guardrail, limit</span>
+</div>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px">
+<div style="display: flex; flex-direction: column">
+<span class="eb" style="padding-bottom: 6px">shortcuts</span>
+<div class="row"><span>Open this panel</span><span style="display: inline-flex; gap: 2px"><span class="kc">⌥</span><span class="kc">⇧</span><span class="kc">A</span></span></div>
+<div class="row"><span>Push to talk</span><span style="display: inline-flex; gap: 2px"><span class="kc">⌃</span><span class="kc">⌥</span></span></div>
+<div class="row"><span>Off the record</span><span style="display: inline-flex; gap: 2px"><span class="kc">⌥</span><span class="kc">⇧</span><span class="kc">O</span></span></div>
+<div class="row"><span>Pause</span><span style="display: inline-flex; gap: 2px"><span class="kc">⌥</span><span class="kc">⇧</span><span class="kc">P</span></span></div>
+</div>
+<div style="display: flex; flex-direction: column">
+<span class="eb" style="padding-bottom: 6px">permissions</span>
+<div class="row"><span>Screen Recording</span><span class="ok">on</span></div>
+<div class="row"><span>Accessibility</span><span class="ok">on</span></div>
+<div class="row"><span>Microphone</span><span class="ok">on</span></div>
+<div class="row"><span class="mu">Redaction</span><span class="ok">names, IBANs</span></div>
+</div>
+</div>
+
+<div style="display: flex; gap: 8px; justify-content: space-between; padding-top: 2px">
+<button class="btn bt" type="button">Quit companion</button>
+<button class="btn bk" type="button">Open control room<svg class="ic" viewBox="0 0 24 24"><path d="M7 17 17 7M9 7h8v8"></path></svg></button>
+</div>
+</section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

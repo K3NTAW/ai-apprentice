@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Agent Pip</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;family=Instrument+Serif:ital@0;1&amp;display=swap">
+<style>
+body{margin:0}
+.aa{--bg:#050505;--s1:#121212;--s2:#1C1C1C;--s3:#2A2A2A;--ln:rgba(255,255,255,.08);--ln2:rgba(255,255,255,.14);--tx:#FFFFFF;--mu:#9E9E9E;--fa:#858585;--ac:#4280FF;--ac2:#7AA6FF;--acs:rgba(66,128,255,.12);--pb:#FFFFFF;--pf:#0A0A0A;--cmp:#1F1F21;--am:#F5A524;--ams:rgba(245,165,36,.15);--gr:#3FCF8E;--grs:rgba(63,207,142,.14);--rd:#FF6B6B;--rds:rgba(255,107,107,.14);--vi:#B39DFF;--vis:rgba(179,157,255,.15);--te:#3DD6C2;--tes:rgba(61,214,194,.14);--co:#FF8A65;--cos:rgba(255,138,101,.16);--stage:linear-gradient(180deg, #232327 0%, #0A0A0C 100%);--sh:0 24px 64px rgba(0,0,0,.55);background:var(--bg);color:var(--tx);font-family:Geist,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;color-scheme:dark}
+.aa *,.aa *::before,.aa *::after{box-sizing:border-box}
+.aa h1,.aa h2,.aa h3,.aa p{margin:0}
+.aa a{color:var(--ac2)}
+.td{font-size:48px;line-height:1.02;letter-spacing:-.035em;font-weight:600}
+.t2{font-size:24px;line-height:1.2;letter-spacing:-.02em;font-weight:600}
+.t3{font-size:16px;line-height:1.35;letter-spacing:-.01em;font-weight:600}
+.sm{font-size:13px}.xs{font-size:12px}.mu{color:var(--mu)}.fa{color:var(--fa)}
+.eb{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--mu);font-weight:500}
+.mono{font-family:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace;font-variant-numeric:tabular-nums}
+.card{background:var(--s1);border:1px solid var(--ln);border-radius:16px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:40px;padding:0 18px;border-radius:999px;font-family:inherit;font-size:14px;font-weight:500;border:1px solid transparent;cursor:pointer;text-decoration:none;white-space:nowrap;line-height:1}
+.bp{background:var(--pb);color:var(--pf)}.bs{background:var(--s2);border-color:var(--ln2);color:var(--tx)}.bg{background:transparent;color:var(--mu)}.bd{background:var(--rds);color:var(--rd)}
+.aa a.btn.bp{color:var(--pf)}.aa a.btn.bs{color:var(--tx)}.aa a.btn.bg{color:var(--mu)}
+.bl{height:48px;padding:0 22px;font-size:15px}.bsm{height:32px;padding:0 12px;font-size:13px}.bi{width:40px;padding:0}
+.btn:focus-visible,.tab:focus-visible,.inp:focus-visible,.sw:focus-visible{outline:2px solid var(--ac2);outline-offset:2px}
+.bdg{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 9px;border-radius:999px;font-size:12px;font-weight:500;white-space:nowrap;line-height:1}
+.bdg::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.k-lim{background:var(--tes);color:var(--te)}.k-exc{background:var(--vis);color:var(--vi)}.k-stop{background:var(--cos);color:var(--co)}.k-jc{background:var(--ams);color:var(--am)}.k-ok{background:var(--grs);color:var(--gr)}.k-pend{background:var(--s3);color:var(--mu)}.k-ac{background:var(--acs);color:var(--ac2)}
+.inp{display:block;width:100%;height:44px;border-radius:12px;background:var(--s2);border:1px solid var(--ln2);color:var(--tx);padding:0 14px;font-family:inherit;font-size:14px}
+.lbl{display:block;font-size:13px;color:var(--mu);font-weight:500;margin-bottom:6px}
+.kc{display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:26px;padding:0 7px;border-radius:7px;background:var(--s3);border:1px solid var(--ln2);border-bottom-width:2px;font-family:"Geist Mono",ui-monospace,Menlo,monospace;font-size:13px;font-weight:500;color:var(--tx);line-height:1}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--ln);flex-wrap:wrap}
+.tab{padding:12px 14px;color:var(--mu);font-family:inherit;font-size:14px;font-weight:500;background:none;border:0;border-bottom:2px solid transparent;margin-bottom:-1px;cursor:pointer;display:inline-flex;gap:8px;align-items:center}
+.tab.on{color:var(--tx);border-bottom-color:var(--tx)}
+.tab .n{font-size:12px;color:var(--fa);font-family:"Geist Mono",ui-monospace,monospace}
+.bar{position:relative;height:6px;border-radius:99px;background:var(--s3)}
+.bar i{position:absolute;left:0;top:0;bottom:0;border-radius:99px;background:var(--ac);display:block}
+.bar i.lo{background:var(--am)}
+.bar b{position:absolute;left:75%;top:-4px;bottom:-4px;width:2px;border-radius:2px;background:var(--tx);opacity:.55;display:block}
+.ic{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.av{width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:600;font-size:11px;flex:none;background:var(--s3);color:var(--tx)}
+.sw{width:40px;height:24px;border-radius:99px;background:var(--s3);border:1px solid var(--ln2);position:relative;padding:0;cursor:pointer;flex:none}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:var(--mu)}
+.sw.on{background:var(--ac);border-color:var(--ac)}.sw.on::after{left:19px;background:#fff}
+.tbl{width:100%;border-collapse:collapse}
+.tbl th{text-align:left;font-size:12px;font-weight:500;color:var(--fa);padding:12px 16px;border-bottom:1px solid var(--ln);white-space:nowrap}
+.tbl td{padding:14px 16px;border-bottom:1px solid var(--ln);vertical-align:top}
+.tbl tr:last-child td{border-bottom:0}
+.q{font-family:"Instrument Serif",Georgia,serif;font-style:italic;font-size:17px;line-height:1.3;color:var(--tx);border-left:2px solid var(--ln2);padding-left:10px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 0;border-top:1px solid var(--ln);flex-wrap:wrap}
+</style>
+</helmet>
+<div class="aa" style="min-height: 900px; display: flex; flex-wrap: wrap; background: var(--bg)">
+<div style="flex: 1 0 248px; border-right: 1px solid var(--ln)">
+<dc-import name="Sidebar" active="agents" hint-size="248px,900px"></dc-import>
+</div>
+<main style="flex: 999 1 560px; min-width: 0; padding: 28px 40px 56px; display: flex; flex-direction: column; gap: 24px">
+<a class="sm" href="Gallery.dc.html" style="color: var(--mu); text-decoration: none">Agents / Pip</a>
+
+<div class="card" style="padding: 0; display: flex; flex-wrap: wrap; overflow: hidden">
+<div style="flex: 0 0 220px; min-height: 220px; background: var(--stage); display: flex; align-items: center; justify-content: center">
+<dc-import name="Avatar" shape="blob" face="smile" tone="#ECEAE5" accent="#3A4EFD" mood="idle" size="168" hint-size="168px,168px"></dc-import>
+</div>
+<div style="flex: 1 1 420px; min-width: 0; padding: 28px 32px; display: flex; flex-direction: column; gap: 14px; justify-content: center">
+<div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap"><h1 class="td">Pip</h1><span class="bdg k-ok">Ready to teach</span></div>
+<div style="display: flex; flex-direction: column; gap: 4px">
+<span style="font-size: 17px">Senior AP Clerk</span>
+<span class="mu" style="display: flex; align-items: center; gap: 8px"><span class="av" style="background: #3A2A1A; color: #FFC98A; width: 22px; height: 22px; font-size: 10px">SK</span>learns from <span style="color: var(--tx)">Sabine Keller</span> · Accounts Payable, 31 years</span>
+</div>
+<div class="sm mu" style="display: flex; gap: 20px; flex-wrap: wrap"><span><span class="mono" style="color: var(--tx)">6</span> processes</span><span><span class="mono" style="color: var(--tx)">23</span> shortcuts</span><span><span class="mono" style="color: var(--tx)">14</span> guardrails</span><span><span class="mono" style="color: var(--tx)">3</span> learners</span><span>Last trained 2026-10-02</span></div>
+</div>
+<div style="flex: 0 1 auto; padding: 28px 32px; display: flex; flex-direction: column; gap: 10px; justify-content: center">
+<a class="btn bp bl" href="Capture.dc.html"><svg class="ic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3"></path></svg>Train</a>
+<a class="btn bs bl" href="Learn.dc.html"><svg class="ic" viewBox="0 0 24 24"><path d="M3 7.5 12 4l9 3.5-9 3.5z"></path><path d="M7 9.5V15c0 1.5 2.5 3 5 3s5-1.5 5-3V9.5"></path></svg>Teach a new employee</a>
+</div>
+</div>
+
+<div class="tabs" role="tablist" aria-label="Agent sections">
+<sc-for list="{{ tabs }}" as="t" hint-placeholder-count="5">
+<button class="{{t.cls}}" type="button" role="tab" aria-selected="{{t.sel}}" onClick="{{t.pick}}">{{t.label}}<span class="n">{{t.n}}</span></button>
+</sc-for>
+</div>
+
+<sc-if value="{{ show.processes }}" hint-placeholder-val="{{ true }}">
+<div style="display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap"><span class="mu">Each process is one Work Map. The bar shows how well Pip understood it, with the 75% bar to clear.</span><a class="btn bs bsm" href="Capture.dc.html">Train a new process</a></div>
+<div class="card" style="padding: 0 20px">
+<sc-for list="{{ processes }}" as="p" hint-placeholder-count="6">
+<div style="display: grid; grid-template-columns: minmax(0, 2.2fr) minmax(0, 1.4fr) minmax(0, 1fr) auto; gap: 24px; align-items: center; padding: 18px 0; border-bottom: 1px solid var(--ln)">
+<div style="display: flex; flex-direction: column; gap: 3px; min-width: 0"><span class="t3">{{p.nm}}</span><span class="sm mu">{{p.meta}}</span></div>
+<div style="display: flex; flex-direction: column; gap: 8px"><div style="display: flex; justify-content: space-between" class="xs"><span class="fa">Understood</span><span class="mono">{{p.score}}%</span></div><div class="bar"><i class="{{p.barCls}}" style="width: {{p.score}}%"></i><b></b></div></div>
+<div style="display: flex; flex-direction: column; gap: 4px; align-items: flex-start"><span class="{{p.badge}}">{{p.state}}</span><span class="xs fa">{{p.date}}</span></div>
+<a class="btn bs bsm" href="WorkMap.dc.html">Open map</a>
+</div>
+</sc-for>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ show.shortcuts }}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap"><span class="mu">Shortcuts Sabine used while training, with why she uses them. Learners see these as hints.</span><div style="display: flex; gap: 8px"><span class="bdg k-pend">All apps</span><span class="bdg k-ac">Excel 9</span><span class="bdg k-pend">Outlook 8</span><span class="bdg k-pend">Browser 6</span></div></div>
+<div class="card" style="overflow-x: auto">
+<div role="table" aria-label="Shortcuts" style="min-width: 860px">
+<div role="row" class="xs fa" style="display: grid; grid-template-columns: 150px 100px 190px minmax(0, 1fr) 60px; gap: 16px; padding: 12px 20px; border-bottom: 1px solid var(--ln); font-weight: 500"><span role="columnheader">Chord</span><span role="columnheader">App</span><span role="columnheader">What it does</span><span role="columnheader">Why, in Sabine's words</span><span role="columnheader" style="text-align: right">Seen</span></div>
+<sc-for list="{{ shortcuts }}" as="s" hint-placeholder-count="7">
+<div role="row" style="display: grid; grid-template-columns: 150px 100px 190px minmax(0, 1fr) 60px; gap: 16px; padding: 14px 20px; border-bottom: 1px solid var(--ln); align-items: center">
+<span role="cell" style="display: inline-flex; gap: 4px"><sc-for list="{{ s.keys }}" as="k" hint-placeholder-count="2"><span class="kc">{{k}}</span></sc-for></span>
+<span role="cell" class="mu">{{s.app}}</span>
+<span role="cell">{{s.what}}</span>
+<span role="cell" class="q">{{s.why}}</span>
+<span role="cell" class="mono mu" style="text-align: right">{{s.seen}}</span>
+</div>
+</sc-for>
+</div>
+</div>
+<span class="sm fa">Showing 7 of 23 · sorted by how often Sabine used them</span>
+</div>
+</sc-if>
+
+<sc-if value="{{ show.guardrails }}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap">
+<div style="display: flex; gap: 8px; flex-wrap: wrap"><span class="bdg k-ac">All 14</span><span class="bdg k-lim">Limit 6</span><span class="bdg k-exc">Exception 3</span><span class="bdg k-stop">Stop and ask 5</span></div>
+<button class="btn bs bsm" type="button"><svg class="ic" viewBox="0 0 24 24" style="width: 16px; height: 16px"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"></path></svg>Export guardrails</button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<sc-for list="{{ guardrails }}" as="g" hint-placeholder-count="5">
+<div class="card" style="padding: 18px 20px; display: grid; grid-template-columns: 120px minmax(0, 1fr) auto; gap: 20px; align-items: start">
+<span class="{{g.cls}}" style="justify-self: start">{{g.kind}}</span>
+<div style="display: flex; flex-direction: column; gap: 8px; min-width: 0">
+<span class="t3">{{g.rule}}</span>
+<span class="q" style="color: var(--mu)">"{{g.quote}}"</span>
+<span class="xs fa">{{g.proc}}</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px; align-items: flex-end">
+<a class="btn bs bsm" href="WorkMap.dc.html"><svg class="ic" viewBox="0 0 24 24" style="width: 14px; height: 14px"><path d="M8 5v14l11-7z"></path></svg>Screen moment <span class="mono">{{g.t}}</span></a>
+<span class="{{g.stCls}}">{{g.st}}</span>
+</div>
+</div>
+</sc-for>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ show.learners }}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap"><span class="mu">Mastery is per step. A step is mastered when the learner gets it right on their own screen, twice.</span><button class="btn bs bsm" type="button">Invite a learner</button></div>
+<div class="card" style="overflow-x: auto">
+<div role="table" aria-label="Learners" style="min-width: 900px">
+<div role="row" class="xs fa" style="display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1.2fr) 220px minmax(0, 1.4fr) 130px; gap: 20px; padding: 12px 20px; border-bottom: 1px solid var(--ln); font-weight: 500"><span role="columnheader">Learner</span><span role="columnheader">Process</span><span role="columnheader">Mastery</span><span role="columnheader">Practice next</span><span role="columnheader">Last session</span></div>
+<sc-for list="{{ learners }}" as="l" hint-placeholder-count="3">
+<div role="row" style="display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1.2fr) 220px minmax(0, 1.4fr) 130px; gap: 20px; padding: 16px 20px; border-bottom: 1px solid var(--ln); align-items: center">
+<span role="cell" style="display: flex; align-items: center; gap: 10px"><span class="av" style="background: {{l.bg}}; color: {{l.fg}}">{{l.ini}}</span><span style="display: flex; flex-direction: column"><span style="font-weight: 500">{{l.nm}}</span><span class="xs fa">{{l.since}}</span></span></span>
+<span role="cell">{{l.proc}}</span>
+<span role="cell" style="display: flex; flex-direction: column; gap: 8px"><span class="xs" style="display: flex; justify-content: space-between; align-items: center"><span class="{{l.badge}}">{{l.state}}</span><span class="mono mu">{{l.done}}</span></span><span class="bar" style="display: block"><i style="width: {{l.pct}}%; background: var(--gr)"></i></span></span>
+<span role="cell" class="sm">{{l.next}}</span>
+<span role="cell" class="mono sm mu">{{l.last}}</span>
+</div>
+</sc-for>
+</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ show.settings }}" hint-placeholder-val="{{ false }}">
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 16px; align-items: start">
+<div class="card" style="padding: 24px; display: flex; flex-direction: column; gap: 16px">
+<h2 class="t3">Identity</h2>
+<div><label class="lbl" for="set-name">Name</label><input class="inp" id="set-name" type="text" value="Pip"></div>
+<div><label class="lbl" for="set-role">Role</label><input class="inp" id="set-role" type="text" value="Senior AP Clerk"></div>
+<div><label class="lbl" for="set-expert">Expert</label><input class="inp" id="set-expert" type="text" value="Sabine Keller"></div>
+<a class="btn bs bsm" href="Studio.dc.html" style="align-self: flex-start">Edit avatar</a>
+</div>
+<div class="card" style="padding: 24px; display: flex; flex-direction: column; gap: 4px">
+<h2 class="t3" style="margin-bottom: 8px">Questions while training</h2>
+<div class="row"><span><span style="display: block">At most one question every</span><span class="xs fa">Pauses shorter than 4 s never trigger a question</span></span><span class="mono" style="padding: 6px 12px; border-radius: 10px; background: var(--s2); border: 1px solid var(--ln2)">2 min</span></div>
+<div class="row"><span>Ask about guardrails first</span><button class="sw on" type="button" aria-pressed="true" aria-label="Ask about guardrails first"></button></div>
+<div class="row"><span>Learn keyboard shortcuts</span><button class="sw on" type="button" aria-pressed="true" aria-label="Learn keyboard shortcuts"></button></div>
+<div class="row"><span>Voice</span><span class="sm mu">Calm · 1.0×</span></div>
+</div>
+<div class="card" style="padding: 24px; display: flex; flex-direction: column; gap: 4px">
+<h2 class="t3" style="margin-bottom: 8px">Privacy</h2>
+<div class="row"><span>Redact names and email addresses</span><button class="sw on" type="button" aria-pressed="true" aria-label="Redact names and email addresses"></button></div>
+<div class="row"><span>Redact IBANs and phone numbers</span><button class="sw on" type="button" aria-pressed="true" aria-label="Redact IBANs and phone numbers"></button></div>
+<div class="row"><span><span style="display: block">Off the record phrase</span><span class="xs fa">Also works with the button or ⌥⇧O</span></span><span class="mono sm">"off the record"</span></div>
+<div class="row"><span>Keep screen moments for</span><span class="sm mu">90 days</span></div>
+</div>
+<div class="card" style="padding: 24px; display: flex; flex-direction: column; gap: 12px; border-color: var(--rds)">
+<h2 class="t3">Delete Pip</h2>
+<p class="sm mu">Removes Pip, its 6 Work Maps and all screen moments. Learner progress is kept as a report. This needs the workspace owner's approval.</p>
+<button class="btn bd bsm" type="button" style="align-self: flex-start">Request deletion</button>
+</div>
+</div>
+</sc-if>
+
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"tab":{"editor":"enum","options":["processes","shortcuts","guardrails","learners","settings"],"default":"processes"},"$preview":{"width":1440,"height":1120}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const st = this.state || {};
+    const tab = st.tab || this.props.tab || 'processes';
+    const defs = [['processes', 'Processes', '6'], ['shortcuts', 'Shortcuts', '23'], ['guardrails', 'Guardrails', '14'], ['learners', 'Learners', '3'], ['settings', 'Settings', '']];
+    const tabs = defs.map(([id, label, n]) => ({ label, n, cls: id === tab ? 'tab on' : 'tab', sel: id === tab ? 'true' : 'false', pick: () => this.setState({ tab: id }) }));
+    const show = {}; defs.forEach(([id]) => { show[id] = id === tab; });
+    const ok = 'bdg k-ok', pend = 'bdg k-pend';
+    const processes = [
+      { nm: 'Code incoming supplier invoices', meta: '7 steps · 3 judgment calls · 4 guardrails', score: 86, state: 'Confirmed', badge: ok, date: '2026-10-02' },
+      { nm: 'Duplicate invoice check', meta: '4 steps · 2 judgment calls · 3 guardrails', score: 79, state: 'Confirmed', badge: ok, date: '2026-09-29' },
+      { nm: 'Czech subsidiary approvals', meta: '5 steps · 2 judgment calls · 3 guardrails', score: 64, state: 'Not yet confirmed', badge: pend, date: '2026-09-30' },
+      { nm: 'Month-end accrual check', meta: '6 steps · 2 judgment calls · 2 guardrails', score: 81, state: 'Confirmed', badge: ok, date: '2026-09-24' },
+      { nm: 'Supplier bank detail change', meta: '5 steps · 1 judgment call · 2 guardrails', score: 92, state: 'Confirmed', badge: ok, date: '2026-09-18' },
+      { nm: 'Payment run preparation', meta: '8 steps · 3 judgment calls · 0 guardrails yet', score: 58, state: 'Not yet confirmed', badge: pend, date: '2026-09-12' }
+    ].map((p) => Object.assign(p, { barCls: p.score < 75 ? 'lo' : '' }));
+    const shortcuts = [
+      { keys: ['⌘', 'F'], app: 'Outlook', what: 'Search mail', why: 'I search the invoice number first. That is how I caught Alpen billing December twice.', seen: '41×' },
+      { keys: ['⌘', '⇧', 'L'], app: 'Excel', what: 'Turn filters on or off', why: 'First thing on every export. Filter by supplier, then by amount.', seen: '33×' },
+      { keys: ['⌘', 'D'], app: 'Excel', what: 'Fill down', why: 'Same cost center for the whole batch. Fill down, then check the odd ones.', seen: '27×' },
+      { keys: ['⌃', '⌘', 'V'], app: 'Excel', what: 'Paste special', why: 'Values only. The ERP formatting breaks the pivot.', seen: '22×' },
+      { keys: ['⌘', 'J'], app: 'Outlook', what: 'Forward', why: 'Anything over €5,000 goes to the controller before I code it.', seen: '18×' },
+      { keys: ['⌘', '⇧', 'T'], app: 'Browser', what: 'Reopen closed tab', why: 'I close the ERP tab by accident ten times a day.', seen: '12×' },
+      { keys: ['⌘', '⌥', 'F'], app: 'Outlook', what: 'Advanced search', why: 'Search by sender over the last 60 days. Duplicates hide there.', seen: '9×' }
+    ];
+    const guardrails = [
+      { kind: 'Limit', cls: 'bdg k-lim', rule: 'Equipment over €5,000 is coded to capex 0400, never to opex 4711.', quote: 'Equipment over €5,000 is always capex.', proc: 'Code incoming supplier invoices · step 4', t: '03:12', st: 'Confirmed', stCls: ok },
+      { kind: 'Exception', cls: 'bdg k-exc', rule: 'Invoices for the Czech subsidiary need a second approval, at any amount.', quote: "Brno always gets Pavel's second signature. Even for a 50 euro invoice.", proc: 'Czech subsidiary approvals · step 2', t: '05:40', st: 'Not yet confirmed', stCls: pend },
+      { kind: 'Stop and ask', cls: 'bdg k-stop', rule: 'Same supplier, similar amount, within 30 days: stop and ask the controller.', quote: 'Alpen billed us for December twice last year. If it looks familiar, I stop.', proc: 'Duplicate invoice check · step 1', t: '01:48', st: 'Confirmed', stCls: ok },
+      { kind: 'Stop and ask', cls: 'bdg k-stop', rule: 'Machine or spare part unclear: ask, never guess the cost center.', quote: "If I can't tell a machine from a spare part, I ask Urs.", proc: 'Code incoming supplier invoices · step 4', t: '03:31', st: 'Confirmed', stCls: ok },
+      { kind: 'Limit', cls: 'bdg k-lim', rule: 'Never change supplier bank details based on an email alone.', quote: 'New IBAN by email? I call the number we already have. Always.', proc: 'Supplier bank detail change · step 3', t: '02:05', st: 'Confirmed', stCls: ok }
+    ];
+    const learners = [
+      { ini: 'LG', nm: 'Lena Graf', since: 'AP clerk since 2026-09-15', bg: '#2B2440', fg: '#C9B8FF', proc: 'Code incoming supplier invoices', done: '5 of 7 steps', pct: 71, state: 'Practice next', badge: 'bdg k-jc', next: 'Check for a duplicate · Second approval, Czech subsidiary', last: '2026-10-03 15:40' },
+      { ini: 'TO', nm: 'Tim Ochsner', since: 'Moved from Treasury', bg: '#1E2F3F', fg: '#8CCBFF', proc: 'Code incoming supplier invoices', done: '7 of 7 steps', pct: 100, state: 'Mastered', badge: 'bdg k-ok', next: 'Nothing left on this map', last: '2026-09-30 10:15' },
+      { ini: 'AD', nm: 'Aylin Demir', since: 'Apprentice, 2nd year', bg: '#1E3A2F', fg: '#7EE0B0', proc: 'Duplicate invoice check', done: '2 of 4 steps', pct: 50, state: 'Practice next', badge: 'bdg k-jc', next: 'Search by sender, last 60 days', last: '2026-10-01 13:05' }
+    ];
+    return { tabs, show, processes, shortcuts, guardrails, learners };
+  }
+}
+</script>
+</body>
+</html>

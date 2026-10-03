@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Side dock</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;family=Instrument+Serif:ital@0;1&amp;display=swap">
+<style>
+body{margin:0}
+.gl{--tx:#111111;--mu:#626262;--fa:#8C8C8C;--ln:rgba(0,0,0,.08);--ln2:rgba(0,0,0,.12);--s2:rgba(0,0,0,.04);--s3:rgba(0,0,0,.07);--bl:#0F7FFF;--bls:rgba(15,127,255,.12);--gr:#13784B;--grs:rgba(19,120,75,.12);--rd:#E5484D;--rds:rgba(229,72,77,.12);--te:#0B7468;--tes:rgba(11,116,104,.12);--co:#C2410C;--cos:rgba(194,65,12,.11);color:var(--tx);font-family:Geist,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased;color-scheme:light}
+.gl *,.gl *::before,.gl *::after{box-sizing:border-box}
+.gl p{margin:0}
+.glass{background:rgba(251,251,251,.84);-webkit-backdrop-filter:blur(24px) saturate(1.5);backdrop-filter:blur(24px) saturate(1.5);border:1px solid rgba(255,255,255,.7);box-shadow:0 10px 24px #0000001f,0 30px 80px rgba(0,0,0,.22),inset 0 1px 1px #fffc}
+.pill{background:#FFFFFF;border:1px solid rgba(0,0,0,.06);box-shadow:0 10px 24px #0000001f,inset 0 1px 1px #fffc}
+.xs{font-size:12px}.mu{color:var(--mu)}.fa{color:var(--fa)}
+.eb{font-size:12px;color:var(--mu);font-weight:500}
+.mono{font-family:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace;font-variant-numeric:tabular-nums}
+.serif{font-family:"Instrument Serif",Georgia,serif;font-style:italic;font-weight:400}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:36px;padding:0 14px;border-radius:999px;font-family:inherit;font-size:13px;font-weight:500;border:1px solid transparent;cursor:pointer;white-space:nowrap;line-height:1}
+.bk{background:#111111;color:#FFFFFF;box-shadow:inset 0 1px 1px rgba(255,255,255,.25),0 4px 10px rgba(0,0,0,.18)}
+.bw{background:#FFFFFF;color:#111111;border-color:rgba(0,0,0,.1);box-shadow:inset 0 1px 1px #fffc,0 1px 2px rgba(0,0,0,.06)}
+.btn:focus-visible{outline:2px solid var(--bl);outline-offset:2px}
+.kc{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 5px;border-radius:6px;background:#FFFFFF;border:1px solid rgba(0,0,0,.12);border-bottom-width:2px;font-family:"Geist Mono",ui-monospace,Menlo,monospace;font-size:11px;font-weight:500;color:#111111;line-height:1}
+.ic{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.it{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:10px;align-items:start;padding:10px 0;border-top:1px solid var(--ln)}
+.ib{width:28px;height:28px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center}
+.rec{width:8px;height:8px;border-radius:50%;background:var(--rd);display:inline-block;flex:none;animation:aa-pulse 1.4s ease-in-out infinite}
+@keyframes aa-pulse{50%{opacity:.3}}
+.wv{width:3px;border-radius:2px;background:var(--bl);display:inline-block;animation:aa-wv 1s ease-in-out infinite}
+@keyframes aa-wv{50%{transform:scaleY(.35)}}
+@media (prefers-reduced-motion:reduce){.gl *{animation:none!important}}
+</style>
+</helmet>
+<div style="position: relative; width: 1440px; height: 900px; overflow: hidden">
+<dc-import name="Desktop" app="mail" recording="{{recording}}" hint-size="1440px,900px"></dc-import>
+
+<sc-if value="{{ open }}" hint-placeholder-val="{{ true }}">
+<svg width="18" height="26" viewBox="0 0 16 22" style="position: absolute; left: 760px; top: 238px" aria-hidden="true"><path d="M1 1v17l4.5-4 3 6.5 3-1.4-3-6.4H14z" fill="#0E1117" stroke="#FFFFFF" stroke-width="1.2"></path></svg>
+<aside class="gl glass" aria-label="AI Apprentice side dock" style="position: absolute; right: 12px; top: 40px; width: 340px; height: 848px; border-radius: 24px; display: flex; flex-direction: column; overflow: hidden; filter: {{dockFilter}}">
+
+<div style="display: flex; align-items: center; gap: 8px; padding: 12px 12px 10px 18px">
+<span class="xs mu">ai apprentice · training</span>
+<span style="flex: 1"></span>
+<span class="pill xs mono" style="display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 999px"><span class="rec" style="background: {{recC}}"></span>12:48</span>
+<button type="button" aria-label="Collapse dock" class="btn bw" style="width: 28px; height: 28px; padding: 0"><svg class="ic" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"></path></svg></button>
+</div>
+
+<sc-if value="{{ off }}" hint-placeholder-val="{{ false }}">
+<div class="pill" style="margin: 4px 12px 0; padding: 12px 14px; border-radius: 16px; display: flex; gap: 10px; align-items: center; background: #ECECEC">
+<svg class="ic" viewBox="0 0 24 24"><path d="M3 3l18 18"></path><path d="M10.6 6.1A10 10 0 0 1 12 6c5 0 9 6 9 6a17 17 0 0 1-3 3.5M6.6 6.6C4.2 8.2 3 12 3 12s4 6 9 6c1.6 0 3-.4 4.3-1"></path></svg>
+<span style="display: flex; flex-direction: column"><span style="font-weight: 600">Off the record · nothing is captured</span><span class="xs mu">since 14:07 · no screen, no audio, no keys</span></span>
+</div>
+</sc-if>
+
+<div style="padding: 14px 18px; display: flex; gap: 14px; align-items: center">
+<div style="width: 76px; height: 76px; border-radius: 22px; background: linear-gradient(180deg, #2C2C31, #0A0A0C); display: flex; align-items: center; justify-content: center; flex: none; box-shadow: 0 6px 14px rgba(0,0,0,.25)">
+<dc-import name="Avatar" shape="blob" face="smile" tone="#ECEAE5" accent="#0F7FFF" mood="{{mood}}" size="64" hint-size="64px,64px"></dc-import>
+</div>
+<div style="display: flex; flex-direction: column; gap: 2px; min-width: 0">
+<span style="font-size: 18px; font-weight: 600; letter-spacing: -0.01em">Pip</span>
+<span class="xs mu">Senior AP Clerk · learning from Sabine</span>
+<span class="xs" style="margin-top: 4px; display: inline-flex; align-items: center; gap: 6px; color: {{stateC}}"><span style="width: 6px; height: 6px; border-radius: 50%; background: currentColor"></span>{{stateLabel}}</span>
+</div>
+</div>
+
+<sc-if value="{{ on }}" hint-placeholder-val="{{ true }}">
+<div class="pill" style="margin: 0 14px; padding: 14px 16px; border-radius: 20px 20px 20px 6px; display: flex; flex-direction: column; gap: 8px">
+<span class="xs mu">asked at a pause · 14:05</span>
+<p style="font-size: 16px; line-height: 1.35; font-weight: 500">You moved that one to capex. What made you do that?</p>
+<div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
+<span style="display: inline-flex; align-items: center; gap: 2px; height: 16px" aria-hidden="true"><span class="wv" style="height: 6px"></span><span class="wv" style="height: 14px; animation-delay: .1s"></span><span class="wv" style="height: 9px; animation-delay: .2s"></span><span class="wv" style="height: 16px; animation-delay: .3s"></span><span class="wv" style="height: 7px; animation-delay: .4s"></span></span>
+<span class="xs mu">answer out loud, or hold</span><span class="kc">⌃</span><span class="kc">⌥</span>
+</div>
+</div>
+</sc-if>
+
+<div style="padding: 18px 18px 0; display: flex; justify-content: space-between; align-items: baseline"><span class="eb">what i learned</span><span class="xs fa">this task</span></div>
+<div style="padding: 4px 18px 0; flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; opacity: {{feedOp}}">
+<sc-for list="{{ feed }}" as="f" hint-placeholder-count="6">
+<div class="it">
+<span class="ib" style="background: {{f.bg}}; color: {{f.fg}}">
+<sc-if value="{{ f.isStep }}" hint-placeholder-val="{{ true }}"><svg class="ic" viewBox="0 0 24 24"><path d="M4 7h3M4 12h3M4 17h3M10 7h10M10 12h10M10 17h10"></path></svg></sc-if>
+<sc-if value="{{ f.isKey }}" hint-placeholder-val="{{ false }}"><svg class="ic" viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2"></rect><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"></path></svg></sc-if>
+<sc-if value="{{ f.isGuard }}" hint-placeholder-val="{{ false }}"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3 5 6v6c0 4.5 3 7.5 7 9 4-1.5 7-4.5 7-9V6z"></path></svg></sc-if>
+</span>
+<span style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><span class="xs" style="color: {{f.fg}}; font-weight: 600">{{f.kind}}</span><span style="line-height: 1.35">{{f.text}}</span></span>
+<span class="xs mono fa">{{f.t}}</span>
+</div>
+</sc-for>
+</div>
+
+<div style="margin: 0 14px; padding: 12px 6px; border-radius: 16px; background: var(--s2); display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; text-align: center">
+<span style="display: flex; flex-direction: column"><span class="mono" style="font-size: 17px; font-weight: 600">5</span><span class="xs fa">steps</span></span>
+<span style="display: flex; flex-direction: column"><span class="mono" style="font-size: 17px; font-weight: 600">4</span><span class="xs fa">shortcuts</span></span>
+<span style="display: flex; flex-direction: column"><span class="mono" style="font-size: 17px; font-weight: 600">2</span><span class="xs fa">guardrails</span></span>
+<span style="display: flex; flex-direction: column"><span class="mono" style="font-size: 17px; font-weight: 600">3</span><span class="xs fa">asked</span></span>
+</div>
+
+<div style="padding: 12px 14px 14px; display: flex; gap: 8px">
+<sc-if value="{{ on }}" hint-placeholder-val="{{ true }}">
+<div style="display: flex; gap: 8px; width: 100%">
+<button class="btn bw" type="button" aria-label="Pause" style="width: 36px; padding: 0"><svg class="ic" viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"></path></svg></button>
+<button class="btn bw" type="button" style="flex: 1"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3l18 18"></path><path d="M10.6 6.1A10 10 0 0 1 12 6c5 0 9 6 9 6a17 17 0 0 1-3 3.5M6.6 6.6C4.2 8.2 3 12 3 12s4 6 9 6c1.6 0 3-.4 4.3-1"></path></svg>Off the record</button>
+<button class="btn bk" type="button">End task</button>
+</div>
+</sc-if>
+<sc-if value="{{ off }}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; gap: 8px; width: 100%">
+<button class="btn bk" type="button" style="flex: 1"><span style="width: 8px; height: 8px; border-radius: 50%; background: #FF6B6B"></span>Back on the record</button>
+<button class="btn bw" type="button">End task</button>
+</div>
+</sc-if>
+</div>
+</aside>
+</sc-if>
+
+<sc-if value="{{ off }}" hint-placeholder-val="{{ false }}">
+<div class="gl glass" style="position: absolute; left: 50%; top: 40px; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; height: 42px; padding: 0 18px 0 14px; border-radius: 999px">
+<svg class="ic" viewBox="0 0 24 24"><path d="M3 3l18 18"></path><path d="M10.6 6.1A10 10 0 0 1 12 6c5 0 9 6 9 6a17 17 0 0 1-3 3.5M6.6 6.6C4.2 8.2 3 12 3 12s4 6 9 6c1.6 0 3-.4 4.3-1"></path></svg>
+<span style="font-weight: 600; font-size: 14px">Off the record · nothing is captured</span>
+<span class="xs mu mono">2:10</span>
+</div>
+<div class="gl" style="position: absolute; left: 420px; top: 470px; display: flex; align-items: flex-start; gap: 2px">
+<svg width="18" height="26" viewBox="0 0 16 22" aria-hidden="true"><path d="M1 1v17l4.5-4 3 6.5 3-1.4-3-6.4H14z" fill="#0E1117" stroke="#FFFFFF" stroke-width="1.2"></path></svg>
+<div style="margin-top: 16px; display: flex; align-items: center; gap: 6px">
+<dc-import name="Avatar" shape="blob" face="smile" tone="#ECEAE5" accent="#0F7FFF" mood="paused" size="40" hint-size="40px,40px"></dc-import>
+<span class="pill" style="padding: 8px 14px; border-radius: 16px 16px 16px 4px; color: var(--mu); white-space: nowrap; background: #ECECEC">paused · off the record</span>
+</div>
+</div>
+<span class="gl pill xs" style="position: absolute; left: 420px; top: 548px; padding: 4px 10px; border-radius: 999px; color: var(--mu)">cursor buddy, while teaching</span>
+</sc-if>
+
+<sc-if value="{{ collapsed }}" hint-placeholder-val="{{ false }}">
+<svg width="18" height="26" viewBox="0 0 16 22" style="position: absolute; left: 980px; top: 360px" aria-hidden="true"><path d="M1 1v17l4.5-4 3 6.5 3-1.4-3-6.4H14z" fill="#0E1117" stroke="#FFFFFF" stroke-width="1.2"></path></svg>
+<button class="gl glass" type="button" aria-label="Expand AI Apprentice dock" style="position: absolute; right: 0; top: 330px; width: 56px; height: 196px; border-radius: 20px 0 0 20px; border-right: 0; display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 12px 0 10px; cursor: pointer; font-family: inherit">
+<svg class="ic" viewBox="0 0 24 24" style="color: var(--mu)"><path d="M15 6l-6 6 6 6"></path></svg>
+<span style="width: 46px; height: 46px; border-radius: 14px; background: linear-gradient(180deg, #2C2C31, #0A0A0C); display: flex; align-items: center; justify-content: center"><dc-import name="Avatar" shape="blob" face="smile" tone="#ECEAE5" accent="#0F7FFF" mood="listening" size="40" hint-size="40px,40px"></dc-import></span>
+<span style="display: flex; flex-direction: column; align-items: center; gap: 6px">
+<span class="rec"></span>
+<span class="mono xs">12:48</span>
+<span class="mono xs" style="min-width: 22px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--bl); color: #FFFFFF; display: inline-flex; align-items: center; justify-content: center">3</span>
+</span>
+</button>
+<div class="gl pill" style="position: absolute; right: 68px; top: 404px; padding: 10px 14px; border-radius: 18px 18px 4px 18px; max-width: 280px"><span class="xs mu" style="display: block">pip · at the next pause</span><span style="font-size: 14px; font-weight: 500">Quick one about invoice 4502?</span></div>
+</sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"collapsed":{"editor":"boolean","default":false},"off":{"editor":"boolean","default":false},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const t = (v) => v === true || v === 'true';
+    const collapsed = t(this.props.collapsed);
+    const off = t(this.props.off);
+    const G = { bg: 'var(--cos)', fg: 'var(--co)' }, L = { bg: 'var(--tes)', fg: 'var(--te)' }, S = { bg: 'var(--bls)', fg: 'var(--bl)' }, K = { bg: 'var(--s3)', fg: 'var(--tx)' };
+    const item = (kind, text, tm, c, type) => ({ kind, text, t: tm, bg: c.bg, fg: c.fg, isStep: type === 's', isKey: type === 'k', isGuard: type === 'g' });
+    return {
+      open: !collapsed, collapsed, off, on: !off,
+      recording: off ? 'false' : 'true',
+      mood: off ? 'paused' : 'listening',
+      stateLabel: off ? 'paused · off the record' : 'listening · quiet while you type',
+      stateC: off ? 'var(--mu)' : 'var(--gr)',
+      recC: off ? 'var(--fa)' : 'var(--rd)',
+      dockFilter: off ? 'saturate(.15)' : 'none',
+      feedOp: off ? '.45' : '1',
+      feed: [
+        item('guardrail · limit', 'Equipment over €5,000 goes to capex 0400', '14:05', L, 'g'),
+        item('step', 'Code the invoice to a cost center', '14:05', S, 's'),
+        item('shortcut · ⌘D', 'Fill down: same cost center for a batch', '14:04', K, 'k'),
+        item('shortcut · ⌘⇧L', 'Filter the export by supplier first', '14:03', K, 'k'),
+        item('step', 'Read the line items on the PDF', '14:02', S, 's'),
+        item('guardrail · stop and ask', 'Familiar supplier and amount: ask the controller', '14:01', G, 'g')
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

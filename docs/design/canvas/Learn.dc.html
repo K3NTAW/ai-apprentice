@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Learn</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;family=Instrument+Serif:ital@0;1&amp;display=swap">
+<style>
+body{margin:0}
+.aa{--bg:#050505;--s1:#121212;--s2:#1C1C1C;--s3:#2A2A2A;--ln:rgba(255,255,255,.08);--ln2:rgba(255,255,255,.14);--tx:#FFFFFF;--mu:#9E9E9E;--fa:#858585;--ac:#4280FF;--ac2:#7AA6FF;--acs:rgba(66,128,255,.12);--pb:#FFFFFF;--pf:#0A0A0A;--cmp:#1F1F21;--am:#F5A524;--ams:rgba(245,165,36,.15);--gr:#3FCF8E;--grs:rgba(63,207,142,.14);--stage:linear-gradient(180deg, #232327 0%, #0A0A0C 100%);background:var(--bg);color:var(--tx);font-family:Geist,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;color-scheme:dark}
+.aa *,.aa *::before,.aa *::after{box-sizing:border-box}
+.aa h1,.aa h2,.aa h3,.aa p{margin:0}
+.aa a{color:var(--ac2)}
+.t1{font-size:36px;line-height:1.1;letter-spacing:-.025em;font-weight:600}
+.t2{font-size:22px;line-height:1.25;letter-spacing:-.02em;font-weight:600}
+.t3{font-size:16px;line-height:1.35;letter-spacing:-.01em;font-weight:600}
+.sm{font-size:13px}.xs{font-size:12px}.mu{color:var(--mu)}.fa{color:var(--fa)}
+.eb{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--mu);font-weight:500}
+.mono{font-family:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace;font-variant-numeric:tabular-nums}
+.card{background:var(--s1);border:1px solid var(--ln);border-radius:16px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:40px;padding:0 18px;border-radius:999px;font-family:inherit;font-size:14px;font-weight:500;border:1px solid transparent;cursor:pointer;text-decoration:none;white-space:nowrap;line-height:1}
+.bp{background:var(--pb);color:var(--pf)}.aa a.btn.bp{color:var(--pf)}
+.bl{height:52px;padding:0 26px;font-size:16px}
+.btn:focus-visible,.opt:focus-visible{outline:2px solid var(--ac2);outline-offset:2px}
+.bdg{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 9px;border-radius:999px;font-size:12px;font-weight:500;white-space:nowrap;line-height:1}
+.bdg::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.k-jc{background:var(--ams);color:var(--am)}.k-ok{background:var(--grs);color:var(--gr)}.k-pend{background:var(--s3);color:var(--mu)}.k-ac{background:var(--acs);color:var(--ac2)}
+.ic{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.opt{display:flex;align-items:center;gap:12px;width:100%;padding:12px;border-radius:12px;border:1px solid var(--ln);background:var(--s2);color:var(--tx);font-family:inherit;font-size:14px;text-align:left;cursor:pointer}
+.opt.on{border-color:var(--ac);box-shadow:0 0 0 1px var(--ac);background:var(--acs)}
+.opt[disabled]{opacity:.5;cursor:default}
+.radio{width:18px;height:18px;border-radius:50%;border:1.5px solid var(--ln2);flex:none;margin-left:auto}
+.opt.on .radio{border:5px solid var(--ac)}
+.col{display:flex;flex-direction:column;gap:10px;min-width:0}
+</style>
+</helmet>
+<div class="aa" style="min-height: 900px; display: flex; flex-wrap: wrap; background: var(--bg)">
+<div style="flex: 1 0 248px; border-right: 1px solid var(--ln)">
+<dc-import name="Sidebar" active="learn" user="lena" hint-size="248px,900px"></dc-import>
+</div>
+<main style="flex: 999 1 560px; min-width: 0; padding: 36px 40px 56px; display: flex; flex-direction: column; gap: 26px">
+<div style="display: flex; flex-direction: column; gap: 6px; max-width: 680px">
+<span class="eb">Hi Lena</span>
+<h1 class="t1">Learn</h1>
+<p class="mu" style="font-size: 15px">Pick an agent, then a process. It teaches you on your own screen through the companion, next to your cursor.</p>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 16px; align-items: start">
+<div class="card col" style="padding: 18px">
+<div style="display: flex; align-items: center; gap: 10px"><span class="mono xs" style="width: 22px; height: 22px; border-radius: 50%; background: var(--pb); color: var(--pf); display: inline-flex; align-items: center; justify-content: center">1</span><span class="t3">Agent</span></div>
+<button class="opt on" type="button" aria-pressed="true"><dc-import name="Avatar" shape="blob" face="smile" tone="#ECEAE5" accent="#3A4EFD" mood="idle" size="44" hint-size="44px,44px"></dc-import><span style="display: flex; flex-direction: column; min-width: 0"><span style="font-weight: 600">Pip</span><span class="xs mu">Senior AP Clerk · from Sabine</span></span><span class="radio"></span></button>
+<button class="opt" type="button" aria-pressed="false"><dc-import name="Avatar" shape="bean" face="wink" tone="#F3A150" accent="#62A9F3" mood="still" size="44" hint-size="44px,44px"></dc-import><span style="display: flex; flex-direction: column; min-width: 0"><span style="font-weight: 600">Juno</span><span class="xs mu">Senior Sales Person · from Marco</span></span><span class="radio"></span></button>
+<button class="opt" type="button" aria-pressed="false"><dc-import name="Avatar" shape="square" face="focus" tone="#65D9A5" accent="#A27DF8" mood="still" size="44" hint-size="44px,44px"></dc-import><span style="display: flex; flex-direction: column; min-width: 0"><span style="font-weight: 600">Otto</span><span class="xs mu">Plant Controller · from Urs</span></span><span class="radio"></span></button>
+<button class="opt" type="button" aria-pressed="false"><dc-import name="Avatar" shape="pill" face="robot" tone="#F3C354" accent="#3A4EFD" mood="still" size="44" hint-size="44px,44px"></dc-import><span style="display: flex; flex-direction: column; min-width: 0"><span style="font-weight: 600">Bolt</span><span class="xs mu">IT Service Desk Lead · from Reto</span></span><span class="radio"></span></button>
+<button class="opt" type="button" disabled="{{ true }}"><dc-import name="Avatar" shape="round" face="calm" tone="#A27DF8" accent="#E775C0" mood="paused" size="44" hint-size="44px,44px"></dc-import><span style="display: flex; flex-direction: column; min-width: 0"><span style="font-weight: 600">Nova</span><span class="xs mu">Still training · not ready yet</span></span></button>
+</div>
+
+<div class="card col" style="padding: 18px">
+<div style="display: flex; align-items: center; gap: 10px"><span class="mono xs" style="width: 22px; height: 22px; border-radius: 50%; background: var(--pb); color: var(--pf); display: inline-flex; align-items: center; justify-content: center">2</span><span class="t3">Process</span></div>
+<button class="opt on" type="button" aria-pressed="true"><span style="display: flex; flex-direction: column; gap: 4px; min-width: 0"><span style="font-weight: 600">Code incoming supplier invoices</span><span class="xs mu">7 steps · 3 judgment calls · about 25 min</span><span class="bdg k-jc" style="align-self: flex-start">Your progress 5 of 7</span></span><span class="radio"></span></button>
+<button class="opt" type="button" aria-pressed="false"><span style="display: flex; flex-direction: column; gap: 4px; min-width: 0"><span style="font-weight: 600">Duplicate invoice check</span><span class="xs mu">4 steps · 2 judgment calls · about 12 min</span></span><span class="radio"></span></button>
+<button class="opt" type="button" aria-pressed="false"><span style="display: flex; flex-direction: column; gap: 4px; min-width: 0"><span style="font-weight: 600">Month-end accrual check</span><span class="xs mu">6 steps · 2 judgment calls · about 20 min</span></span><span class="radio"></span></button>
+<button class="opt" type="button" aria-pressed="false"><span style="display: flex; flex-direction: column; gap: 4px; min-width: 0"><span style="font-weight: 600">Supplier bank detail change</span><span class="xs mu">5 steps · 1 judgment call · about 15 min</span></span><span class="radio"></span></button>
+<button class="opt" type="button" disabled="{{ true }}"><span style="display: flex; flex-direction: column; gap: 4px; min-width: 0"><span style="font-weight: 600">Czech subsidiary approvals</span><span class="xs mu">Sabine has not confirmed this map yet</span></span></button>
+</div>
+
+<div class="card col" style="padding: 22px; gap: 18px; background: var(--stage)">
+<div style="display: flex; align-items: center; gap: 10px"><span class="mono xs" style="width: 22px; height: 22px; border-radius: 50%; background: var(--pb); color: var(--pf); display: inline-flex; align-items: center; justify-content: center">3</span><span class="t3">Start</span></div>
+<div style="display: flex; align-items: center; gap: 14px">
+<dc-import name="Avatar" shape="blob" face="smile" tone="#ECEAE5" accent="#3A4EFD" mood="happy" size="88" hint-size="88px,88px"></dc-import>
+<div style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><span class="sm mu">Pip teaches</span><span class="t2">Code incoming supplier invoices</span></div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px; padding: 14px; border-radius: 12px; background: var(--s2)">
+<span class="xs fa">Pip will focus on</span>
+<span class="sm">Step 2 · Check for a duplicate</span>
+<span class="sm">Step 6 · Second approval, Czech subsidiary</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<span class="xs fa">Practice with</span>
+<span class="sm">Practice set: invoices 4471, 4502, 4517, 4523</span>
+</div>
+<span class="sm mu" style="display: flex; align-items: center; gap: 8px"><span style="width: 8px; height: 8px; border-radius: 50%; background: var(--gr)"></span>Companion paired · Lena's MacBook Air</span>
+<a class="btn bp bl" href="Teach.dc.html" style="width: 100%"><svg class="ic" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"></path></svg>Start</a>
+<span class="xs fa" style="text-align: center">Pip appears next to your cursor. Say "off the record" any time.</span>
+</div>
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
