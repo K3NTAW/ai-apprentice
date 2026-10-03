@@ -9,6 +9,8 @@ import {
   buildScreenEventTurn,
   buildTeachBackTurn,
   describeEvent,
+  INTERVIEWER_PROMPT,
+  TUTOR_PROMPT,
 } from "./prompts";
 import { GET } from "@/app/api/voice/signed-url/route";
 
@@ -17,10 +19,10 @@ const event: ScreenEvent = {
   t: 1000,
   source: "dom",
   type: "field_changed",
-  entity: { kind: "invoice", id: "4471" },
-  field: "cost_center",
-  from: "4711",
-  to: "0400",
+  entity: { kind: "slide", id: "2" },
+  field: "revenue_growth",
+  from: "12%",
+  to: "15%",
 };
 
 function dr(question: DecisionResult["question"], answer: string | number): DecisionResult {
@@ -135,30 +137,58 @@ describe("askGate", () => {
 
 describe("message builders", () => {
   it("describes an event in one plain sentence", () => {
-    expect(describeEvent(event)).toBe("cost center of invoice 4471 changed from 4711 to 0400");
+    expect(describeEvent(event)).toBe("revenue growth of slide 2 changed from 12% to 15%");
+    expect(describeEvent({ ...event, app: "Microsoft PowerPoint" })).toBe(
+      "revenue growth of slide 2 changed from 12% to 15% in Microsoft PowerPoint",
+    );
+  });
+
+  it("describes every event type in a non-empty sentence", () => {
+    const mail = { ...event, entity: { kind: "email", id: "Offer Q3" }, app: "Microsoft Outlook", field: undefined, from: undefined, to: undefined };
+    const cases: [ScreenEvent, string][] = [
+      [{ ...mail, type: "record_opened" }, "email Offer Q3 opened in Microsoft Outlook"],
+      [{ ...mail, type: "button_clicked", field: "flag" }, "flag clicked on email Offer Q3 in Microsoft Outlook"],
+      [{ ...mail, type: "status_changed", to: "flagged" }, "status of email Offer Q3 set to flagged in Microsoft Outlook"],
+      [{ ...mail, type: "app_switched", window: "Inbox" }, "switched to Microsoft Outlook (Inbox)"],
+      [{ ...mail, type: "text_entered", field: "body" }, "body typed in email Offer Q3 in Microsoft Outlook"],
+      [{ ...mail, type: "item_created", entity: { kind: "slide", id: "9" }, app: undefined }, "slide 9 created"],
+      [{ ...mail, type: "item_sent", field: "forward", to: "controller" }, "email Offer Q3 sent (forward) to controller in Microsoft Outlook"],
+      [{ ...mail, type: "item_deleted", entity: { kind: "slide", id: "4" }, app: "Microsoft PowerPoint" }, "slide 4 deleted in Microsoft PowerPoint"],
+      [{ ...mail, type: "navigated", entity: { kind: "folder", id: "Archive" } }, "moved to folder Archive in Microsoft Outlook"],
+      [{ ...mail, type: "field_changed", field: "subject", to: "Offer Q4" }, "subject of email Offer Q3 set to Offer Q4 in Microsoft Outlook"],
+    ];
+    expect(new Set(cases.map(([e]) => e.type)).size).toBe(10);
+    for (const [e, text] of cases) expect(describeEvent(e)).toBe(text);
+  });
+
+  it("the agent prompts carry no domain-specific wording", () => {
+    for (const p of [INTERVIEWER_PROMPT, TUTOR_PROMPT]) {
+      expect(p).not.toMatch(/invoice|rechnung|cost.?cent(er|re)|iban|supplier/i);
+    }
+    expect(INTERVIEWER_PROMPT).toContain("slide 4");
   });
 
   it("carries the tags and names the on-screen object", () => {
     const screen = buildScreenEventTurn(event, "reason");
     expect(screen.startsWith("[SCREEN_EVENT]")).toBe(true);
-    expect(screen).toContain("invoice 4471");
-    expect(screen).toContain("cost center");
+    expect(screen).toContain("slide 2");
+    expect(screen).toContain("revenue growth");
     expect(buildScreenEventTurn(event, "guardrail")).toMatch(/stop and ask someone/);
-    expect(buildDebriefTurn(["Why 0400?", "Any limit?"])).toMatch(/^\[DEBRIEF\][\s\S]*1\. Why 0400\?\n2\. Any limit\?/);
-    expect(buildTeachBackTurn("You move it to 0400.")).toBe("[TEACH_BACK] You move it to 0400.");
+    expect(buildDebriefTurn(["Why 15%?", "Any limit?"])).toMatch(/^\[DEBRIEF\][\s\S]*1\. Why 15%\?\n2\. Any limit\?/);
+    expect(buildTeachBackTurn("You set it to 15%.")).toBe("[TEACH_BACK] You set it to 15%.");
     const step = {
       n: 2,
-      title: "Fix the cost center",
-      screen_moment: { t: 1000, entity: "invoice 4471", field: "cost_center" },
-      guardrails: [{ rule: "Above 10k ask finance", quote_ref: 1, kind: "limit" as const, quote: "over ten grand I call Anna" }],
+      title: "Update the growth figure",
+      screen_moment: { t: 1000, app: "Microsoft PowerPoint", entity: "slide 2", field: "revenue_growth" },
+      guardrails: [{ rule: "Above 5 points ask the CFO", quote_ref: 1, kind: "limit" as const, quote: "over five points I call Anna" }],
     };
     const predict = buildPredictTurn(step);
     expect(predict.startsWith("[PREDICT]")).toBe(true);
-    expect(predict).toContain("invoice 4471");
-    const stop = buildGuardrailStopTurn({ expert: "Marta", step, pending: "approve invoice 4471" });
+    expect(predict).toContain("slide 2");
+    const stop = buildGuardrailStopTurn({ expert: "Marta", step, pending: "send the deck" });
     expect(stop.startsWith("[GUARDRAIL_STOP]")).toBe(true);
     expect(stop).toContain("Marta would stop here. Why do you think?");
-    expect(stop).toContain("over ten grand I call Anna");
+    expect(stop).toContain("over five points I call Anna");
     expect(stop).toContain('"step_n": 2');
     expect(buildMasteryTurn("You got 4 of 5.")).toBe("[MASTERY] You got 4 of 5.");
   });

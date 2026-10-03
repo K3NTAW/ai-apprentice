@@ -21,7 +21,7 @@ Default behaviour: stay silent. Do not comment, do not narrate, do not fill paus
   Ask exactly ONE short question, under 20 words, about the named on-screen object.
   - Ask: reason -> why this step, why this value.
   - Ask: guardrail -> is there a limit, or when would you stop and ask someone.
-  Name the object as given (for example "invoice 4471" or "the cost center"). Then wait for the answer. Do not ask a follow-up unless the answer was cut off.
+  Name the object as given (for example "the email from Muster AG" or "slide 4"). The work can be in any app. Then wait for the answer. Do not ask a follow-up unless the answer was cut off.
 
 [DEBRIEF] followed by a numbered list of questions
   Ask the listed questions one at a time, in order. Wait for each answer before asking the next. Keep each question short. When the list is done, say "That's all I had. Thank you."
@@ -38,7 +38,7 @@ export const INTERVIEWER_FIRST_MESSAGE =
 
 export const TUTOR_PROMPT = `You are the Apprentice Tutor. You teach a learner how an expert does a task, using the expert's Work Map. The Work Map arrives as a contextual update (and as the dynamic variable {{work_map}} when set). The expert's name is {{expert}}.
 
-Be patient and plain. Explain each step in the expert's own words and name the expert ("{{expert}} checks the cost center here because ..."). Quote the expert's reason when the Work Map has one; never invent a reason. If the Work Map has no reason for a step, say so.
+Be patient and plain. Explain each step in the expert's own words and name the expert ("{{expert}} checks who the email goes to here because ..."). Quote the expert's reason when the Work Map has one; never invent a reason. If the Work Map has no reason for a step, say so.
 
 Never read bracket tags aloud. React to these turns:
 
@@ -59,12 +59,12 @@ function pretty(s: string): string {
   return s.replace(/[_-]+/g, " ").trim();
 }
 
-/** The on-screen object in plain words, e.g. 'invoice 4471'. */
+/** The on-screen object in plain words, e.g. 'slide 4' or 'email Offer Q3'. */
 export function describeObject(event: Pick<ScreenEvent, "entity">): string {
   return `${pretty(event.entity.kind)} ${event.entity.id}`;
 }
 
-/** One plain sentence describing a screen event, e.g. 'cost center of invoice 4471 changed from 4711 to 0400'. */
+/** One plain sentence per screen event, total over every event type, e.g. 'revenue growth of slide 2 changed from 12% to 15% in Microsoft PowerPoint'. */
 export function describeEvent(event: ScreenEvent): string {
   const obj = describeObject(event);
   const field = event.field ? pretty(event.field) : undefined;
@@ -76,15 +76,28 @@ export function describeEvent(event: ScreenEvent): string {
         : event.from !== undefined
           ? ` cleared (was ${event.from})`
           : " changed";
+  const where = event.app ? ` in ${event.app}` : "";
   switch (event.type) {
     case "field_changed":
-      return field ? `${field} of ${obj}${change}` : `${obj}${change}`;
+      return `${field ? `${field} of ${obj}` : obj}${change}${where}`;
     case "status_changed":
-      return `status of ${obj}${change}`;
+      return `status of ${obj}${change}${where}`;
     case "record_opened":
-      return `${obj} opened`;
+      return `${obj} opened${where}`;
     case "button_clicked":
-      return `${field ?? event.to ?? "a button"} clicked on ${obj}`;
+      return `${field ?? event.to ?? "a button"} clicked on ${obj}${where}`;
+    case "app_switched":
+      return `switched to ${event.app ?? event.entity.id}${event.window ? ` (${event.window})` : ""}`;
+    case "text_entered":
+      return `${field ?? "text"} typed in ${obj}${where}`;
+    case "item_created":
+      return `${obj} created${where}`;
+    case "item_sent":
+      return `${obj} sent${field && field !== "send" ? ` (${field})` : ""}${event.to !== undefined ? ` to ${event.to}` : ""}${where}`;
+    case "item_deleted":
+      return `${obj} deleted${where}`;
+    case "navigated":
+      return `moved to ${obj}${where}`;
   }
 }
 
