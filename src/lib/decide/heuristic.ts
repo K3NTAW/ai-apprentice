@@ -1,23 +1,23 @@
-// Deterministic last resort. Never throws; works on partial or unknown state shapes.
+// Deterministic last resort. Never throws; works on partial or unknown state shapes. App-agnostic.
 import type { DecisionQuestionName } from "../types";
 import type { RawAnswer } from "./prompts";
 
 const CONFIDENCE = 0.4;
-const EQUIPMENT = /equip|machine|hardware|device|server|laptop|computer|forklift|tool|anlage|ger[äa]t|asset/i;
+/** Buttons and statuses that stop, park or escalate something. */
+const STOPPING = /^(hold|on[ _]hold|flag(ged)?|escalate|reject(ed)?|block(ed)?|stop|pause|report|second[ _]approval|send for 2nd approval)$/i;
 
+type HEvent = { type?: string; field?: string; from?: string; to?: string; entity?: { kind?: string; id?: string } };
 type HState = {
-  event?: { type?: string; field?: string; to?: string };
+  event?: HEvent;
+  /** Recent events before this one, oldest first. */
+  previous_events?: HEvent[];
   silence_ms?: number;
   typing?: boolean;
   questions_asked_last_10min?: number;
   step?: { reason?: { quote?: string } | null; guardrails?: unknown[] };
-  pending?: {
-    amount_eur?: number;
-    description?: string;
-    category?: string;
-    cost_center?: string;
-    asset_number?: string;
-  };
+  /** Pending action in Teach: a numeric value and the captured limit, or a delete/send under a stop-and-ask rule. */
+  pending?: { type?: string; value?: number; limit?: number };
+  guardrails?: { kind?: string }[];
 };
 
 function asState(state: unknown): HState {
@@ -31,15 +31,34 @@ function asState(state: unknown): HState {
   return state && typeof state === "object" ? (state as HState) : {};
 }
 
+const trim = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+
+/** item_sent is routine only when it goes to the same recipient as the last item sent before it. */
+function newRecipient(e: HEvent, previous: HEvent[] | undefined): boolean {
+  const prior = (Array.isArray(previous) ? previous : []).filter((p) => p?.type === "item_sent" && trim(p.to));
+  const last = prior[prior.length - 1];
+  return !last || trim(last.to).toLowerCase() !== trim(e.to).toLowerCase();
+}
+
 function eventClass(s: HState): string {
   const e = s.event;
   if (!e) return "routine";
-  if (e.type === "field_changed" && e.field === "cost_center") return "judgment_call";
-  if (e.type === "status_changed") return "possible_guardrail";
-  if (e.type === "button_clicked" && [e.to, e.field].some((v) => /^(hold|send for 2nd approval)$/i.test((v ?? "").trim()))) {
-    return "possible_guardrail";
+  switch (e.type) {
+    case "item_deleted":
+      return "judgment_call";
+    case "item_sent":
+      return newRecipient(e, s.previous_events) ? "judgment_call" : "routine";
+    case "status_changed":
+      return "possible_guardrail";
+    case "button_clicked":
+      return [e.to, e.field, e.entity?.id].some((v) => STOPPING.test(trim(v))) ? "possible_guardrail" : "routine";
+    case "field_changed":
+      // Overriding a value that was already there; a first entry is routine.
+      return trim(e.from) && trim(e.from) !== trim(e.to) ? "judgment_call" : "routine";
+    default:
+      // record_opened, navigated, app_switched, text_entered, item_created
+      return "routine";
   }
-  return "routine";
 }
 
 function askTiming(s: HState): string {
@@ -50,10 +69,11 @@ function askTiming(s: HState): string {
 
 function violatesGuardrail(s: HState): number {
   const p = s.pending;
-  if (!p) return 0.1;
-  const equipment = EQUIPMENT.test(`${p.description ?? ""} ${p.category ?? ""}`);
-  const miscoded = p.cost_center !== "0400" || !p.asset_number;
-  return (p.amount_eur ?? 0) > 5000 && equipment && miscoded ? 0.9 : 0.1;
+  if (!p || typeof p !== "object") return 0.1;
+  if (typeof p.value === "number" && typeof p.limit === "number" && p.value > p.limit) return 0.9;
+  const stopAndAsk = Array.isArray(s.guardrails) && s.guardrails.some((g) => g?.kind === "stop_and_ask");
+  if (stopAndAsk && (p.type === "item_deleted" || p.type === "item_sent")) return 0.6;
+  return 0.1;
 }
 
 export function heuristicAnswer(question: DecisionQuestionName, state: unknown): RawAnswer {

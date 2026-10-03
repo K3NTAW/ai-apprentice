@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "@/app/api/decide/route";
 import { DecisionResultSchema } from "../types";
@@ -24,14 +26,8 @@ const json = (body: unknown, status = 200) =>
 
 const llmReply = (obj: unknown) => json({ stop_reason: "end_turn", content: [{ type: "text", text: JSON.stringify(obj) }] });
 
-const equipmentState = {
-  pending: {
-    amount_eur: 7200,
-    description: "CNC milling machine, production equipment",
-    cost_center: "4711",
-    asset_number: "",
-  },
-};
+// A pending value over the limit the expert stated.
+const overLimitState = { pending: { type: "field_changed", value: 7200, limit: 5000 } };
 
 beforeEach(() => {
   vi.stubEnv("JEV_API_KEY", "");
@@ -188,7 +184,7 @@ describe("fallthrough chain", () => {
   it("LLM failure falls through to heuristic", async () => {
     vi.stubEnv("ANTHROPIC_API_KEY", "ant-test");
     const { fetchImpl } = mockFetch(json({ stop_reason: "refusal", content: [] }));
-    const res = await decide("violates_guardrail", equipmentState, { fetchImpl });
+    const res = await decide("violates_guardrail", overLimitState, { fetchImpl });
     expect(res).toMatchObject({ provider: "heuristic", confidence: 0.4 });
   });
 
@@ -203,7 +199,7 @@ describe("fallthrough chain", () => {
     vi.stubEnv("JEV_API_KEY", "jev-test");
     vi.stubEnv("ANTHROPIC_API_KEY", "ant-test");
     const { fetchImpl } = mockFetch(new Error("network down"), new Error("network down"));
-    const res = await decide("violates_guardrail", equipmentState, { fetchImpl });
+    const res = await decide("violates_guardrail", overLimitState, { fetchImpl });
     expect(res.provider).toBe("heuristic");
     expect(DecisionResultSchema.parse(res)).toBeTruthy();
   });
@@ -222,14 +218,54 @@ describe("heuristic", () => {
   const h = (q: Parameters<typeof decide>[0], state: unknown) => decide(q, state, { provider: "heuristic" });
 
   it.each([
-    [{ event: { type: "field_changed", field: "cost_center" } }, "judgment_call"],
+    [{ event: { type: "field_changed", field: "revenue_growth", from: "12%", to: "15%" } }, "judgment_call"],
     [{ event: { type: "button_clicked", field: "Hold" } }, "possible_guardrail"],
+    [{ event: { type: "button_clicked", field: "flag" } }, "possible_guardrail"],
     [{ event: { type: "button_clicked", to: "Send for 2nd approval" } }, "possible_guardrail"],
+    [{ event: { type: "button_clicked", field: "bold" } }, "routine"],
     [{ event: { type: "status_changed" } }, "possible_guardrail"],
-    [{ event: { type: "field_changed", field: "description" } }, "routine"],
+    [{ event: { type: "item_deleted", entity: { kind: "slide", id: "4" } } }, "judgment_call"],
+    [{ event: { type: "field_changed", field: "title", to: "Board update" } }, "routine"],
     [{ event: { type: "record_opened" } }, "routine"],
+    [{ event: { type: "navigated", entity: { kind: "slide", id: "4" } } }, "routine"],
+    [{ event: { type: "app_switched", entity: { kind: "app", id: "Microsoft Outlook" } } }, "routine"],
+    [{ event: { type: "text_entered", field: "body" } }, "routine"],
+    [{ event: { type: "item_created", entity: { kind: "slide", id: "9" } } }, "routine"],
   ])("event_class %j -> %s", async (state, expected) => {
     expect((await h("event_class", state)).answer).toBe(expected);
+  });
+
+  it("an email forwarded to a controller is a judgment call; the same recipient again is routine", async () => {
+    const forward = { type: "item_sent", entity: { kind: "email", id: "Offer Q3" }, field: "forward", to: "controller@example.com" };
+    expect((await h("event_class", { event: forward })).answer).toBe("judgment_call");
+    const prior = [{ ...forward, to: "team@example.com" }];
+    expect((await h("event_class", { event: forward, previous_events: prior })).answer).toBe("judgment_call");
+    const same = [{ ...forward }];
+    expect((await h("event_class", { event: forward, previous_events: same })).answer).toBe("routine");
+    // Recipient names are never matched: a different name to the same address is still routine.
+    const renamed = { ...forward, to: "CONTROLLER@example.com " };
+    expect((await h("event_class", { event: renamed, previous_events: same })).answer).toBe("routine");
+  });
+
+  it("no domain-specific wording or rule is left in the prompts and heuristics", () => {
+    const files = [
+      "src/lib/perception/vision.ts",
+      "src/lib/decide/prompts.ts",
+      "src/lib/decide/heuristic.ts",
+      "src/lib/decide/llm.ts",
+      "src/lib/decide/jev.ts",
+      "src/lib/voice/prompts.ts",
+      "src/lib/workmap/synthesize.ts",
+      "src/lib/workmap/score.ts",
+      "src/lib/workmap/teachback.ts",
+      "src/lib/workmap/export.ts",
+    ];
+    // Allowlist: the permitted email and slide examples (none of them use a banned word today).
+    const allow: RegExp[] = [];
+    for (const f of files) {
+      const text = allow.reduce((t, re) => t.replace(re, ""), readFileSync(join(process.cwd(), f), "utf8"));
+      expect({ f, hit: text.match(/invoice|rechnung|cost.?cent(er|re)|iban|supplier/i)?.[0] ?? null }).toEqual({ f, hit: null });
+    }
   });
 
   it.each([
@@ -251,19 +287,18 @@ describe("heuristic", () => {
     expect((await h("step_guardrail_captured", empty)).answer).toBe(0);
   });
 
-  it("EUR 7,200 equipment invoice on cost center 4711 violates the guardrail", async () => {
-    const res = await h("violates_guardrail", equipmentState);
+  it("a pending value over the stated limit violates the guardrail", async () => {
+    const res = await h("violates_guardrail", overLimitState);
     expect(res.answer as number).toBeGreaterThanOrEqual(0.8);
     expect(res).toMatchObject({ provider: "heuristic", confidence: 0.4 });
   });
 
-  it("correctly coded or small invoices do not", async () => {
-    const ok = { pending: { ...equipmentState.pending, cost_center: "0400", asset_number: "A-1001" } };
-    const small = { pending: { ...equipmentState.pending, amount_eur: 900 } };
-    const office = { pending: { amount_eur: 7200, description: "Consulting services Q3", cost_center: "4711", asset_number: "" } };
-    expect((await h("violates_guardrail", ok)).answer).toBe(0.1);
-    expect((await h("violates_guardrail", small)).answer).toBe(0.1);
-    expect((await h("violates_guardrail", office)).answer).toBe(0.1);
+  it("a delete under a stop-and-ask rule is risky; values under the limit and empty state are not", async () => {
+    const del = { pending: { type: "item_deleted" }, guardrails: [{ kind: "stop_and_ask" }] };
+    expect((await h("violates_guardrail", del)).answer).toBe(0.6);
+    expect((await h("violates_guardrail", { pending: { type: "item_deleted" }, guardrails: [] })).answer).toBe(0.1);
+    expect((await h("violates_guardrail", { pending: { value: 900, limit: 5000 } })).answer).toBe(0.1);
+    expect((await h("violates_guardrail", { pending: { value: 9000 } })).answer).toBe(0.1);
     expect((await h("violates_guardrail", undefined)).answer).toBe(0.1);
   });
 });
