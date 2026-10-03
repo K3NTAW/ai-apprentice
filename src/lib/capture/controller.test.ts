@@ -53,7 +53,7 @@ function setup(opts: { decide?: CaptureApi["decide"]; agentSpeaking?: boolean } 
   });
   c.start();
   const publish = (id = "4471") =>
-    bus.publishDom({ type: "field_changed", entity: { kind: "invoice", id }, field: "cost_center", from: "4711", to: "0400" })!;
+    bus.publishOs({ type: "field_changed", entity: { kind: "invoice", id }, field: "cost_center", from: "4711", to: "0400" })!;
   return { api, voice, bus, c, publish, onError };
 }
 
@@ -228,5 +228,68 @@ describe("capture controller", () => {
     expect(voice.promptTurn).not.toHaveBeenCalled();
     expect(c.debrief()[0]).toMatchObject({ why: "decide_failed" });
     expect(onError).toHaveBeenCalledWith("decide", expect.any(Error));
+  });
+
+  it("a companion app event is stored as a redacted os app_switched ScreenEvent", async () => {
+    const { api, bus, c } = setup();
+    c.onCompanionApp({ app: "Microsoft Outlook", title: "Re: offer for anna.meier@example.com" });
+    await flush();
+    const [ev] = bus.all();
+    expect(ev).toMatchObject({ source: "os", type: "app_switched", app: "Microsoft Outlook", entity: { kind: "app", id: "Microsoft Outlook" } });
+    expect(ev.window).toContain("Re: offer for");
+    expect(ev.window).not.toContain("anna.meier@example.com");
+    expect(api.postEvents).toHaveBeenCalledWith([ev]);
+    expect(JSON.stringify(api.postEvents.mock.calls)).not.toContain("anna.meier@example.com");
+    expect(c.feed()[0]).toBe(ev);
+  });
+
+  it("companion typing holds a question; idle releases it", async () => {
+    const { voice, c, publish } = setup();
+    vi.advanceTimersByTime(3000);
+    c.onCompanionActivity({ typing: true, pointer: false, idle_ms: 0 });
+    publish();
+    await flush();
+    expect(voice.promptTurn).not.toHaveBeenCalled();
+    expect(voice.noteUserActivity).toHaveBeenCalled();
+    c.onCompanionActivity({ typing: false, pointer: false, idle_ms: 2000 });
+    vi.advanceTimersByTime(500);
+    expect(voice.promptTurn).toHaveBeenCalledTimes(1);
+  });
+
+  it("stale or disconnected companion activity falls back to the browser signals", async () => {
+    const a = setup();
+    vi.advanceTimersByTime(3000);
+    a.c.onCompanionActivity({ typing: true, pointer: false, idle_ms: 0 });
+    vi.advanceTimersByTime(1600);
+    a.publish();
+    await flush();
+    expect(a.voice.promptTurn).toHaveBeenCalledTimes(1);
+
+    a.c.stop();
+    const b = setup();
+    vi.advanceTimersByTime(3000);
+    b.c.onCompanionActivity({ typing: true, pointer: false, idle_ms: 0 });
+    b.c.onCompanionDisconnected();
+    b.publish();
+    await flush();
+    expect(b.voice.promptTurn).toHaveBeenCalledTimes(1);
+  });
+
+  it("nothing companion-derived is stored or used while off the record, and it resumes cleanly", async () => {
+    const { api, bus, voice, c } = setup();
+    c.setOffRecord(true);
+    voice.noteUserActivity.mockClear();
+    c.onCompanionApp({ app: "Microsoft Excel", title: "Salaries.xlsx" });
+    c.onCompanionActivity({ typing: true, pointer: true, idle_ms: 0 });
+    await flush();
+    expect(bus.all()).toEqual([]);
+    expect(api.postEvents).not.toHaveBeenCalled();
+    expect(c.feed()).toEqual([]);
+    expect(voice.noteUserActivity).not.toHaveBeenCalled();
+    c.setOffRecord(false);
+    c.onCompanionApp({ app: "Microsoft Outlook", title: "Inbox" });
+    await flush();
+    expect(bus.all()).toHaveLength(1);
+    expect(bus.all()[0]).toMatchObject({ source: "os", type: "app_switched", app: "Microsoft Outlook" });
   });
 });

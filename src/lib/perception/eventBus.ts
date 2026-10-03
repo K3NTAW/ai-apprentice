@@ -1,7 +1,6 @@
-// Merged screen event bus (BUILD_SPEC D4: DOM is ground truth). Framework free.
+// Merged screen event bus: vision events from frames, os events from the desktop companion. Framework free.
 import { newId, type ScreenEvent, type VisionEvent } from "@/lib/types";
 
-export const TWIN_WINDOW_S = 4;
 export const DUPLICATE_WINDOW_S = 10;
 /** An os app_switched within this window wins over a vision app_switched for the same app. */
 export const OS_WINDOW_S = 1;
@@ -29,18 +28,6 @@ export function createEventBus({ now = () => Date.now() / 1000 }: { now?: () => 
   };
 
   return {
-    publishDom(partial: Omit<ScreenEvent, "id" | "t" | "source">, t: number = now()): ScreenEvent | undefined {
-      if (paused) return undefined;
-      const ev: ScreenEvent = { ...partial, id: newId("ev"), t, source: "dom" };
-      const twins = events.filter(
-        (e) => e.source === "vision" && Math.abs(e.t - t) <= TWIN_WINDOW_S && sameTwin(e, ev),
-      );
-      if (twins.length) events = events.filter((e) => !twins.includes(e));
-      events.push(ev);
-      emit(ev, twins[0]?.id);
-      return ev;
-    },
-
     /** Companion (os) events, e.g. app_switched. Supersedes a vision app_switched twin within OS_WINDOW_S. */
     publishOs(partial: Omit<ScreenEvent, "id" | "t" | "source">, t: number = now()): ScreenEvent | undefined {
       if (paused) return undefined;
@@ -56,10 +43,6 @@ export function createEventBus({ now = () => Date.now() / 1000 }: { now?: () => 
       if (paused) return [];
       const out: ScreenEvent[] = [];
       for (const v of batch) {
-        const domTwin = events.some(
-          (e) => e.source === "dom" && Math.abs(e.t - t) <= TWIN_WINDOW_S && sameTwin(e, v),
-        );
-        if (domTwin) continue;
         const osTwin = events.some((e) => e.source === "os" && Math.abs(e.t - t) <= OS_WINDOW_S && sameSwitch(e, v));
         if (osTwin) continue;
         const dup = events.some(

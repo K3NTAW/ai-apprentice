@@ -30,6 +30,8 @@ export type SidePanelProps = {
   onTogglePause(): void;
   onToggleShare(): void;
   onAnswer(text: string): void;
+  /** The capture console on the left owns the session controls, counter, last question and feed. */
+  hideControls?: boolean;
 };
 
 const DOT: Record<PresenceStatus, string> = {
@@ -78,6 +80,8 @@ export default function SidePanel(p: SidePanelProps) {
 
       {p.notice && <div className="rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">{p.notice}</div>}
 
+      {!p.hideControls && (
+        <>
       {!p.running ? (
         <div className="flex flex-col gap-2">
           <label className="flex flex-col gap-1 text-xs text-slate-600">
@@ -131,6 +135,9 @@ export default function SidePanel(p: SidePanelProps) {
         <div className="min-h-10 rounded bg-slate-50 p-2">{p.lastQuestion ?? "None yet"}</div>
       </div>
 
+        </>
+      )}
+
       {p.running && p.textMode && (
         <form onSubmit={submit} className="flex flex-col gap-1">
           <label className="text-[11px] uppercase tracking-wide text-slate-500" htmlFor="capture-answer">
@@ -151,6 +158,7 @@ export default function SidePanel(p: SidePanelProps) {
         </form>
       )}
 
+      {!p.hideControls && (
       <div className="min-h-0 flex-1">
         <div className="text-[11px] uppercase tracking-wide text-slate-500">Events</div>
         <ol className="flex flex-col gap-1 font-mono text-xs">
@@ -162,6 +170,7 @@ export default function SidePanel(p: SidePanelProps) {
           ))}
         </ol>
       </div>
+      )}
     </aside>
   );
 }

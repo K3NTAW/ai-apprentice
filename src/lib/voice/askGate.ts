@@ -4,7 +4,14 @@ import type { AskKind } from "./prompts";
 // Decides whether the interviewer asks about a screen event now, waits, or saves it for the debrief.
 // Pure apart from the injected clock. Spec D7: ask less, later.
 
-export type Activity = { typing: boolean; speaking: boolean; silence_ms: number };
+/**
+ * Desktop companion activity (counts only). `fresh` is false when the last message is older than
+ * COMPANION_STALE_MS or the socket is closed; a stale block is ignored and the gate falls back to
+ * speech pause plus frame stillness (the browser-side silence_ms).
+ */
+export type CompanionActivity = { typing: boolean; idle_ms: number; fresh: boolean };
+
+export type Activity = { typing: boolean; speaking: boolean; silence_ms: number; companion?: CompanionActivity };
 
 export type AskGateInput = {
   event: ScreenEvent;
@@ -30,9 +37,24 @@ export type AskGateOptions = {
 };
 
 const WINDOW_MS = 10 * 60 * 1000;
-const MIN_SILENCE_MS = 1500;
+export const MIN_SILENCE_MS = 1500;
+export const COMPANION_STALE_MS = 1500;
 const SCREEN_EXPLAINS_THRESHOLD = 0.7;
 const GUARDRAIL_EVERY = 3;
+
+/**
+ * Folds fresh companion activity into the browser signals. Companion typing holds a question until
+ * typing is false or idle_ms >= MIN_SILENCE_MS; effective silence is min(silence_ms, idle_ms).
+ */
+export function effectiveActivity(a: Activity): { typing: boolean; speaking: boolean; silence_ms: number } {
+  const c = a.companion?.fresh ? a.companion : undefined;
+  if (!c) return { typing: a.typing, speaking: a.speaking, silence_ms: a.silence_ms };
+  return {
+    typing: a.typing || (c.typing && c.idle_ms < MIN_SILENCE_MS),
+    speaking: a.speaking,
+    silence_ms: Math.min(a.silence_ms, c.idle_ms),
+  };
+}
 
 export function createAskGate({ maxPer10Min = 5, minGapMs = 20000, now = Date.now }: AskGateOptions = {}) {
   const asked: { t: number; kind: AskKind }[] = [];
@@ -55,7 +77,7 @@ export function createAskGate({ maxPer10Min = 5, minGapMs = 20000, now = Date.no
         : { action: "wait", why: "routine" };
     }
 
-    const { typing, speaking, silence_ms } = input.activity;
+    const { typing, speaking, silence_ms } = effectiveActivity(input.activity);
     if (typing) return { action: "wait", why: "typing" };
     if (speaking) return { action: "wait", why: "speaking" };
     if (input.agentSpeaking) return { action: "wait", why: "agent_speaking" };

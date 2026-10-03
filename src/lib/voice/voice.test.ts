@@ -17,7 +17,7 @@ import { GET } from "@/app/api/voice/signed-url/route";
 const event: ScreenEvent = {
   id: "e1",
   t: 1000,
-  source: "dom",
+  source: "vision",
   type: "field_changed",
   entity: { kind: "slide", id: "2" },
   field: "revenue_growth",
@@ -132,6 +132,47 @@ describe("askGate", () => {
     const ready = g.nextReady(quiet);
     expect(ready?.decision).toMatchObject({ action: "ask_now", ask: "reason" });
     expect(g.stats().pending).toBe(0);
+  });
+});
+
+describe("askGate with the desktop companion", () => {
+  const comp = (over: Partial<{ typing: boolean; idle_ms: number; fresh: boolean }> = {}) => ({
+    typing: false,
+    idle_ms: 3000,
+    fresh: true,
+    ...over,
+  });
+
+  it("companion typing holds a question", () => {
+    const g = createAskGate({ now: () => 0 });
+    const d = g.consider(input({ activity: { ...quiet, companion: comp({ typing: true, idle_ms: 100 }) } }));
+    expect(d).toMatchObject({ action: "wait", why: "typing" });
+  });
+
+  it("idle above the threshold releases it", () => {
+    const g = createAskGate({ now: () => 0 });
+    expect(g.consider(input({ activity: { ...quiet, companion: comp({ typing: true, idle_ms: 1500 }) } })).action).toBe("ask_now");
+    expect(g.consider(input({ activity: { ...quiet, companion: comp({ typing: false, idle_ms: 2000 }) } })).action).toBe("ask_now");
+  });
+
+  it("effective silence is min(silence_ms, idle_ms) when fresh", () => {
+    const g = createAskGate({ now: () => 0 });
+    const d = g.consider(input({ activity: { ...quiet, silence_ms: 5000, companion: comp({ idle_ms: 400 }) } }));
+    expect(d).toMatchObject({ action: "wait", why: "no_pause" });
+  });
+
+  it("stale or disconnected companion activity is ignored: speech pause and frame stillness decide", () => {
+    const g = createAskGate({ now: () => 0 });
+    const stale = comp({ typing: true, idle_ms: 0, fresh: false });
+    expect(g.consider(input({ activity: { ...quiet, companion: stale } })).action).toBe("ask_now");
+    const g2 = createAskGate({ now: () => 0 });
+    expect(g2.consider(input({ activity: { ...quiet, silence_ms: 800, companion: stale } }))).toMatchObject({ why: "no_pause" });
+  });
+
+  it("without a companion the gate uses speech pause and frame stillness", () => {
+    const g = createAskGate({ now: () => 0 });
+    expect(g.consider(input({ activity: { ...quiet, silence_ms: 1000 } }))).toMatchObject({ why: "no_pause" });
+    expect(g.consider(input({ activity: { ...quiet, silence_ms: 1600 } })).action).toBe("ask_now");
   });
 });
 

@@ -11,7 +11,8 @@ import {
 } from "@/lib/types";
 import type { EventBus } from "@/lib/perception/eventBus";
 import type { ActivityTracker } from "@/lib/perception/activity";
-import type { AskGate } from "@/lib/voice/askGate";
+import { COMPANION_STALE_MS, type AskGate, type CompanionActivity } from "@/lib/voice/askGate";
+import { redactScreenEvent } from "@/lib/perception/redactEvent";
 import { buildScreenEventTurn, describeEvent, describeObject, type AskKind } from "@/lib/voice/prompts";
 
 export const TICK_MS = 500;
@@ -66,6 +67,10 @@ export type CaptureControllerOptions = {
 
 type Pending = { event: ScreenEvent; decisions: Decisions; since: number };
 
+/** Activity and app messages from the desktop companion (counts only, see src/lib/companion/client.ts). */
+export type CompanionActivityIn = { typing: boolean; pointer: boolean; idle_ms: number };
+export type CompanionAppIn = { app: string; title: string };
+
 /** Paid calls the capture loop makes that can hit the workspace daily cap. */
 export type LimitedKind = "vision" | "decide";
 
@@ -98,6 +103,8 @@ export function createCaptureController(opts: CaptureControllerOptions) {
   let lastActivityPing = -Infinity;
   let capture: FrameCapture | null = null;
   let timer: ReturnType<typeof setInterval> | null = null;
+  // Last companion activity with its local receive time; null when absent or disconnected.
+  let companion: { typing: boolean; idle_ms: number; at: number } | null = null;
   let unsubscribe: (() => void) | null = null;
   // Once a kind hits its daily cap, the loop stops calling it for this session.
   const limited = new Set<LimitedKind>();
@@ -124,6 +131,29 @@ export function createCaptureController(opts: CaptureControllerOptions) {
     voice.noteUserActivity();
   }
 
+  /** Companion block for the gate; stale (> COMPANION_STALE_MS) or disconnected counts as absent. */
+  function companionBlock(): CompanionActivity | undefined {
+    if (!companion) return undefined;
+    const fresh = now() - companion.at <= COMPANION_STALE_MS;
+    return { typing: companion.typing, idle_ms: companion.idle_ms, fresh };
+  }
+
+  function gateActivity() {
+    const snap = activity.snapshot();
+    const c = companionBlock();
+    return {
+      typing: snap.typing,
+      speaking: snap.speaking,
+      silence_ms: snap.silence_ms,
+      ...(c ? { companion: c } : {}),
+    };
+  }
+
+  const companionTyping = () => {
+    const c = companionBlock();
+    return Boolean(c?.fresh && c.typing);
+  };
+
   function ask(event: ScreenEvent, kind: AskKind) {
     gate.markAsked(kind);
     if (open) closeOpen();
@@ -146,13 +176,12 @@ export function createCaptureController(opts: CaptureControllerOptions) {
 
   /** Runs the gate on one item; true when it is settled (asked, saved or dropped as routine). */
   function evaluate(item: Pending): boolean {
-    const snap = activity.snapshot();
     const d = gate.consider({
       event: item.event,
       eventClass: item.decisions.event_class,
       screenExplains: item.decisions.screen_explains_it,
       timing: item.decisions.ask_timing,
-      activity: { typing: snap.typing, speaking: snap.speaking, silence_ms: snap.silence_ms },
+      activity: gateActivity(),
       agentSpeaking: voice.isSpeaking(),
     });
     if (d.action === "ask_now") {
@@ -173,7 +202,7 @@ export function createCaptureController(opts: CaptureControllerOptions) {
 
   function tick() {
     if (offRecord) return;
-    if (activity.snapshot().typing) pingActivity();
+    if (activity.snapshot().typing || companionTyping()) pingActivity();
     if (!pending.length) return;
     const keep: Pending[] = [];
     let askedThisTick = false;
@@ -206,7 +235,7 @@ export function createCaptureController(opts: CaptureControllerOptions) {
       event,
       recent_events: seen.slice(-RECENT_EVENTS),
       silence_ms: snap.silence_ms,
-      typing: snap.typing,
+      typing: snap.typing || companionTyping(),
       speaking: snap.speaking || voice.isSpeaking(),
       questions_asked_last_10min: gate.stats().askedLast10Min,
     };
@@ -256,6 +285,8 @@ export function createCaptureController(opts: CaptureControllerOptions) {
     bus.setPaused(active);
     voice.setMuted(active);
     if (active) {
+      // Nothing companion-derived survives into the off-record range.
+      companion = null;
       capture?.pause();
       offFrom = getT();
       send("setOffRecord", () => api.setOffRecord({ from: offFrom }));
@@ -294,6 +325,28 @@ export function createCaptureController(opts: CaptureControllerOptions) {
     postEntry(speaker, text);
     if (open) closeOpen(text);
     changed();
+  }
+
+  /** Companion activity: holds questions while typing, idle_ms feeds the pause. Dropped off the record. */
+  function onCompanionActivity(a: CompanionActivityIn) {
+    if (offRecord) return;
+    companion = { typing: a.typing, idle_ms: a.idle_ms, at: now() };
+    if (a.typing) pingActivity();
+  }
+
+  /** Frontmost app or window change: stored as an os app_switched, redacted first. Dropped off the record. */
+  function onCompanionApp(a: CompanionAppIn) {
+    if (offRecord) return;
+    const app = a.app.trim();
+    if (!app) return;
+    const clean = redactScreenEvent({ app, window: a.title.trim() || undefined });
+    if (!clean.window) delete clean.window;
+    bus.publishOs({ type: "app_switched", entity: { kind: "app", id: clean.app ?? app }, ...clean });
+  }
+
+  /** The socket closed: companion activity counts as absent until the next message. */
+  function onCompanionDisconnected() {
+    companion = null;
   }
 
   async function onFrame(frame: FrameIn) {
@@ -341,6 +394,9 @@ export function createCaptureController(opts: CaptureControllerOptions) {
     tick,
     onTranscript,
     onFrame,
+    onCompanionActivity,
+    onCompanionApp,
+    onCompanionDisconnected,
     setOffRecord,
     setCapture(handle: FrameCapture | null) {
       capture = handle;

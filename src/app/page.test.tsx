@@ -21,6 +21,15 @@ describe("landing page", () => {
     expect(html).toContain("private workspaces");
   });
 
+  it("says it works on the apps you already use and never mentions the ERP sandbox", async () => {
+    const html = render();
+    expect(html).toContain("works on the apps you already use");
+    expect(html).not.toMatch(/ERP|sandbox/i);
+    const { default: ShellHeader } = await import("@/components/shell/ShellHeader");
+    const nav = renderToStaticMarkup(<ShellHeader user={null} />);
+    expect(nav).not.toMatch(/ERP|\/erp/);
+  });
+
   it("CTA reads 'Sign in' in supabase mode", () => {
     state.mode = "supabase";
     const html = render();

@@ -14,7 +14,7 @@ export function dailyLimitNotice(kinds: readonly string[]): string | null {
   const list = kinds.map((k) => WHAT[k] ?? k).join(" and ");
   const rest = kinds.includes("decide")
     ? "New steps are saved for the debrief instead of asked now."
-    : "Capture keeps recording what you do in the ERP.";
+    : "Capture keeps recording the events it sees on screen.";
   return `Daily limit reached for ${list} in this workspace (resets at midnight). ${rest}`;
 }
 

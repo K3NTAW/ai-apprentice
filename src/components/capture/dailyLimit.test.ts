@@ -43,7 +43,7 @@ function setup(api: Partial<CaptureApi>) {
   });
   c.start();
   const publish = (id: string) =>
-    bus.publishDom({ type: "field_changed", entity: { kind: "invoice", id }, field: "cost_center", from: "4711", to: "0400" });
+    bus.publishOs({ type: "field_changed", entity: { kind: "invoice", id }, field: "cost_center", from: "4711", to: "0400" });
   return { c, full, publish, onChange, onError };
 }
 

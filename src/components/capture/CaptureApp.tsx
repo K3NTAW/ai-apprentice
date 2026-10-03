@@ -1,13 +1,12 @@
 "use client";
 
-// Capture page (BUILD_SPEC Module 1): sandbox ERP on the left, side panel on the right.
-// Voice is optional: when it cannot start, the loop runs in text mode and questions show in the panel.
+// Capture page (pivot): a session console on the left watches the expert's real screen (any app);
+// the voice side panel stays on the right. The desktop companion, when paired, adds typing/pointer
+// activity and frontmost-app events. Voice is optional: when it cannot start, the loop runs in text mode and questions show in the panel.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import ErpSandbox from "@/components/erp/ErpSandbox";
 import { createActivityTracker } from "@/lib/perception/activity";
 import { startScreenCapture, type CaptureHandle } from "@/lib/perception/capture";
-import { emitDomEvent, onDomEvent } from "@/lib/perception/domEvents";
 import { createEventBus, type EventBus } from "@/lib/perception/eventBus";
 import { createAskGate } from "@/lib/voice/askGate";
 import { useVoiceAgent, VoiceProvider, type UseVoiceAgentOptions } from "@/lib/voice/useVoiceAgent";
@@ -19,6 +18,13 @@ import {
   type CaptureVoice,
 } from "@/lib/capture/controller";
 import { createCaptureSession, createHttpCaptureApi } from "@/lib/capture/httpApi";
+import {
+  createCompanionClient,
+  type CompanionClient,
+  type CompanionPermissions,
+  type CompanionStatus,
+} from "@/lib/companion/client";
+import CaptureConsole from "./CaptureConsole";
 import { dailyLimitNotice, voiceStartNotice } from "./dailyLimit";
 import SidePanel, { type PresenceStatus } from "./SidePanel";
 
@@ -90,6 +96,10 @@ function CaptureInner() {
   const loopRef = useRef<Loop | null>(null);
   const voiceModeRef = useRef(false);
   const captureRef = useRef<CaptureHandle | null>(null);
+  const companionRef = useRef<CompanionClient | null>(null);
+  const [companionStatus, setCompanionStatus] = useState<CompanionStatus>("not connected");
+  const [companionPerms, setCompanionPerms] = useState<CompanionPermissions | null>(null);
+  const [shareWarning, setShareWarning] = useState<string | null>(null);
 
   const clientTools = useMemo<NonNullable<UseVoiceAgentOptions["clientTools"]>>(
     () => ({
@@ -110,8 +120,28 @@ function CaptureInner() {
     agentRef.current = agent;
   });
 
-  // The ERP emits DOM events through domEvents; they reach the bus only while a session runs.
-  useEffect(() => onDomEvent((p) => loopRef.current?.bus.publishDom(p)), []);
+  // Desktop companion: optional. Its activity and app events reach the controller only while a session runs;
+  // the controller drops them while off the record.
+  useEffect(() => {
+    const client = createCompanionClient();
+    companionRef.current = client;
+    const offs = [
+      client.on("status", (s, perms) => {
+        setCompanionStatus(s);
+        setCompanionPerms(perms);
+        if (s !== "paired") loopRef.current?.ctrl.onCompanionDisconnected();
+      }),
+      client.on("activity", (a) => loopRef.current?.ctrl.onCompanionActivity(a)),
+      client.on("app", (a) => loopRef.current?.ctrl.onCompanionApp(a)),
+    ];
+    client.connect();
+    setCompanionStatus(client.status());
+    return () => {
+      for (const off of offs) off();
+      client.dispose();
+      companionRef.current = null;
+    };
+  }, []);
 
   useEffect(
     () => () => {
@@ -120,12 +150,6 @@ function CaptureInner() {
     },
     [],
   );
-
-  const onActivity = useCallback((kind: "keystroke" | "pointer") => {
-    const ctrl = loopRef.current?.ctrl;
-    if (kind === "keystroke") ctrl?.noteKeystroke();
-    else ctrl?.notePointer();
-  }, []);
 
   async function start() {
     if (starting || loopRef.current) return;
@@ -205,11 +229,15 @@ function CaptureInner() {
   async function toggleShare() {
     const loop = loopRef.current;
     if (!loop) return;
-    if (captureRef.current) {
-      captureRef.current.stop();
+    const clear = () => {
       captureRef.current = null;
       loop.ctrl.setCapture(null);
       setSharing(false);
+      setShareWarning(null);
+    };
+    if (captureRef.current) {
+      captureRef.current.stop();
+      clear();
       return;
     }
     try {
@@ -217,12 +245,23 @@ function CaptureInner() {
         getT: loop.getT,
         onFrame: (f) => void loop.ctrl.onFrame(f),
         onFrameChange: () => loop.activity.noteFrameChange(),
+        // Stopped from the browser's own "Stop sharing" bar.
+        onEnded: () => {
+          if (captureRef.current === handle) clear();
+        },
       });
       captureRef.current = handle;
       loop.ctrl.setCapture(handle);
       setSharing(true);
+      setShareWarning(
+        handle.displaySurface && handle.displaySurface !== "monitor"
+          ? "You shared a window or tab, not the whole screen. Capture only sees that part and halo placement will be off. Stop sharing and pick the entire screen."
+          : null,
+      );
     } catch (err) {
-      setNotice(`Screen share not started (${err instanceof Error ? err.message : String(err)}). DOM events still work.`);
+      setNotice(
+        `Screen share not started (${err instanceof Error ? err.message : String(err)}). Capture still works from speech and the desktop companion.`,
+      );
     }
   }
 
@@ -232,6 +271,8 @@ function CaptureInner() {
     loop.ctrl.stop();
     captureRef.current?.stop();
     captureRef.current = null;
+    setSharing(false);
+    setShareWarning(null);
     if (voiceModeRef.current) void agentRef.current.stop();
     router.push(`/debrief/${loop.sessionId}`);
   }
@@ -248,8 +289,30 @@ function CaptureInner() {
 
   return (
     <main className="flex h-screen bg-slate-100">
-      <div className="min-w-0 flex-1 overflow-auto p-3">
-        <ErpSandbox mode="capture" onEvent={emitDomEvent} onActivity={onActivity} />
+      <div className="min-w-0 flex-1 overflow-auto p-4">
+        <CaptureConsole
+          running={running}
+          starting={starting}
+          offRecord={view.offRecord}
+          sharing={sharing}
+          shareWarning={shareWarning}
+          expert={expert}
+          lastQuestion={view.lastQuestion}
+          asked={view.asked}
+          guardrailAsked={view.guardrailAsked}
+          savedForDebrief={view.debrief}
+          feed={view.feed}
+          companion={{
+            status: companionStatus,
+            permissions: companionPerms,
+            onPair: (code) => companionRef.current?.pair(code) ?? false,
+          }}
+          onExpertChange={setExpert}
+          onStart={() => void start()}
+          onEnd={endTask}
+          onTogglePause={togglePause}
+          onToggleShare={() => void toggleShare()}
+        />
       </div>
       <SidePanel
         status={status}
@@ -273,6 +336,7 @@ function CaptureInner() {
         onTogglePause={togglePause}
         onToggleShare={() => void toggleShare()}
         onAnswer={(text) => loopRef.current?.ctrl.onTranscript("expert", text)}
+        hideControls
       />
     </main>
   );

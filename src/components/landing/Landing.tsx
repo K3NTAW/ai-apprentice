@@ -2,7 +2,10 @@
 import Link from "next/link";
 
 export const STEPS = [
-  { title: "Capture", text: "The expert does real work while a quiet voice asks why, only at natural pauses." },
+  {
+    title: "Capture",
+    text: "Capture works on the apps you already use: the expert does real work while a quiet voice asks why, only at natural pauses.",
+  },
   { title: "Map", text: "Steps, reasons and guardrails become a Work Map the expert checks and confirms." },
   { title: "Teach", text: "The new hire works real cases while a tutor stops them where the expert would have stopped." },
 ] as const;

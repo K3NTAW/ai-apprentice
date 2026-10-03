@@ -11,6 +11,8 @@ export type CaptureOptions = {
   onFrame: (f: CapturedFrame) => void;
   getT: () => number;
   onFrameChange?: () => void;
+  /** The user stopped sharing from the browser UI (track 'ended'). */
+  onEnded?: () => void;
 };
 
 export type CaptureHandle = {
@@ -18,6 +20,8 @@ export type CaptureHandle = {
   pause(): void;
   resume(): void;
   stream: MediaStream;
+  /** What the user picked: 'monitor', 'window' or 'browser'; undefined when the browser does not say. */
+  displaySurface?: string;
 };
 
 const DIFF_WIDTH = 160;
@@ -28,11 +32,18 @@ export async function startScreenCapture({
   onFrame,
   getT,
   onFrameChange,
+  onEnded,
 }: CaptureOptions): Promise<CaptureHandle> {
   if (typeof window === "undefined" || !navigator.mediaDevices?.getDisplayMedia) {
     throw new Error("screen capture is only available in the browser");
   }
-  const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+  // Whole monitor: the companion halo and vision rects map to the primary display.
+  const stream = await navigator.mediaDevices.getDisplayMedia({
+    video: { displaySurface: "monitor" },
+    audio: false,
+  } as DisplayMediaStreamOptions);
+  const track = stream.getVideoTracks()[0];
+  const displaySurface = (track?.getSettings() as { displaySurface?: string } | undefined)?.displaySurface;
   const video = document.createElement("video");
   video.muted = true;
   video.playsInline = true;
@@ -79,9 +90,17 @@ export async function startScreenCapture({
     timer = null;
   };
 
+  let handle: CaptureHandle;
+  track?.addEventListener("ended", () => {
+    if (stopped) return;
+    handle.stop();
+    onEnded?.();
+  });
+
   start();
-  return {
+  handle = {
     stream,
+    displaySurface,
     pause: halt,
     resume: start,
     stop() {
@@ -91,4 +110,5 @@ export async function startScreenCapture({
       video.srcObject = null;
     },
   };
+  return handle;
 }
