@@ -102,7 +102,7 @@ async function writeSession(s: Session): Promise<void> {
   await rename(tmp, file);
 }
 
-function mutate(id: string, fn: (s: Session) => void): Promise<Session> {
+async function mutate(id: string, fn: (s: Session) => void): Promise<Session> {
   assertId(id);
   return enqueue(id, async () => {
     const s = await readSession(id);
