@@ -3,7 +3,7 @@
 const BASE = "http://internal.invalid";
 const BLOCKED_FIRST_SEGMENTS = new Set(["login", "auth"]);
 
-export function safeNext(input: unknown, fallback = "/capture"): string {
+export function safeNext(input: unknown, fallback = "/dashboard"): string {
   if (typeof input !== "string") return fallback;
   if (input.length < 1 || input.length > 2048) return fallback;
   if (input[0] !== "/" || input[1] === "/" || input[1] === "\\") return fallback;

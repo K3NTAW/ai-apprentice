@@ -1,94 +1,24 @@
-"use client";
+// Work Map for one session. The Learners section is loaded here on the server through the request context.
+import MapDetail from "@/components/map/MapDetail";
+import { getRequestContext } from "@/lib/auth/context";
+import { loadDashboardInput } from "@/lib/dashboard/load";
+import { workmapLearners, type MasteryRow } from "@/lib/dashboard/summary";
 
-// Work Map for one session: build it if missing, view it, export guardrails, open in Teach.
-import Link from "next/link";
-import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
-import WorkMapView from "@/components/workmap/WorkMapView";
-import type { Session, WorkMap } from "@/lib/types";
+export const dynamic = "force-dynamic";
 
-export default function MapPage() {
-  const { id } = useParams<{ id: string }>();
-  const [session, setSession] = useState<Session | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [building, setBuilding] = useState(false);
+async function learners(id: string): Promise<MasteryRow[] | null> {
+  const result = await getRequestContext();
+  if (result.kind !== "ok") return null;
+  try {
+    const input = await loadDashboardInput(result.ctx);
+    return workmapLearners(id, input.sessions, input.members, input.createdBy);
+  } catch (err) {
+    console.error("map learners:", err instanceof Error ? err.message : String(err));
+    return null;
+  }
+}
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch(`/api/session/${encodeURIComponent(id)}`, { cache: "no-store" });
-        if (!res.ok) throw new Error(res.status === 404 ? "Session not found." : `GET session ${res.status}`);
-        const s = (await res.json()) as Session;
-        if (!cancelled) setSession(s);
-      } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [id]);
-
-  const build = async () => {
-    setBuilding(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/workmap", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ session_id: id }),
-      });
-      if (!res.ok) throw new Error(`POST /api/workmap ${res.status}`);
-      const { workmap } = (await res.json()) as { workmap: WorkMap };
-      setSession((s) => (s ? { ...s, workmap } : s));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBuilding(false);
-    }
-  };
-
-  return (
-    <main className="flex flex-col gap-4 p-8">
-      <Link className="text-sm underline" href="/map">
-        All Work Maps
-      </Link>
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      {!session && !error && <p className="text-sm text-slate-400">Loading…</p>}
-      {session && !session.workmap && (
-        <div className="flex flex-col items-start gap-2">
-          <p className="text-sm text-slate-600">This session has no Work Map yet.</p>
-          <button
-            type="button"
-            onClick={build}
-            disabled={building}
-            className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
-          >
-            {building ? "Building…" : "Build Work Map"}
-          </button>
-        </div>
-      )}
-      {session?.workmap && (
-        <>
-          <div className="flex gap-2">
-            <a
-              className="rounded border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50"
-              href={`/api/export?session_id=${encodeURIComponent(session.id)}`}
-              download={`guardrails-${session.id}.md`}
-            >
-              Export guardrails (.md)
-            </a>
-            <Link
-              className="rounded border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50"
-              href={`/teach?session=${encodeURIComponent(session.id)}`}
-            >
-              Open in Teach
-            </Link>
-          </div>
-          <WorkMapView sessionId={session.id} workmap={session.workmap} />
-        </>
-      )}
-    </main>
-  );
+export default async function MapPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  return <MapDetail id={id} learners={await learners(id)} />;
 }

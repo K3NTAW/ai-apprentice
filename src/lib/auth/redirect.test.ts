@@ -49,7 +49,7 @@ describe("safeNext", () => {
   ];
   for (const input of bad) {
     it(`rejects ${typeof input === "string" ? JSON.stringify(input.slice(0, 40)) : String(input)}`, () => {
-      expect(safeNext(input)).toBe("/capture");
+      expect(safeNext(input)).toBe("/dashboard");
     });
   }
 

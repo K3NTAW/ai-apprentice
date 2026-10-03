@@ -84,9 +84,9 @@ beforeEach(() => {
 });
 
 describe("GET /auth/callback", () => {
-  it("local mode redirects to /capture without Supabase", async () => {
+  it("local mode redirects to /dashboard without Supabase", async () => {
     state.mode = "local";
-    expect(location(await call("?code=abc&next=/teach")).path).toBe("/capture");
+    expect(location(await call("?code=abc&next=/teach")).path).toBe("/dashboard");
     expect(createServerClient).not.toHaveBeenCalled();
   });
 
@@ -132,11 +132,11 @@ describe("GET /auth/callback", () => {
     expect(setCookie(res)).toContain("sb-test-auth-token=session");
   });
 
-  it("an unsafe next goes to /capture", async () => {
+  it("an unsafe next goes to /dashboard", async () => {
     for (const next of ["//evil.com", "https://evil.com", "/login", "/auth/callback"]) {
-      expect(location(await call(`?code=abc&next=${encodeURIComponent(next)}`)).path).toBe("/capture");
+      expect(location(await call(`?code=abc&next=${encodeURIComponent(next)}`)).path).toBe("/dashboard");
     }
-    expect(location(await call("?code=abc")).path).toBe("/capture");
+    expect(location(await call("?code=abc")).path).toBe("/dashboard");
   });
 
   it("sets ws to the lowest new workspace when bootstrap adds memberships", async () => {

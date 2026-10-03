@@ -17,7 +17,7 @@ export async function GET(request: NextRequest): Promise<Response> {
   const fail = (code: LoginErrorCode) => redirectTo(`/login?error=${code}`);
 
   const mode = appMode();
-  if (mode === "local") return redirectTo("/capture");
+  if (mode === "local") return redirectTo("/dashboard");
   const env = mode === "supabase" ? publicSupabaseEnv() : null;
   if (!env) return fail("workspace_setup_failed");
 

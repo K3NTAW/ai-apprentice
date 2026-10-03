@@ -3,6 +3,7 @@ import Link from "next/link";
 import type { Role } from "@/lib/auth/context";
 
 export const NAV_LINKS = [
+  { href: "/dashboard", label: "Dashboard" },
   { href: "/capture", label: "Capture" },
   { href: "/map", label: "Work Maps" },
   { href: "/teach", label: "Teach" },

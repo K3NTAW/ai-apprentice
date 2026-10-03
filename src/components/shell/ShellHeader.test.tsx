@@ -6,10 +6,11 @@ const render = (user: ShellUser | null) => renderToStaticMarkup(<ShellHeader use
 const base: ShellUser = { mode: "supabase", workspaceName: "Acme AP", email: "lena@example.com", role: "owner" };
 
 describe("ShellHeader", () => {
-  it("shows the four nav links for every role and when the context is missing", () => {
+  it("shows the nav links, Dashboard first, for every role and when the context is missing", () => {
     for (const user of [base, { ...base, role: "learner" as const }, { ...base, mode: "local" as const }, null]) {
       const html = render(user);
       for (const [href, label] of [
+        ["/dashboard", "Dashboard"],
         ["/capture", "Capture"],
         ["/map", "Work Maps"],
         ["/teach", "Teach"],
@@ -18,6 +19,7 @@ describe("ShellHeader", () => {
         expect(html).toContain(`href="${href}"`);
         expect(html).toContain(`>${label}</a>`);
       }
+      expect(html.indexOf('href="/dashboard"')).toBeLessThan(html.indexOf('href="/capture"'));
     }
   });
 
