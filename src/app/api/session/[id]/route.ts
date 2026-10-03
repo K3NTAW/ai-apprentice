@@ -1,10 +1,10 @@
-import { getSession } from "@/lib/store";
-import { handle, notFound, type IdContext } from "../_http";
+import { notFound, withApi, type IdContext } from "../_http";
 
+// Any member reads any session of the active workspace.
 export async function GET(_req: Request, ctx: IdContext) {
-  return handle(async () => {
+  return withApi(async ({ store }) => {
     const { id } = await ctx.params;
-    const s = await getSession(id);
+    const s = await store.getSession(id);
     return s ? Response.json(s) : notFound();
   });
 }

@@ -1,9 +1,13 @@
 import { z } from "zod";
 import { redactTextAsync } from "@/lib/redact";
+import { requireContext } from "@/lib/auth/context";
 
 const Body = z.object({ text: z.string() });
 
 export async function POST(req: Request) {
+  // Signed-in member of a workspace only (401 signed out, 503 misconfigured).
+  const ctx = await requireContext();
+  if (ctx instanceof Response) return ctx;
   let json: unknown;
   try {
     json = await req.json();

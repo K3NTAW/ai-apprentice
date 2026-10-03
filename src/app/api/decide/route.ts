@@ -1,5 +1,6 @@
 import { decideMany } from "@/lib/decide";
 import { DECISION_QUESTIONS, type DecisionQuestionName } from "@/lib/types";
+import { requireContext } from "@/lib/auth/context";
 
 export const runtime = "nodejs";
 
@@ -8,6 +9,9 @@ function isQuestion(q: unknown): q is DecisionQuestionName {
 }
 
 export async function POST(req: Request): Promise<Response> {
+  // Signed-in member of a workspace only (401 signed out, 503 misconfigured).
+  const ctx = await requireContext();
+  if (ctx instanceof Response) return ctx;
   let body: { question?: unknown; questions?: unknown; state?: unknown };
   try {
     body = await req.json();

@@ -1,3 +1,5 @@
+import { requireContext } from "@/lib/auth/context";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -13,6 +15,9 @@ function isRole(r: string | null): r is Role {
 }
 
 export async function GET(req: Request): Promise<Response> {
+  // Signed-in member of a workspace only (401 signed out, 503 misconfigured).
+  const ctx = await requireContext();
+  if (ctx instanceof Response) return ctx;
   const role = new URL(req.url).searchParams.get("role");
   if (!isRole(role)) {
     return Response.json({ error: "unknown_role", allowed: Object.keys(AGENT_ENV) }, { status: 400 });

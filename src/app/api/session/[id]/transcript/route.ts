@@ -1,7 +1,6 @@
 import { z } from "zod";
-import { appendTranscript } from "@/lib/store";
 import { TranscriptEntrySchema } from "@/lib/types";
-import { handle, parseBody, type IdContext } from "../../_http";
+import { parseBody, requireCreatorOrOwner, withApi, type IdContext } from "../../_http";
 
 // The store sets redacted itself, so clients may omit it.
 const Body = z.object({
@@ -9,11 +8,13 @@ const Body = z.object({
 });
 
 export async function POST(req: Request, ctx: IdContext) {
-  return handle(async () => {
+  return withApi(async (api) => {
     const { id } = await ctx.params;
+    const denied = await requireCreatorOrOwner(api, id);
+    if (denied) return denied;
     const body = await parseBody(req, Body);
     if (!body.ok) return body.res;
-    const s = await appendTranscript(id, body.data.entries);
+    const s = await api.store.appendTranscript(id, body.data.entries);
     return Response.json({ ok: true, transcript: s.transcript.length });
   });
 }

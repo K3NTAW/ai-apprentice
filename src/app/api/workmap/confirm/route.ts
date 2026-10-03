@@ -1,18 +1,20 @@
 import { z } from "zod";
 import { redactText } from "@/lib/redact";
-import { getSession, saveWorkMap } from "@/lib/store";
-import { handle, notFound, parseBody } from "../../session/_http";
+import { notFound, parseBody, requireCreatorOrOwner, withApi } from "../../session/_http";
 
 export const runtime = "nodejs";
 
 const Body = z.object({ session_id: z.string(), confirmed: z.boolean(), correction: z.string().optional() });
 
 export function POST(req: Request): Promise<Response> {
-  return handle(async () => {
+  return withApi(async (api) => {
     const body = await parseBody(req, Body);
     if (!body.ok) return body.res;
     const { session_id, confirmed } = body.data;
-    const session = await getSession(session_id);
+    // Session creator or a workspace owner.
+    const denied = await requireCreatorOrOwner(api, session_id);
+    if (denied) return denied;
+    const session = await api.store.getSession(session_id);
     if (!session) return notFound(`session not found: ${session_id}`);
     if (!session.workmap) return Response.json({ error: "no work map yet" }, { status: 409 });
     const first = session.expert?.trim().split(/\s+/)[0];
@@ -25,7 +27,7 @@ export function POST(req: Request): Promise<Response> {
     } else {
       workmap.confirmed_by_expert = confirmed;
     }
-    await saveWorkMap(session_id, workmap);
+    await api.store.saveWorkMap(session_id, workmap);
     return Response.json({ workmap });
   });
 }

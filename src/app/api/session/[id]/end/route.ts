@@ -1,9 +1,10 @@
-import { endSession } from "@/lib/store";
-import { handle, type IdContext } from "../../_http";
+import { requireCreatorOrOwner, withApi, type IdContext } from "../../_http";
 
 export async function POST(_req: Request, ctx: IdContext) {
-  return handle(async () => {
+  return withApi(async (api) => {
     const { id } = await ctx.params;
-    return Response.json(await endSession(id));
+    const denied = await requireCreatorOrOwner(api, id);
+    if (denied) return denied;
+    return Response.json(await api.store.endSession(id));
   });
 }
