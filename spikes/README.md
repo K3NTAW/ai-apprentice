@@ -1,10 +1,52 @@
 # Spikes (BUILD_SPEC section 11, hours 0-2)
 
-Throwaway scripts. Plain `.mjs`, Node 26 built-ins only (global `fetch`, `process.loadEnvFile`), no npm dependencies.
+Throwaway scripts. Plain `.mjs`, Node 26 built-ins only (global `fetch`, `WebSocket`, `process.loadEnvFile`), no npm dependencies.
 
 Each script loads `../.env.local` (repo root) if it exists. Set `SPIKE_ENV_FILE=/path/to/.env.local` to load a different file. Keys are never printed.
 
 Exit codes: `0` PASS, `1` FAIL (with reason), `2` SKIP (key missing).
+
+## a: ElevenLabs agent replies after an injected screen event
+
+Checks whether the interviewer agent can be pushed into speaking by a screen event over the raw Conversational AI WebSocket in text-only mode (risk table section 15).
+
+```sh
+node spikes/a-elevenlabs.mjs           # text only (conversation.text_only override)
+node spikes/a-elevenlabs.mjs --voice   # no text_only override; audio chunks are counted, not played
+```
+
+Needs `ELEVENLABS_API_KEY` and `ELEVENLABS_AGENT_ID_INTERVIEWER`. The script gets a signed URL via `GET /v1/convai/conversation/get-signed-url` (`xi-api-key` header). On a 4xx it falls back to the public agent URL `wss://api.elevenlabs.io/v1/convai/conversation?agent_id=...`. It never prints the key or the signed URL.
+
+Flow:
+
+1. Send `conversation_initiation_client_data` with `{"conversation":{"text_only":true}}` and wait up to 10 s for `conversation_initiation_metadata`. If the agent has a first message, log it.
+2. Phase A: send `contextual_update` (`[SCREEN_EVENT] cost center of invoice 4471 changed ...`) and wait 6 s. The docs say this does not trigger a reply.
+3. Phase B: send `user_message` (`[SCREEN_EVENT] The expert just changed ... Ask one short question about why.`) and wait up to 15 s for `agent_response`. Record the latency.
+4. Close and print the verdict block.
+
+The whole time, each `ping` gets a `pong` with the same `event_id`, and each `client_tool_call` gets a `client_tool_result` of `ok`.
+
+Dashboard prerequisites:
+
+- Create the interviewer agent in the ElevenLabs Agents dashboard and put its id in `ELEVENLABS_AGENT_ID_INTERVIEWER`.
+- If the server rejects `text_only` (the script prints the close code and reason), go to the agent's Security tab, enable overrides (text only / conversation overrides) and run it again.
+- A private agent needs the API key for the signed URL. Without a signed URL the agent has to be public.
+
+PASS means phase B produced an `agent_response` that mentions the invoice, the cost center or capex (case-insensitive). FAIL prints the reason, including the server close code and reason when there is one. Verdict block:
+
+```
+--- verdict ---
+mode: text_only
+contextual_update_alone_triggers_reply: no
+user_message_triggers_reply: yes
+latency_ms: 840
+reply: "Why did you move invoice 4471 to capex?"
+PASS: phase B reply mentions the invoice, the cost center or capex
+```
+
+Mitigation (section 15): the synthetic user turn (phase B) IS the mechanism the app will use to make the agent speak after a screen event. `contextual_update` only adds background context.
+
+Deviations from the scout T-0003 facts: none observed yet (not run with real keys).
 
 ## b: Jev decide() call
 
@@ -65,6 +107,6 @@ Fixture: `fixtures/invoice.html` (fake invoice 4471, Hydrotek Maschinen GmbH, EU
 
 | spike | date | result | notes |
 |---|---|---|---|
-| a | | not run yet | |
+| a | | not run yet | no .env.local in worktree on 2026-10-03; SKIP path verified only |
 | b | | not run yet | no .env.local at main checkout on 2026-10-03; SKIP path verified only |
 | c | | not run yet | no .env.local at main checkout on 2026-10-03; SKIP path verified only |
