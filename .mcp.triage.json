@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "bus": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--project",
+        "/Users/k3ntaw/code/orchestrator",
+        "python",
+        "-m",
+        "orchestrator.bus_mcp"
+      ],
+      "env": {
+        "ORCH_ROOT": "/Users/k3ntaw/code/ai-apprentice"
+      }
+    }
+  }
+}

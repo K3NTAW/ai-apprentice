@@ -1,0 +1,41 @@
+{
+  "mcpServers": {
+    "orchestrator": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--project",
+        "/Users/k3ntaw/code/orchestrator",
+        "python",
+        "-m",
+        "orchestrator.mcp"
+      ],
+      "env": {
+        "ORCH_ROOT": "/Users/k3ntaw/code/ai-apprentice"
+      }
+    },
+    "bus": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--project",
+        "/Users/k3ntaw/code/orchestrator",
+        "python",
+        "-m",
+        "orchestrator.bus_mcp"
+      ],
+      "env": {
+        "ORCH_ROOT": "/Users/k3ntaw/code/ai-apprentice"
+      }
+    },
+    "github": {
+      "command": "github-mcp-server",
+      "args": [
+        "stdio"
+      ],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GH_WRITE_TOKEN}"
+      }
+    }
+  }
+}
