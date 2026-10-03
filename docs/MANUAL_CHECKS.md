@@ -51,3 +51,18 @@ Run `npm run dev` with at least one finished capture session under `data/session
 - [ ] Two score bars (reason captured, guardrail captured): green at or above 75%, amber below, with a threshold tick.
 - [ ] Open questions are listed at the bottom.
 - [ ] "Export guardrails (.md)" downloads the markdown from `/api/export?session_id=<id>`. "Open in Teach" goes to `/teach?session=<id>`.
+
+## Debrief
+
+Run `npm run dev` with a finished capture session. End task on `/capture` goes to `/debrief/<id>`, or open it directly. Voice needs the Voice setup above; "Text mode" (or a voice failure) shows each question on screen with an answer input.
+
+- [ ] Start debrief: the Work Map builds, then one question at a time appears. The header shows "Follow-up n of at least 3".
+- [ ] At least 3 follow-ups are asked, none of them a question already asked live during capture (compare with the capture-phase `qa` in `session.json`). Each names the on-screen object.
+- [ ] Each answer lands in `session.json` as a QA pair with `phase: "debrief"`, and the map is rebuilt after it.
+- [ ] Scores rise: the per-step reason and guardrail bars grow after answers (green "+n" deltas, round counter goes up), with a threshold line at 75%.
+- [ ] The debrief states why it ended: "All steps are above the threshold." or "Question budget reached." (at most 6 questions).
+- [ ] Teach-back: the text is shown (and spoken in voice mode) with a "~N s spoken" badge, which reads under 60 s.
+- [ ] "Yes, that is how it works" and "Not quite" are visible in both voice and text mode.
+- [ ] Judge corrects one detail: "Not quite", type the correction, Send correction. The map is rebuilt, the correction is in `qa` (phase debrief) and in the map's open questions, and a revised teach-back is shown for a second confirm.
+- [ ] Confirm: "Yes, that is how it works" sets `workmap.confirmed_by_expert: true` in `session.json`. The Work Map and a link to `/map/<id>` appear; `/map` shows the session as confirmed.
+- [ ] With voice, saying "yes" or a correction after the teach-back triggers the agent's `confirm_teach_back` tool with the same result.
