@@ -38,6 +38,9 @@ Supabase dashboard, Authentication:
   `/auth/verify`); the browser accepts both. Example body:
   `<p>Your sign-in code: {{ .Token }}</p><p><a href="{{ .ConfirmationURL }}">Or sign in with this link</a></p>`.
   The code length follows Auth settings, Email OTP length (default 6); the login form accepts 6 to 10 digits.
+  When the project uses another length, set `SUPABASE_OTP_LENGTH` (server env, 6 to 10) to the same value:
+  /auth/verify accepts exactly that many digits. /auth/verify also allows at most 10 attempts per email and 30
+  per IP in 10 minutes (per server instance), then answers 429.
 
 `<domain>` is the production domain on Vercel (custom domain or `<project>.vercel.app`).
 

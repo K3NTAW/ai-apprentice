@@ -1,9 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { bindCaptureTransport, captureCompanionSink } from "@/lib/capture/companionWiring";
 import { bindTeachTransport, stopPointSink } from "@/lib/teach/companionBridge";
 import type { CompanionListeners, KeyValueStore } from "./client";
-import { createStepAside } from "./stepAside";
+import { createShareFlow, createStepAside } from "./stepAside";
 import {
+  BRIDGE_STATUS_TIMEOUT_MS,
   createBridgeTransport,
   createNoneTransport,
   selectTransport,
@@ -124,8 +125,9 @@ describe("bridge transport", () => {
     t.on("chord", chords);
     expect(t.buddySay("before connect")).toBe(false);
     t.connect();
-    expect(status).toHaveBeenLastCalledWith("paired", null);
+    expect(status).toHaveBeenLastCalledWith("connecting", null);
     b.emit("status", { version: "1.0.0", permissions: { input: true, screen: false, accessibility: true } });
+    expect(status).toHaveBeenLastCalledWith("paired", { input: true, screen: false, accessibility: true });
     expect(t.status()).toEqual({ kind: "bridge", status: "paired", permissions: { input: true, screen: false, accessibility: true } });
     b.emit("chord", { t: 1, chord: "Cmd+Shift+T", app: "Excel" });
     b.emit("chord", { t: 1, chord: "a", app: "Excel" }); // plain typing is dropped
@@ -149,6 +151,7 @@ describe("bridge transport", () => {
     const b = fakeBridge();
     const t = createBridgeTransport(b.bridge);
     t.connect();
+    b.emit("status", { version: "1.0.0", permissions: { input: true, screen: true, accessibility: true } });
     t.dockShow();
     t.dispose();
     t.dispose();
@@ -157,6 +160,59 @@ describe("bridge transport", () => {
     expect(b.sent.filter((m) => (m as { type: string }).type === "dock.hide")).toHaveLength(1);
     expect(t.status().status).toBe("not connected");
     expect(t.buddyState("idle")).toBe(false);
+  });
+});
+
+describe("bridge status honesty (fix round T-0123)", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+  const perms = { input: true, screen: true, accessibility: true };
+
+  it("is 'connecting' with permissions unknown until the first status event, then paired", () => {
+    vi.useFakeTimers();
+    const b = fakeBridge();
+    const t = createBridgeTransport(b.bridge);
+    const status = vi.fn();
+    t.on("status", status);
+    t.connect();
+    expect(t.status()).toEqual({ kind: "bridge", status: "connecting", permissions: null });
+    expect(t.buddySay("too early")).toBe(false);
+    b.emit("chord", { t: 1, chord: "Cmd+Shift+T", app: "Excel" }); // nothing but status counts yet
+    vi.advanceTimersByTime(BRIDGE_STATUS_TIMEOUT_MS - 1);
+    expect(t.status().status).toBe("connecting");
+    b.emit("status", { version: "1.0.0", permissions: perms });
+    expect(t.status()).toEqual({ kind: "bridge", status: "paired", permissions: perms });
+    vi.advanceTimersByTime(10_000);
+    expect(t.status().status).toBe("paired");
+    expect(status.mock.calls.map(([s]) => s)).toEqual(["connecting", "paired"]);
+    expect(t.buddySay("hi")).toBe(true);
+  });
+
+  it("'App not responding' after 3 s without a status event; a late event still pairs", () => {
+    vi.useFakeTimers();
+    const b = fakeBridge();
+    const t = createBridgeTransport(b.bridge);
+    const status = vi.fn();
+    t.on("status", status);
+    t.connect();
+    vi.advanceTimersByTime(BRIDGE_STATUS_TIMEOUT_MS);
+    expect(t.status()).toEqual({ kind: "bridge", status: "not responding", permissions: null });
+    expect(status).toHaveBeenLastCalledWith("not responding", null);
+    b.emit("status", { version: "1.0.0", permissions: perms });
+    expect(t.status().status).toBe("paired");
+  });
+
+  it("dispose before the timeout stops the timer", () => {
+    vi.useFakeTimers();
+    const b = fakeBridge();
+    const t = createBridgeTransport(b.bridge);
+    const status = vi.fn();
+    t.on("status", status);
+    t.connect();
+    t.dispose();
+    vi.advanceTimersByTime(BRIDGE_STATUS_TIMEOUT_MS * 2);
+    expect(status.mock.calls.map(([s]) => s)).toEqual(["connecting", "not connected"]);
   });
 });
 
@@ -246,11 +302,44 @@ describe("step aside and restore", () => {
     expect(log).toEqual(["getDisplayMedia", "window:step-aside", "window:restore"]);
   });
 
-  it("a rejected getDisplayMedia never steps aside and restore stays a no-op", async () => {
+  it("a rejected getDisplayMedia never steps aside; restore sends one restore, then is a no-op", async () => {
     const { log, sa } = order();
     await expect(sa.share(async () => Promise.reject(new Error("denied")))).rejects.toThrow("denied");
+    expect(sa.restore()).toBe(true);
+    expect(sa.restore()).toBe(false);
+    expect(log).toEqual(["window:restore"]);
+  });
+
+  it("restore while the share is pending cancels the later step-aside", async () => {
+    const { log, sa } = order();
+    let resolve!: (v: string) => void;
+    const p = sa.share(() => new Promise<string>((r) => (resolve = r)));
+    expect(sa.restore()).toBe(true);
+    resolve("h");
+    await p;
+    expect(sa.isAside()).toBe(false);
+    expect(sa.restore()).toBe(false);
+    expect(log).toEqual(["window:restore"]);
+  });
+
+  it("stepAside false (voice did not start) shares without stepping aside or restoring", async () => {
+    const { log, sa } = order();
+    await sa.share(async () => "h", { stepAside: false });
     expect(sa.restore()).toBe(false);
     expect(log).toEqual([]);
+  });
+
+  it("the share flow stops a handle that arrives after stop()", async () => {
+    const { log, f } = order();
+    const flow = createShareFlow<{ stop(): void }>(() => f.t);
+    const stop = vi.fn();
+    let resolve!: (v: { stop(): void }) => void;
+    const p = flow.start(() => new Promise((r) => (resolve = r)));
+    flow.stop();
+    resolve({ stop });
+    expect(await p).toBeNull();
+    expect(stop).toHaveBeenCalledTimes(1);
+    expect(log).toEqual(["window:restore"]);
   });
 
   it.each(["finish", "error", "stream ended", "unmount"])("restore on %s after a share", async () => {

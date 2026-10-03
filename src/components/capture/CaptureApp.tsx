@@ -4,7 +4,8 @@
 // the voice side panel stays on the right. The desktop companion, when paired, adds typing/pointer
 // activity and frontmost-app events, mirrors the session on its buddy and panel, and its shortcuts drive
 // the controls. One-app D2: the companion is a transport (desktop app bridge, opt-in WebSocket or none); in the
-// app Start also shares the screen without a picker and the window steps aside until End. Voice is optional: when it cannot start, the loop runs in text mode and questions show in the panel.
+// app Start also shares the screen without a picker and the window steps aside until End. Start order: the voice
+// agent first (mic prompt, start error visible), then the share, then the step-aside only when voice runs. Voice is optional: when it cannot start, the loop runs in text mode and questions show in the panel.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createActivityTracker } from "@/lib/perception/activity";
@@ -25,7 +26,7 @@ import { buildSessionAgent } from "@/lib/companion/agentState";
 import { SHORTCUT_LEARNING } from "@/lib/companion/chord";
 import type { CompanionPermissions, CompanionStatus, ShortcutAction } from "@/lib/companion/client";
 import { selectTransport, type CompanionTransport, type TransportHost } from "@/lib/companion/transport";
-import { createStepAside } from "@/lib/companion/stepAside";
+import { createShareFlow, startVoiceThenShare } from "@/lib/companion/stepAside";
 import { bindCaptureTransport, captureCompanionSink } from "@/lib/capture/companionWiring";
 import { routeShortcut } from "@/lib/companion/shortcuts";
 import AgentHeader from "@/components/agents/AgentHeader";
@@ -114,9 +115,8 @@ function CaptureInner({ agentParam, transport }: { agentParam: string | null; tr
   const [view, setView] = useState<View>(EMPTY);
   const loopRef = useRef<Loop | null>(null);
   const voiceModeRef = useRef(false);
-  const captureRef = useRef<CaptureHandle | null>(null);
   const companionRef = useRef<CompanionTransport | null>(null);
-  const stepAsideRef = useRef(createStepAside(() => companionRef.current));
+  const shareRef = useRef(createShareFlow<CaptureHandle>(() => companionRef.current));
   const [host, setHost] = useState<TransportHost>("detecting");
   const shortcutRef = useRef<(a: ShortcutAction) => void>(() => {});
   const [companionStatus, setCompanionStatus] = useState<CompanionStatus>("not connected");
@@ -148,7 +148,7 @@ function CaptureInner({ agentParam, transport }: { agentParam: string | null; tr
   useEffect(() => {
     const t = transport ?? selectTransport();
     companionRef.current = t;
-    const stepAside = stepAsideRef.current;
+    const share = shareRef.current;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- the transport is picked on the client only ("detecting" before).
     setHost(t.kind);
     const off = bindCaptureTransport(t, {
@@ -161,7 +161,7 @@ function CaptureInner({ agentParam, transport }: { agentParam: string | null; tr
     });
     t.connect();
     return () => {
-      stepAside.restore();
+      share.stop();
       off();
       t.dispose();
       companionRef.current = null;
@@ -172,13 +172,13 @@ function CaptureInner({ agentParam, transport }: { agentParam: string | null; tr
     loopRef.current?.ctrl.setAgent({ status: textMode ? null : agent.status, mode: textMode ? null : agentMode });
   }, [agent.status, agentMode, textMode, running]);
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    const share = shareRef.current;
+    return () => {
       loopRef.current?.ctrl.stop();
-      captureRef.current?.stop();
-    },
-    [],
-  );
+      share.stop();
+    };
+  }, []);
 
   async function start() {
     if (starting || loopRef.current) return;
@@ -250,23 +250,31 @@ function CaptureInner({ agentParam, transport }: { agentParam: string | null; tr
     loopRef.current = { ctrl, bus, activity, getT, sessionId, startedAt: t0 };
     ctrl.start();
     setRunning(true);
-    // In the desktop app the screen share is part of Start: no picker, then the window steps aside.
-    if (companionRef.current?.kind === "bridge") void toggleShare();
 
-    try {
-      await agentRef.current.start({ dynamicVariables: { expert: name } });
-      voiceModeRef.current = true;
-      setTextMode(false);
-    } catch (err) {
-      voiceModeRef.current = false;
-      setTextMode(true);
-      setNotice(
-        voiceStartNotice(
-          err instanceof Error ? err.message : String(err),
-          "Text mode: questions appear here, type your answers below.",
-        ),
-      );
-    }
+    // Voice first, so the mic prompt or a start error shows; in the desktop app the screen share is part of Start
+    // (no picker) and the window steps aside only when voice runs.
+    await startVoiceThenShare({
+      startVoice: async () => {
+        try {
+          await agentRef.current.start({ dynamicVariables: { expert: name } });
+          voiceModeRef.current = true;
+          setTextMode(false);
+          return true;
+        } catch (err) {
+          voiceModeRef.current = false;
+          setTextMode(true);
+          setNotice(
+            voiceStartNotice(
+              err instanceof Error ? err.message : String(err),
+              "Text mode: questions appear here, type your answers below.",
+            ),
+          );
+          return false;
+        }
+      },
+      inApp: companionRef.current?.kind === "bridge",
+      share: (stepAside) => toggleShare(stepAside),
+    });
     setStarting(false);
   }
 
@@ -275,38 +283,34 @@ function CaptureInner({ agentParam, transport }: { agentParam: string | null; tr
     if (ctrl) ctrl.setOffRecord(!ctrl.isOffRecord());
   }
 
-  async function toggleShare() {
+  async function toggleShare(stepAside = true) {
     const loop = loopRef.current;
     if (!loop) return;
+    const share = shareRef.current;
     const clear = () => {
-      captureRef.current = null;
       loop.ctrl.setCapture(null);
       setSharing(false);
       setShareWarning(null);
-      stepAsideRef.current.restore();
     };
-    if (captureRef.current) {
-      captureRef.current.stop();
+    if (share.handle()) {
+      share.stop();
       clear();
       return;
     }
     try {
-      const handle = await stepAsideRef.current.share(() => startScreenCapture({
-        getT: loop.getT,
-        onFrame: (f) => void loop.ctrl.onFrame(f),
-        onFrameChange: () => loop.activity.noteFrameChange(),
-        // Stopped from the browser's own "Stop sharing" bar.
-        onEnded: () => {
-          if (captureRef.current === handle) clear();
-        },
-      }));
-      if (loopRef.current !== loop) {
-        // Ended while getDisplayMedia was pending.
-        handle.stop();
-        stepAsideRef.current.restore();
-        return;
-      }
-      captureRef.current = handle;
+      const handle = await share.start(
+        (onEnded) =>
+          startScreenCapture({
+            getT: loop.getT,
+            onFrame: (f) => void loop.ctrl.onFrame(f),
+            onFrameChange: () => loop.activity.noteFrameChange(),
+            // Stopped from the browser's own "Stop sharing" bar (or the app's stream ended): the flow restores.
+            onEnded,
+          }),
+        { stepAside, onEnded: clear },
+      );
+      // Ended while getDisplayMedia was pending: the flow stopped the late handle and restored the window.
+      if (!handle) return;
       loop.ctrl.setCapture(handle);
       setSharing(true);
       setShareWarning(
@@ -315,7 +319,6 @@ function CaptureInner({ agentParam, transport }: { agentParam: string | null; tr
           : null,
       );
     } catch (err) {
-      stepAsideRef.current.restore();
       setNotice(
         `Screen share not started (${err instanceof Error ? err.message : String(err)}). Capture still works from speech and the desktop companion.`,
       );
@@ -325,10 +328,10 @@ function CaptureInner({ agentParam, transport }: { agentParam: string | null; tr
   function endTask() {
     const loop = loopRef.current;
     if (!loop) return;
+    // A share still pending (Start in progress) is cancelled and never steps aside.
+    loopRef.current = null;
     loop.ctrl.stop();
-    captureRef.current?.stop();
-    captureRef.current = null;
-    stepAsideRef.current.restore();
+    shareRef.current.stop();
     setSharing(false);
     setShareWarning(null);
     if (voiceModeRef.current) void agentRef.current.stop();

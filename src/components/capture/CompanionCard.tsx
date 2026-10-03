@@ -19,6 +19,7 @@ const LABEL: Record<CompanionStatus, string> = {
   pair: "Pair: enter the code from the companion's tray menu",
   paired: "Paired",
   "origin blocked": "This site is not on the companion's allowed origins",
+  "not responding": "App not responding",
 };
 
 const PERMISSION_NAMES: Record<keyof CompanionPermissions, string> = {

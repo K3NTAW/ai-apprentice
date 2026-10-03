@@ -5,8 +5,10 @@
 // - none: a plain browser by default; every send returns false, no events.
 // Message shapes are the protocol v1-v3 messages (client.ts `outgoing`); incoming payloads go through the same
 // parseCompanionMessage validation as WebSocket frames.
-// Status: the same CompanionStatus for every kind. The bridge reports "paired" once connected (the app is there)
-// and "not connected" after dispose; none is always "not connected". Callers keep their "status !== 'paired'
+// Status: the same CompanionStatus for every kind. The bridge is "connecting" (permissions unknown) from connect()
+// until the app's first 'status' event, then "paired"; with no event within BRIDGE_STATUS_TIMEOUT_MS it reports
+// "not responding" (paired again when a late event arrives) and "not connected" after dispose; none is always
+// "not connected". Callers keep their "status !== 'paired'
 // -> onCompanionDisconnected" rule unchanged.
 import {
   createCompanionClient,
@@ -67,6 +69,7 @@ export type CompanionTransport = {
 };
 
 export const WS_SETTING_KEY = "ai-apprentice.companion.ws";
+export const BRIDGE_STATUS_TIMEOUT_MS = 3000;
 
 /** window.apprentice when it has the contract's shape, else null. */
 export function getBridge(win: unknown = typeof window === "undefined" ? undefined : window): ApprenticeBridge | null {
@@ -159,12 +162,21 @@ export function createWebSocketTransport(client: CompanionClient = createCompani
   };
 }
 
-export function createBridgeTransport(bridge: ApprenticeBridge): CompanionTransport {
+export function createBridgeTransport(
+  bridge: ApprenticeBridge,
+  { statusTimeoutMs = BRIDGE_STATUS_TIMEOUT_MS }: { statusTimeoutMs?: number } = {},
+): CompanionTransport {
   const listeners = listenerSets();
   let status: CompanionStatus = "not connected";
   let permissions: CompanionPermissions | null = null;
   let offs: (() => void)[] = [];
   let dockShown = false;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+
+  function clearTimer() {
+    if (timer) clearTimeout(timer);
+    timer = null;
+  }
 
   function emitStatus() {
     for (const fn of listeners.status) fn(status, permissions);
@@ -181,7 +193,9 @@ export function createBridgeTransport(bridge: ApprenticeBridge): CompanionTransp
   }
 
   function onPayload(type: BridgeEvent, payload: unknown) {
-    if (status !== "paired" || !payload || typeof payload !== "object" || Array.isArray(payload)) return;
+    if (status === "not connected" || !payload || typeof payload !== "object" || Array.isArray(payload)) return;
+    // Until the app's first status event only that event counts.
+    if (status !== "paired" && type !== "status") return;
     let raw: string;
     try {
       raw = JSON.stringify({ ...(payload as object), type });
@@ -192,6 +206,8 @@ export function createBridgeTransport(bridge: ApprenticeBridge): CompanionTransp
     if (!m) return;
     switch (m.type) {
       case "status":
+        clearTimer();
+        status = "paired";
         permissions = m.permissions;
         emitStatus();
         break;
@@ -213,8 +229,15 @@ export function createBridgeTransport(bridge: ApprenticeBridge): CompanionTransp
   return {
     kind: "bridge",
     connect() {
-      if (status === "paired") return;
-      status = "paired";
+      if (status !== "not connected") return;
+      status = "connecting";
+      permissions = null;
+      timer = setTimeout(() => {
+        timer = null;
+        if (status !== "connecting") return;
+        status = "not responding";
+        emitStatus();
+      }, statusTimeoutMs);
       offs = BRIDGE_EVENTS.map((type) => {
         try {
           const off = bridge.on(type, (p) => onPayload(type, p));
@@ -251,7 +274,8 @@ export function createBridgeTransport(bridge: ApprenticeBridge): CompanionTransp
     },
     dockLearned: (k, t) => send(outgoing.dockLearned(k, t)),
     window(action) {
-      if (status !== "paired" || !["step-aside", "restore", "focus"].includes(action)) return false;
+      // The window belongs to the app's preload, so it works before the first status event too.
+      if (status === "not connected" || !["step-aside", "restore", "focus"].includes(action)) return false;
       try {
         bridge.window(action);
         return true;
@@ -260,7 +284,8 @@ export function createBridgeTransport(bridge: ApprenticeBridge): CompanionTransp
       }
     },
     dispose() {
-      if (status !== "paired") return;
+      if (status === "not connected") return;
+      clearTimer();
       // The dock goes away with the page, like the WebSocket client.
       if (dockShown) send({ type: "dock.hide" });
       dockShown = false;

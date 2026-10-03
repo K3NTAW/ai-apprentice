@@ -5,13 +5,14 @@
 // natural pauses and guardrail stops by voice and the companion buddy ('stop' point) before the save.
 // The buddy also mirrors the tutor (state, captions, glances) and the companion shortcuts drive the controls. Finish stores Session.teach.
 // One-app D2: the companion is a transport (desktop app bridge, opt-in WebSocket or none); in the app Start
-// also shares the screen without a picker and the window steps aside until Finish.
+// also shares the screen without a picker and the window steps aside until Finish. Start order: the voice agent
+// first (mic prompt, start error visible), then the share, then the step-aside only when voice runs.
 // Rollback: revert this task's commit; the page then shows the previous placeholder.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { startScreenCapture, type CaptureHandle, type CapturedFrame } from "@/lib/perception/capture";
 import type { CompanionPermissions, CompanionStatus, ShortcutAction } from "@/lib/companion/client";
 import { selectTransport, type CompanionTransport, type TransportHost } from "@/lib/companion/transport";
-import { createStepAside } from "@/lib/companion/stepAside";
+import { createShareFlow, startVoiceThenShare } from "@/lib/companion/stepAside";
 import { buddyStateFor } from "@/lib/companion/buddyState";
 import { routeShortcut } from "@/lib/companion/shortcuts";
 import { bindTeachTransport, stopPointSink, teachShortcutControls } from "@/lib/teach/companionBridge";
@@ -107,10 +108,9 @@ function TeachInner({ sessionId, localMode, agentParam = null, transport }: Teac
 
   const loopRef = useRef<Loop | null>(null);
   const masteryRef = useRef<MasteryState>({});
-  const captureRef = useRef<CaptureHandle | null>(null);
   const monitorRef = useRef(true);
   const companionRef = useRef<CompanionTransport | null>(null);
-  const stepAsideRef = useRef(createStepAside(() => companionRef.current));
+  const shareRef = useRef(createShareFlow<CaptureHandle>(() => companionRef.current));
   const [host, setHost] = useState<TransportHost>("detecting");
   const shortcutFnRef = useRef<(a: ShortcutAction) => void>(() => {});
   const companionActivity = useRef<{ typing: boolean; idle_ms: number; at: number } | null>(null);
@@ -207,7 +207,7 @@ function TeachInner({ sessionId, localMode, agentParam = null, transport }: Teac
   useEffect(() => {
     const t = transport ?? selectTransport();
     companionRef.current = t;
-    const stepAside = stepAsideRef.current;
+    const share = shareRef.current;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- the transport is picked on the client only ("detecting" before).
     setHost(t.kind);
     const off = bindTeachTransport(t, {
@@ -229,8 +229,7 @@ function TeachInner({ sessionId, localMode, agentParam = null, transport }: Teac
     t.connect();
     return () => {
       loopRef.current?.engine.clearAll("unmount");
-      captureRef.current?.stop();
-      stepAside.restore();
+      share.stop();
       off();
       t.dispose();
       companionRef.current = null;
@@ -358,59 +357,62 @@ function TeachInner({ sessionId, localMode, agentParam = null, transport }: Teac
       lastStopAt: -Infinity,
     };
     setRunning(true);
-    // In the desktop app the screen share is part of Start: no picker, then the window steps aside.
-    if (companionRef.current?.kind === "bridge") void toggleShare();
-    try {
-      await agentRef.current.start({ dynamicVariables: { expert: workmap.expert, work_map: JSON.stringify(workmap) } });
-      voiceModeRef.current = true;
-      setTextMode(false);
-    } catch (err) {
-      voiceModeRef.current = false;
-      setTextMode(true);
-      setNotice(`Voice did not start (${err instanceof Error ? err.message : String(err)}). Text mode: the tutor writes here.`);
-    }
+    // Voice first, so the mic prompt or a start error shows; in the desktop app the screen share is part of Start
+    // (no picker) and the window steps aside only when voice runs.
+    await startVoiceThenShare({
+      startVoice: async () => {
+        try {
+          await agentRef.current.start({ dynamicVariables: { expert: workmap.expert, work_map: JSON.stringify(workmap) } });
+          voiceModeRef.current = true;
+          setTextMode(false);
+          return true;
+        } catch (err) {
+          voiceModeRef.current = false;
+          setTextMode(true);
+          setNotice(`Voice did not start (${err instanceof Error ? err.message : String(err)}). Text mode: the tutor writes here.`);
+          return false;
+        }
+      },
+      inApp: companionRef.current?.kind === "bridge",
+      share: (stepAside) => toggleShare(stepAside),
+    });
     setStarting(false);
   }
 
-  async function toggleShare() {
+  async function toggleShare(stepAside = true) {
     const loop = loopRef.current;
     if (!loop) return;
+    const share = shareRef.current;
     const clear = () => {
-      captureRef.current = null;
       setSharing(false);
       setShareWarning(null);
       loop.engine.clearAll("pause");
-      stepAsideRef.current.restore();
     };
-    if (captureRef.current) {
-      captureRef.current.stop();
+    if (share.handle()) {
+      share.stop();
       clear();
       return;
     }
     try {
-      const handle = await stepAsideRef.current.share(() => startScreenCapture({
-        getT: () => (Date.now() - loop.t0) / 1000,
-        onFrame: (f) => void onFrame(loop, f),
-        onFrameChange: () => {
-          loop.lastFrameChange = Date.now();
-        },
-        onEnded: () => {
-          if (captureRef.current === handle) clear();
-        },
-      }));
-      if (loopRef.current !== loop) {
-        // Finished while getDisplayMedia was pending.
-        handle.stop();
-        stepAsideRef.current.restore();
-        return;
-      }
-      captureRef.current = handle;
+      const handle = await share.start(
+        (onEnded) =>
+          startScreenCapture({
+            getT: () => (Date.now() - loop.t0) / 1000,
+            onFrame: (f) => void onFrame(loop, f),
+            onFrameChange: () => {
+              loop.lastFrameChange = Date.now();
+            },
+            onEnded,
+          }),
+        { stepAside, onEnded: clear },
+      );
+      // Finished while getDisplayMedia was pending: the flow stopped the late handle, restored once, no step-aside.
+      if (!handle) return;
       // Halo rects map to the primary display only when the whole monitor is shared.
       monitorRef.current = !handle.displaySurface || handle.displaySurface === "monitor";
       setSharing(true);
       setShareWarning(monitorRef.current ? null : MONITOR_WARNING);
     } catch (err) {
-      stepAsideRef.current.restore();
       setNotice(`Screen share not started (${err instanceof Error ? err.message : String(err)}).`);
     }
   }
@@ -421,8 +423,8 @@ function TeachInner({ sessionId, localMode, agentParam = null, transport }: Teac
     loop.paused = !loop.paused;
     if (loop.paused) {
       loop.engine.clearAll("pause");
-      captureRef.current?.pause();
-    } else captureRef.current?.resume();
+      shareRef.current.handle()?.pause();
+    } else shareRef.current.handle()?.resume();
     setPaused(loop.paused);
   }
 
@@ -433,9 +435,7 @@ function TeachInner({ sessionId, localMode, agentParam = null, transport }: Teac
     talkingRef.current = false;
     setTalking(false);
     loop.engine.clearAll("end");
-    captureRef.current?.stop();
-    captureRef.current = null;
-    stepAsideRef.current.restore();
+    shareRef.current.stop();
     setSharing(false);
     setRunning(false);
     const s = summary(masteryRef.current, loop.workmap.steps);

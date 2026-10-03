@@ -1,5 +1,9 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { startScreenCapture, type CaptureHandle } from "@/lib/perception/capture";
+import { flush, fakeDesktop } from "@/lib/companion/fakeDesktop.testkit";
+import { createShareFlow, startVoiceThenShare } from "@/lib/companion/stepAside";
+import { selectTransport } from "@/lib/companion/transport";
 import { EMAIL_FLOW_WORKMAP } from "@/lib/teach/fixtures";
 import type { Intervention } from "@/lib/teach/intervention";
 import TeachConsole, { decideStatus, frameUrl, type TeachConsoleProps } from "./TeachConsole";
@@ -98,5 +102,85 @@ describe("Teach console in the desktop app vs a browser (one-app D2)", () => {
     const html = renderToStaticMarkup(<TeachConsole {...base} host="none" companion={{ ...base.companion, status: "not connected" }} />);
     expect(html).toContain("Get the desktop app");
     expect(html).not.toContain('data-testid="companion-card"');
+  });
+});
+
+// Teach's desktop app share (fix round T-0123): the Start/Finish/unmount sequence TeachApp runs, over a fake
+// window.apprentice and a mocked getDisplayMedia, through the same functions start(), toggleShare(), finish() and
+// the unmount cleanup call (the repo has no DOM test renderer).
+describe("TeachApp in the desktop app: step aside and restore", () => {
+  let d: ReturnType<typeof fakeDesktop>;
+  beforeEach(() => {
+    d = fakeDesktop();
+    d.install();
+  });
+  afterEach(() => d.uninstall());
+
+  function teachApp() {
+    const transport = selectTransport({ storage: null, env: undefined });
+    transport.connect();
+    d.paired();
+    const share = createShareFlow<CaptureHandle>(() => transport);
+    let loop: object | null = null;
+    const toggleShare = async (stepAside = true) => {
+      if (!loop) return;
+      if (share.handle()) return share.stop();
+      try {
+        await share.start((onEnded) => startScreenCapture({ getT: () => 0, onFrame: () => {}, onEnded }), { stepAside });
+      } catch {
+        /* notice */
+      }
+    };
+    return {
+      start: async () => {
+        loop = {};
+        await startVoiceThenShare({
+          startVoice: async () => {
+            d.log.push("agent.start");
+            return true;
+          },
+          inApp: transport.kind === "bridge",
+          share: (stepAside) => toggleShare(stepAside),
+        });
+      },
+      finish: () => {
+        loop = null;
+        share.stop();
+      },
+      unmount: () => {
+        share.stop();
+        transport.dispose();
+      },
+    };
+  }
+
+  it("Start: getDisplayMedia, then step-aside; Finish restores", async () => {
+    const app = teachApp();
+    await app.start();
+    expect(d.log).toEqual(["agent.start", "getDisplayMedia", "window:step-aside"]);
+    app.finish();
+    expect(d.log).toEqual(["agent.start", "getDisplayMedia", "window:step-aside", "window:restore"]);
+    expect(d.track.stopped).toBe(1);
+  });
+
+  it("Finish while getDisplayMedia is pending restores once and never steps aside afterwards", async () => {
+    const app = teachApp();
+    d.nextShare("hold");
+    const started = app.start();
+    await flush();
+    app.finish();
+    d.release();
+    await started;
+    await flush();
+    expect(d.log).toEqual(["agent.start", "getDisplayMedia", "window:restore"]);
+    expect(d.track.stopped).toBe(1);
+  });
+
+  it("unmount cleanup restores", async () => {
+    const app = teachApp();
+    await app.start();
+    app.unmount();
+    expect(d.log.at(-1)).toBe("window:restore");
+    expect(d.log.filter((l) => l === "window:restore")).toHaveLength(1);
   });
 });

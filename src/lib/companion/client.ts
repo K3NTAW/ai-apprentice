@@ -17,7 +17,8 @@ export const SAY_TEXT_MAX = 280;
 const MAX_APP = 200;
 const MAX_TITLE = 500;
 
-export type CompanionStatus = "not connected" | "connecting" | "pair" | "paired" | "origin blocked";
+/** "not responding": the desktop app bridge sent no status event within 3 s (bridge transport only). */
+export type CompanionStatus = "not connected" | "connecting" | "pair" | "paired" | "origin blocked" | "not responding";
 export type CompanionPermissions = { input: boolean; screen: boolean; accessibility: boolean };
 export type CompanionStatusMsg = { type: "status"; version: string; permissions: CompanionPermissions };
 export type CompanionActivityMsg = {

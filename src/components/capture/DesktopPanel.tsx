@@ -19,13 +19,21 @@ export function desktopDownloads(
   return { mac: httpsOnly(env.mac), win: httpsOnly(env.win) };
 }
 
+/** Green only once the app answered with a status event; no event within 3 s reads 'App not responding'. */
+export function appStatusLabel(status: CompanionCardProps["status"]): string {
+  if (status === "paired") return "Running in AI Apprentice";
+  if (status === "not responding") return "App not responding";
+  if (status === "connecting") return "Connecting to AI Apprentice...";
+  return "AI Apprentice not connected";
+}
+
 export function AppStatus({ companion }: { companion: CompanionCardProps }) {
   const missing = missingPermissions(companion.permissions);
   return (
     <section data-testid="app-status" className="flex flex-col gap-1 rounded border border-slate-200 bg-white p-3 text-xs">
       <div className="flex items-center gap-2">
         <span className={`h-2 w-2 rounded-full ${companion.status === "paired" ? "bg-green-500" : "bg-slate-300"}`} />
-        <span className="font-semibold">Running in AI Apprentice</span>
+        <span className="font-semibold">{appStatusLabel(companion.status)}</span>
         {companion.permissions && missing.length === 0 && <span className="ml-auto text-slate-600">All permissions granted</span>}
       </div>
       {missing.length > 0 && (

@@ -50,6 +50,7 @@ vi.mock("@supabase/ssr", () => ({
 }));
 
 import { createServerClient } from "@supabase/ssr";
+import { verifyThrottle } from "@/lib/auth/verifyThrottle";
 import { POST } from "./route";
 
 const WS_OWN = "11111111-1111-4111-8111-111111111111";
@@ -72,6 +73,7 @@ beforeEach(() => {
   state.rpc = { data: [{ workspace_id: WS_OWN, name: "Personal", role: "owner" }], error: null };
   state.calls = [];
   vi.mocked(createServerClient).mockClear();
+  verifyThrottle.reset();
 });
 
 describe("POST /auth/verify", () => {
@@ -136,8 +138,53 @@ describe("POST /auth/verify", () => {
     expect(createServerClient).not.toHaveBeenCalled();
   });
 
-  it("accepts the longer codes Supabase can be configured for (up to 10 digits)", async () => {
-    expect((await call({ ...ok, token: "1234567890" })).status).toBe(200);
-    expect((await call({ ...ok, token: "12345678901" })).status).toBe(400);
+  it("accepts exactly SUPABASE_OTP_LENGTH digits (default 6)", async () => {
+    for (const token of ["12345", "1234567", "1234567890"]) expect((await call({ ...ok, token })).status).toBe(400);
+    vi.stubEnv("SUPABASE_OTP_LENGTH", "8");
+    try {
+      expect((await call({ ...ok, token: "12345678" })).status).toBe(200);
+      expect((await call({ ...ok, token: "123456" })).status).toBe(400);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+    expect((await call(ok)).status).toBe(200);
+  });
+});
+
+describe("POST /auth/verify throttle (fix round T-0123)", () => {
+  const from = (ip: string, body: unknown) =>
+    POST(
+      new NextRequest("http://app.test/auth/verify", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-forwarded-for": `${ip}, 10.0.0.1` },
+        body: JSON.stringify(body),
+      }),
+    );
+
+  it("429 after 10 attempts per email in 10 minutes (any IP, any case), before Supabase", async () => {
+    vi.useFakeTimers();
+    try {
+      for (let i = 0; i < 10; i++) expect((await from(`192.0.2.${i}`, { ...ok, token: "000000" })).status).not.toBe(429);
+      const calls = state.calls.length;
+      const res = await from("192.0.2.99", { ...ok, email: "Sabine@Example.com" });
+      expect([res.status, await res.json()]).toEqual([429, { error: "rate_limited" }]);
+      expect(state.calls).toHaveLength(calls);
+      expect((await from("192.0.2.99", { ...ok, email: "lena@example.com" })).status).toBe(200);
+      vi.advanceTimersByTime(10 * 60 * 1000);
+      expect((await from("192.0.2.99", ok)).status).toBe(200);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("429 after 30 attempts per IP in 10 minutes", async () => {
+    for (let i = 0; i < 30; i++) expect((await from("198.51.100.7", { ...ok, email: `u${i}@example.com` })).status).toBe(200);
+    expect((await from("198.51.100.7", { ...ok, email: "new@example.com" })).status).toBe(429);
+    expect((await from("198.51.100.8", { ...ok, email: "new@example.com" })).status).toBe(200);
+  });
+
+  it("malformed tokens count as attempts", async () => {
+    for (let i = 0; i < 10; i++) expect((await call({ ...ok, token: "12" })).status).toBe(400);
+    expect((await call(ok)).status).toBe(429);
   });
 });

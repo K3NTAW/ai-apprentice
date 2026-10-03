@@ -3,6 +3,23 @@ import Link from "next/link";
 import type { Role } from "@/lib/auth/context";
 import type { DashboardSummary, MasteryRow, WorkflowStatus } from "@/lib/dashboard/summary";
 import { canCapture } from "@/components/shell/ShellHeader";
+import HideInApp from "@/components/shell/HideInApp";
+
+export type QuickAction = { href: string; label: string; primary?: boolean; browserOnly?: boolean };
+
+/**
+ * Quick actions for a role. browserOnly ones (the desktop app install link, /capture#companion) are left out
+ * inside the desktop app; the page renders them through HideInApp, which decides that after mount.
+ */
+export function quickActions(role: Role | null, { inApp = false }: { inApp?: boolean } = {}): QuickAction[] {
+  const all: QuickAction[] = [
+    ...(canCapture(role) ? [{ href: "/capture", label: "Start a capture", primary: true }] : []),
+    { href: "/teach", label: "Start tutoring" },
+    { href: "/workspace", label: "Invite a colleague" },
+    { href: "/capture#companion", label: "Install the desktop companion", browserOnly: true },
+  ];
+  return inApp ? all.filter((a) => !a.browserOnly) : all;
+}
 
 const STATUS_STYLE: Record<WorkflowStatus, string> = {
   capturing: "bg-sky-100 text-sky-800",
@@ -108,20 +125,18 @@ export default function Dashboard({ summary, role }: { summary: DashboardSummary
         </Card>
         <Card title="Quick actions">
           <div className="flex flex-wrap gap-2 text-sm">
-            {canCapture(role) && (
-              <Link className="rounded bg-slate-900 px-3 py-1.5 text-white" href="/capture">
-                Start a capture
-              </Link>
-            )}
-            <Link className="rounded border border-slate-300 px-3 py-1.5 hover:bg-slate-50" href="/teach">
-              Start tutoring
-            </Link>
-            <Link className="rounded border border-slate-300 px-3 py-1.5 hover:bg-slate-50" href="/workspace">
-              Invite a colleague
-            </Link>
-            <Link className="rounded border border-slate-300 px-3 py-1.5 hover:bg-slate-50" href="/capture#companion">
-              Install the desktop companion
-            </Link>
+            {quickActions(role).map((a) => {
+              const link = (
+                <Link
+                  key={a.href}
+                  className={a.primary ? "rounded bg-slate-900 px-3 py-1.5 text-white" : "rounded border border-slate-300 px-3 py-1.5 hover:bg-slate-50"}
+                  href={a.href}
+                >
+                  {a.label}
+                </Link>
+              );
+              return a.browserOnly ? <HideInApp key={a.href}>{link}</HideInApp> : link;
+            })}
           </div>
         </Card>
       </div>

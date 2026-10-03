@@ -2,7 +2,8 @@
 // magic link; the template must include {{ .Token }}, see docs/DEPLOY.md), then the code goes to /auth/verify,
 // which runs verifyOtp(type 'email') and the workspace bootstrap server side, and the page navigates to the
 // returned safe path (default /agents).
-// Supabase's OTP length is configurable (6 by default, up to 10), so 6 to 10 digits are accepted.
+// Supabase's OTP length is configurable (6 by default, up to 10), so the form accepts 6 to 10 digits; the server
+// (/auth/verify) accepts exactly SUPABASE_OTP_LENGTH digits (default 6).
 
 export const CODE_LOGIN_DEFAULT_NEXT = "/agents";
 export const OTP_MIN = 6;
@@ -21,6 +22,15 @@ export const CODE_LOGIN_ERRORS: Record<VerifyErrorCode | SendErrorCode, string> 
 };
 
 export const isOtpCode = (v: string): boolean => new RegExp(`^\\d{${OTP_MIN},${OTP_MAX}}$`).test(v);
+
+/** The project's Email OTP length from SUPABASE_OTP_LENGTH (server env); 6 when unset or outside 6..10. */
+export function otpLength(env: string | undefined = process.env.SUPABASE_OTP_LENGTH): number {
+  const n = Number(env);
+  return Number.isInteger(n) && n >= OTP_MIN && n <= OTP_MAX ? n : OTP_MIN;
+}
+
+/** Exactly `length` digits. */
+export const isOtpCodeOfLength = (v: string, length: number = otpLength()): boolean => new RegExp(`^\\d{${length}}$`).test(v);
 
 export type OtpClient = {
   auth: {

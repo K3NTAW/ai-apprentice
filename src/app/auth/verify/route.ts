@@ -2,10 +2,13 @@
 // same workspace bootstrap and ws cookie rule as the magic-link callback. Session cookies and the ws cookie are
 // written onto the JSON response itself. Response: 200 { redirect } (a safe next, default /agents) or
 // { error: VerifyErrorCode } with 400/403/429/500/503; the login form shows fixed texts for the codes.
+// Throttled in memory (lib/auth/verifyThrottle): 10 attempts per email and 30 per IP in 10 minutes, then 429.
+// The token must be exactly SUPABASE_OTP_LENGTH digits (default 6).
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { WS_COOKIE, wsCookieOptions } from "@/lib/auth/cookies";
-import { CODE_LOGIN_DEFAULT_NEXT, isOtpCode, type VerifyErrorCode } from "@/lib/auth/codeLogin";
+import { CODE_LOGIN_DEFAULT_NEXT, isOtpCodeOfLength, type VerifyErrorCode } from "@/lib/auth/codeLogin";
+import { clientIp, verifyThrottle } from "@/lib/auth/verifyThrottle";
 import { safeNext } from "@/lib/auth/redirect";
 import { bootstrapAfterSignIn } from "@/lib/auth/signIn";
 import { appMode, publicSupabaseEnv } from "@/lib/supabase/env";
@@ -30,6 +33,8 @@ export async function POST(request: NextRequest): Promise<Response> {
     return fail("bad_request", 400);
   }
 
+  if (!verifyThrottle.ip.hit(clientIp(request.headers))) return fail("rate_limited", 429);
+
   let body: { email?: unknown; token?: unknown; next?: unknown };
   try {
     body = (await request.json()) as typeof body;
@@ -39,7 +44,8 @@ export async function POST(request: NextRequest): Promise<Response> {
   const email = typeof body?.email === "string" ? body.email.trim() : "";
   const token = typeof body?.token === "string" ? body.token.trim() : "";
   if (!email || email.length > EMAIL_MAX || !email.includes("@")) return fail("bad_request", 400);
-  if (!isOtpCode(token)) return fail("code_invalid", 400);
+  if (!verifyThrottle.email.hit(email.toLowerCase())) return fail("rate_limited", 429);
+  if (!isOtpCodeOfLength(token)) return fail("code_invalid", 400);
   const next = safeNext(body?.next, CODE_LOGIN_DEFAULT_NEXT);
 
   const pendingCookies: PendingCookie[] = [];
