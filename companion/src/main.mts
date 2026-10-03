@@ -18,10 +18,10 @@ import {
 import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { appAllowlist, PRODUCT_NAME, resolveAppUrl, userDataDirName, wsEnabled, type AppUrlResult } from "./appConfig.mjs";
 import { ActivityAggregator, AppChangeTracker, WINDOW_MS, toInputKind, type InputKind } from "./activity.mjs";
-import { checkAppUrl } from "./appUrl.mjs";
+import { checkAppUrl, planMainLoad, serializeStoredAppUrl, STORED_APP_URL_FILE, validateSetupUrl } from "./appUrl.mjs";
 import { avatarFor } from "./avatarUrl.mjs";
 import { BRIDGE_CHANNELS, createForwarder, exposeBridge, routeBridgeMessage, senderAllowed, type BridgeHandlers } from "./bridge.mjs";
 import { buddyView, cursorPollNeeded, expireBuddy, initialBuddy, reduceBuddy, type BuddyAction } from "./buddy.mjs";
@@ -40,7 +40,7 @@ import {
   type DockAction,
 } from "./dock.mjs";
 import { mapRect, type DisplayInfo } from "./overlay.mjs";
-import { parseAllowlist, type Allowlist } from "./origin.mjs";
+import type { Allowlist } from "./origin.mjs";
 import { Pairing } from "./pairing.mjs";
 import { isPanelAction, panelMaterial, panelViewModel } from "./panel.mjs";
 import { formatPairingLine, isPermissionKey } from "./pairingWindow.mjs";
@@ -109,11 +109,13 @@ let frontApp = "";
 const dockOn = dockEnabled(process.env.COMPANION_DOCK);
 const chordsOn = chordsEnabled(process.env.COMPANION_CHORDS);
 let dock = initialDock();
-/** WebSocket admission and 'Open control room' (unchanged v1 allowlist). */
-const allowlist = parseAllowlist(process.env.COMPANION_ALLOWED_ORIGINS);
 let appUrl: AppUrlResult = { ok: false, reason: "not_resolved" };
-/** Main window allowlist: APP_URL origin only when packaged (see appConfig.mts). Set in boot(). */
-let appList: Allowlist = { rules: [], errors: [] };
+/**
+ * The single exact-origin allowlist (see origin.mts buildAllowlist): main window, bridge, permissions,
+ * display media, navigation, app_url and WebSocket admission. Filled in place by applyAppUrl(), so the
+ * WebSocket gate that holds this object sees updates. Empty (deny all) until APP_URL is known.
+ */
+const appList: Allowlist = { rules: [], errors: [] };
 const settings = new SettingsStore(
   {
     read: () => {
@@ -534,7 +536,7 @@ function panelView() {
     platform: process.platform,
     paused,
     session,
-    allowlist,
+    allowlist: appList,
     bindings: s.bindings,
     registrationErrors,
     talkMode: talk.getMode(),
@@ -633,7 +635,7 @@ ipcMain.on("panel-action", (e, action: unknown) => {
 });
 ipcMain.on("panel-open-control-room", (e) => {
   if (!fromPanel(e) || !session) return;
-  const url = checkAppUrl(session.app_url, allowlist);
+  const url = checkAppUrl(session.app_url, appList);
   if (url.ok) void shell.openExternal(url.href);
   else log(`control room not opened: ${url.reason}`);
 });
@@ -785,10 +787,54 @@ function openExternal(url: string): void {
   }
 }
 
-function loadMain(win: BrowserWindow): void {
-  if (appUrl.ok) void win.loadURL(appUrl.url);
-  else void win.loadFile(path.join(here, "..", "static", "app-error.html"), { query: { reason: appUrl.reason } });
+const SETUP_HTML = path.join(here, "..", "static", "setup.html");
+
+function storedAppUrlPath(): string {
+  return path.join(app.getPath("userData"), STORED_APP_URL_FILE);
 }
+
+/** Resolve APP_URL (env, app.config.json, stored setting) and rebuild the exact-origin allowlist in place. */
+function applyAppUrl(): void {
+  const read = (file: string) => {
+    try {
+      return fs.readFileSync(file, "utf8");
+    } catch {
+      return null;
+    }
+  };
+  appUrl = resolveAppUrl({ env: process.env.APP_URL, configText: read(path.join(here, "..", "app.config.json")), storedText: read(storedAppUrlPath()) });
+  if (!appUrl.ok && appUrl.reason !== "app_url_unset") log(`APP_URL invalid: ${appUrl.reason}`);
+  const next = appAllowlist({ appOrigin: appUrl.ok ? appUrl.origin : null, isPackaged: app.isPackaged, env: process.env.COMPANION_ALLOWED_ORIGINS });
+  appList.rules.splice(0, appList.rules.length, ...next.rules);
+  appList.errors.splice(0, appList.errors.length, ...next.errors);
+  for (const e of appList.errors) log(e);
+}
+
+/** Remote only with a valid APP_URL; otherwise a local page (setup screen or error page), nothing remote. */
+function loadMain(win: BrowserWindow): void {
+  const plan = planMainLoad(appUrl);
+  if (plan.kind === "remote") void win.loadURL(plan.url);
+  else if (plan.kind === "setup") void win.loadFile(SETUP_HTML);
+  else void win.loadFile(path.join(here, "..", "static", "app-error.html"), { query: { reason: plan.reason } });
+}
+
+/** Setup screen save: only the main window's main frame on the local setup page, and only while unset. */
+ipcMain.handle("setup-save-url", (e, raw: unknown) => {
+  const frame = e.senderFrame;
+  const onSetup = !!frame && frame === e.sender.mainFrame && isMainContents(e.sender) && frame.url.split(/[?#]/)[0] === pathToFileURL(SETUP_HTML).href;
+  if (!onSetup || appUrl.ok) return { ok: false, reason: "not_allowed" };
+  const checked = validateSetupUrl(raw);
+  if (!checked.ok) return { ok: false, reason: checked.reason };
+  try {
+    fs.writeFileSync(storedAppUrlPath(), serializeStoredAppUrl(checked.url), { mode: 0o600 });
+  } catch (err) {
+    log(`app url not saved: ${String(err)}`);
+    return { ok: false, reason: "app_url_not_saved" };
+  }
+  applyAppUrl();
+  if (mainWin && !mainWin.isDestroyed()) loadMain(mainWin);
+  return { ok: true };
+});
 
 let boundsTimer: NodeJS.Timeout | null = null;
 function saveBoundsSoon(win: BrowserWindow): void {
@@ -971,14 +1017,13 @@ function rebuildMenu(): void {
 
 async function startWsServer(): Promise<void> {
   if (!pairing) return;
-  for (const e of allowlist.errors) log(e);
   const port = parsePort(process.env.COMPANION_PORT);
   if (!port.ok) {
     serverError = port.reason;
     return;
   }
   try {
-    server = await startServer(port.port, allowlist, pairing, {
+    server = await startServer(port.port, appList, pairing, {
       status,
       log,
       onPairedChange: (next) => setConnection("ws", next),
@@ -994,16 +1039,7 @@ async function startWsServer(): Promise<void> {
 }
 
 async function boot(): Promise<void> {
-  let configText: string | null = null;
-  try {
-    configText = fs.readFileSync(path.join(here, "..", "app.config.json"), "utf8");
-  } catch {
-    configText = null;
-  }
-  appUrl = resolveAppUrl({ env: process.env.APP_URL, configText, isPackaged: app.isPackaged });
-  if (appUrl.ok) appList = appAllowlist({ appOrigin: appUrl.origin, isPackaged: app.isPackaged, env: process.env.COMPANION_ALLOWED_ORIGINS });
-  else log(`APP_URL invalid: ${appUrl.reason}`);
-  for (const e of appList.errors) log(e);
+  applyAppUrl();
   installSessionGuards();
   buildAppMenu();
   tray = new Tray(trayImage());

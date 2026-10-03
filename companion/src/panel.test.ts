@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { checkAppUrl } from "./appUrl.mjs";
-import { parseAllowlist } from "./origin.mjs";
+import { buildAllowlist } from "./origin.mjs";
 import { isPanelAction, panelMaterial, panelViewModel, type PanelInput } from "./panel.mjs";
 import { parseClientMessage, SESSION_LIMITS, type SessionStateMessage } from "./protocol.mjs";
 import { defaultBindings } from "./shortcuts.mjs";
 
-const allowlist = parseAllowlist(undefined);
+const allowlist = buildAllowlist({ appOrigin: "https://app.example.com", isPackaged: false, env: undefined });
 const session: SessionStateMessage = {
   type: "session.state",
   mode: "teach",
@@ -16,7 +16,7 @@ const session: SessionStateMessage = {
   last_question: "Why this cost centre?",
   last_answer: "Because of the project code.",
   off_record: true,
-  app_url: "https://ai-apprentice.vercel.app/w/1/teach",
+  app_url: "https://app.example.com/w/1/teach",
 };
 
 function input(over: Partial<PanelInput> = {}): PanelInput {
@@ -87,8 +87,8 @@ describe("panel view model", () => {
 
 describe("app_url allowlist check", () => {
   it("opens allowed https origins and localhost http, normalised", () => {
-    expect(checkAppUrl("https://ai-apprentice.vercel.app/w/1", allowlist)).toEqual({ ok: true, href: "https://ai-apprentice.vercel.app/w/1" });
-    expect(checkAppUrl("HTTPS://AI-APPRENTICE.vercel.app:443/x", allowlist)).toEqual({ ok: true, href: "https://ai-apprentice.vercel.app/x" });
+    expect(checkAppUrl("https://app.example.com/w/1", allowlist)).toEqual({ ok: true, href: "https://app.example.com/w/1" });
+    expect(checkAppUrl("HTTPS://APP.EXAMPLE.com:443/x", allowlist)).toEqual({ ok: true, href: "https://app.example.com/x" });
     expect(checkAppUrl("http://localhost:3000/capture", allowlist).ok).toBe(true);
   });
 
@@ -96,19 +96,22 @@ describe("app_url allowlist check", () => {
     for (const bad of [
       "javascript:alert(1)",
       "file:///etc/passwd",
-      "https://user:pw@ai-apprentice.vercel.app/",
-      "https://ai-apprentice.vercel.app@evil.com/",
-      "http://ai-apprentice.vercel.app/",
-      "https://ai-apprentice.vercel.app.evil.com/",
+      "https://user:pw@app.example.com/",
+      "https://app.example.com@evil.com/",
+      "http://app.example.com/",
+      "https://app.example.com.evil.com/",
       "https://xn--i-apprentice-xyz.vercel.app/",
       "https://аi-apprentice.vercel.app/",
-      "https://evil.com/?https://ai-apprentice.vercel.app",
+      "https://evil.com/?https://app.example.com",
       "http://localhost:3001/",
+      "https://ai-apprentice.vercel.app/",
+      "https://evil-k3ntaws-projects.vercel.app/",
+      "https://ai-apprentice-x.vercel.app/",
       "data:text/html,hi",
       "not a url",
       "",
       undefined,
-      "https://ai-apprentice.vercel.app/" + "a".repeat(3000),
+      "https://app.example.com/" + "a".repeat(3000),
     ]) {
       expect(checkAppUrl(bad, allowlist).ok, String(bad)).toBe(false);
     }

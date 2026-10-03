@@ -69,21 +69,24 @@ describe("app config and the WebSocket switch", () => {
     expect(src.match(/startServer\(/g)).toHaveLength(1);
   });
 
-  it("APP_URL: env first, dev localhost, packaged config; invalid is an error", () => {
-    const config = JSON.stringify({ appUrl: "https://ai-apprentice.vercel.app" });
-    expect(resolveAppUrl({ env: undefined, configText: config, isPackaged: true })).toMatchObject({ ok: true, origin: "https://ai-apprentice.vercel.app" });
-    expect(resolveAppUrl({ env: undefined, configText: config, isPackaged: false })).toMatchObject({ ok: true, origin: "http://localhost:3000" });
-    expect(resolveAppUrl({ env: "https://staging.example.com/app", configText: config, isPackaged: true })).toMatchObject({ ok: true, origin: "https://staging.example.com" });
-    expect(resolveAppUrl({ env: "http://example.com", configText: config, isPackaged: true })).toEqual({ ok: false, reason: "app_url_scheme" });
-    expect(resolveAppUrl({ env: undefined, configText: "{", isPackaged: true })).toEqual({ ok: false, reason: "app_url_missing" });
+  it("APP_URL: env first, then config, then stored; no default; invalid is an error", () => {
+    const config = JSON.stringify({ appUrl: "https://app.example.com" });
+    expect(resolveAppUrl({ env: undefined, configText: config, storedText: null })).toMatchObject({ ok: true, origin: "https://app.example.com" });
+    expect(resolveAppUrl({ env: "https://staging.example.com/app", configText: config, storedText: null })).toMatchObject({ ok: true, origin: "https://staging.example.com" });
+    expect(resolveAppUrl({ env: "http://localhost:3000", configText: null, storedText: null })).toMatchObject({ ok: true, origin: "http://localhost:3000" });
+    expect(resolveAppUrl({ env: "http://example.com", configText: config, storedText: null })).toEqual({ ok: false, reason: "app_url_scheme" });
+    expect(resolveAppUrl({ env: undefined, configText: "{", storedText: null })).toEqual({ ok: false, reason: "app_url_unset" });
     expect(validateAppUrl("https://u:p@example.com")).toEqual({ ok: false, reason: "app_url_userinfo" });
   });
 
-  it("packaged allowlist is the APP_URL origin only; dev adds localhost and the Vercel patterns", () => {
-    expect(appAllowlist({ appOrigin: "https://ai-apprentice.vercel.app", isPackaged: true, env: undefined }).rules.map((r) => r.source)).toEqual([
-      "https://ai-apprentice.vercel.app",
+  it("packaged allowlist is the APP_URL origin only; dev adds localhost:3000 only", () => {
+    expect(appAllowlist({ appOrigin: "https://app.example.com", isPackaged: true, env: undefined }).rules.map((r) => r.source)).toEqual([
+      "https://app.example.com",
     ]);
-    expect(appAllowlist({ appOrigin: "https://ai-apprentice.vercel.app", isPackaged: false, env: undefined }).rules.length).toBe(4);
+    expect(appAllowlist({ appOrigin: "https://app.example.com", isPackaged: false, env: undefined }).rules.map((r) => r.source)).toEqual([
+      "https://app.example.com",
+      "http://localhost:3000",
+    ]);
   });
 
   it("overlay, dock (buddy is drawn in the overlays) and panel windows use content protection", () => {

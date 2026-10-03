@@ -1,56 +1,66 @@
-// Origin allowlist and Host check. Electron-free.
+// Exact-origin allowlist and Host check. Electron-free. No wildcards anywhere.
 
-export const DEFAULT_ALLOWED_ORIGINS = [
-  "http://localhost:3000",
-  "https://*-k3ntaws-projects.vercel.app",
-  "https://ai-apprentice*.vercel.app",
-];
+/** Allowed only when the app is unpackaged (dev runs). */
+export const DEV_ORIGIN = "http://localhost:3000";
 
-export type OriginRule = { scheme: "http" | "https"; hostRe: RegExp; port: string; source: string };
+export type OriginRule = { scheme: "http" | "https"; host: string; port: string; source: string };
 export type Allowlist = { rules: OriginRule[]; errors: string[] };
 
-const LABEL_CHARS = "[a-z0-9-]";
-
-function escapeRe(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
 /**
- * Compile one allowlist entry. Format: scheme://host[:port]. '*' is allowed only inside the
- * host's first label and matches [a-z0-9-]* (never a dot). Returns null when invalid.
+ * Compile one exact origin. Format: scheme://host[:port]. No wildcards: any '*' is invalid.
+ * Returns null when invalid.
  */
 export function compileRule(entry: string): OriginRule | null {
-  const m = /^(https?):\/\/([^/:?#\s]+)(?::(\d{1,5}))?\/?$/i.exec(entry.trim());
+  const trimmed = entry.trim();
+  if (trimmed.includes("*")) return null;
+  const m = /^(https?):\/\/([^/:?#\s]+)(?::(\d{1,5}))?\/?$/i.exec(trimmed);
   if (!m) return null;
   const scheme = m[1].toLowerCase() as "http" | "https";
   const host = m[2].toLowerCase();
   const port = m[3] ?? "";
   const labels = host.split(".");
-  if (labels.some((l) => l.length === 0)) return null;
-  const [first, ...rest] = labels;
-  if (rest.some((l) => l.includes("*"))) return null;
-  if (!/^[a-z0-9*-]+$/.test(first) || !rest.every((l) => /^[a-z0-9-]+$/.test(l))) return null;
-  if (first.replace(/\*/g, "").length === 0) return null; // bare '*' or '**'
-  if (first.includes("*") && rest.length < 2) return null; // wildcard needs a registrable parent
-  const firstRe = first.split("*").map(escapeRe).join(`${LABEL_CHARS}*`);
-  const hostRe = new RegExp(`^${[firstRe, ...rest.map(escapeRe)].join("\\.")}$`);
-  return { scheme, hostRe, port, source: entry.trim() };
+  if (labels.some((l) => !/^[a-z0-9-]+$/.test(l))) return null;
+  return { scheme, host, port, source: trimmed };
 }
 
 /**
- * Build the allowlist from COMPANION_ALLOWED_ORIGINS. Unset means the defaults.
- * Set but empty, or with no valid entries, means DENY ALL (rules = []).
+ * Exact extra origins from COMPANION_ALLOWED_ORIGINS (comma separated). Unset or empty adds nothing.
+ * An entry with '*' is rejected with an error line; so is any other invalid entry.
  */
 export function parseAllowlist(env: string | undefined): Allowlist {
-  const entries = env === undefined ? DEFAULT_ALLOWED_ORIGINS : env.split(",").map((s) => s.trim()).filter(Boolean);
+  const entries = (env ?? "").split(",").map((s) => s.trim()).filter(Boolean);
   const rules: OriginRule[] = [];
   const errors: string[] = [];
   for (const e of entries) {
+    if (e.includes("*")) {
+      errors.push(`wildcard origin rejected (exact origins only): ${e}`);
+      continue;
+    }
     const r = compileRule(e);
     if (r) rules.push(r);
     else errors.push(`invalid origin rule ignored: ${e}`);
   }
-  if (env !== undefined && rules.length === 0) errors.push("COMPANION_ALLOWED_ORIGINS has no valid entries: all origins denied");
+  return { rules, errors };
+}
+
+/**
+ * The single exact-origin list every trust decision uses (bridge, permissions, display media, navigation,
+ * app_url, WebSocket Origin): the APP_URL origin, http://localhost:3000 only when unpackaged, and the exact
+ * origins from COMPANION_ALLOWED_ORIGINS. No APP_URL yet: no APP_URL origin (the setup screen is local).
+ */
+export function buildAllowlist(opts: { appOrigin: string | null; isPackaged: boolean; env: string | undefined }): Allowlist {
+  const rules: OriginRule[] = [];
+  const errors: string[] = [];
+  const add = (entry: string) => {
+    const r = compileRule(entry);
+    if (r) rules.push(r);
+    else errors.push(`invalid origin rule ignored: ${entry}`);
+  };
+  if (opts.appOrigin !== null) add(opts.appOrigin);
+  if (!opts.isPackaged) add(DEV_ORIGIN);
+  const extra = parseAllowlist(opts.env);
+  rules.push(...extra.rules);
+  errors.push(...extra.errors);
   return { rules, errors };
 }
 
@@ -64,7 +74,7 @@ export function isOriginAllowed(origin: string | undefined | null, list: Allowli
   const norm = port === defaultPort ? "" : port;
   return list.rules.some((r) => {
     const rulePort = r.port === defaultPort ? "" : r.port;
-    return r.scheme === scheme && rulePort === norm && r.hostRe.test(host);
+    return r.scheme === scheme && rulePort === norm && r.host === host;
   });
 }
 

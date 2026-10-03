@@ -31,8 +31,8 @@ describe("electron-builder config", () => {
     expect(build.win.target).toEqual([{ target: "nsis", arch: ["x64"] }]);
   });
 
-  it("app.config.json holds an https appUrl", () => {
+  it("app.config.json ships no default appUrl (APP_URL or the setup screen provides it)", () => {
     const cfg = JSON.parse(fs.readFileSync(path.join(root, "app.config.json"), "utf8"));
-    expect(new URL(cfg.appUrl).protocol).toBe("https:");
+    expect(cfg.appUrl).toBeNull();
   });
 });

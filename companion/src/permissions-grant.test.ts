@@ -9,17 +9,20 @@ import {
   type PermissionRequest,
 } from "./permissionsGrant.mjs";
 
-const list = appAllowlist({ appOrigin: "https://ai-apprentice.vercel.app", isPackaged: true, env: undefined });
-const OK = "https://ai-apprentice.vercel.app/train";
+const list = appAllowlist({ appOrigin: "https://app.example.com", isPackaged: true, env: undefined });
+const OK = "https://app.example.com/train";
 const LOOKALIKES = [
-  "https://ai-apprentice.vercel.app.evil.com/",
+  "https://app.example.com.evil.com/",
   "https://ai-apprentice-vercel.app/",
-  "https://xai-apprentice.vercel.app/",
-  "http://ai-apprentice.vercel.app/",
-  "https://ai-apprentice.vercel.app:8443/",
-  "https://user:pw@ai-apprentice.vercel.app/",
-  "https://evil.com/#https://ai-apprentice.vercel.app",
+  "https://xapp.example.com/",
+  "http://app.example.com/",
+  "https://app.example.com:8443/",
+  "https://user:pw@app.example.com/",
+  "https://evil.com/#https://app.example.com",
   "http://localhost:3000/",
+  "https://ai-apprentice.vercel.app/",
+  "https://evil-k3ntaws-projects.vercel.app/",
+  "https://ai-apprentice-x.vercel.app/",
   "file:///Users/x/index.html",
   "",
 ];
@@ -57,11 +60,11 @@ describe("permission requests", () => {
   });
 
   it("permission checks follow the same rule", () => {
-    expect(checkPermission({ permission: "media", origin: "https://ai-apprentice.vercel.app", mediaType: "audio", fromMainWindow: true }, list)).toBe(true);
-    expect(checkPermission({ permission: "media", origin: "https://ai-apprentice.vercel.app", mediaType: "video", fromMainWindow: true }, list)).toBe(false);
-    expect(checkPermission({ permission: "media", origin: "https://ai-apprentice.vercel.app.evil.com", mediaType: "audio", fromMainWindow: true }, list)).toBe(false);
-    expect(checkPermission({ permission: "media", origin: "https://ai-apprentice.vercel.app", mediaType: "audio", fromMainWindow: false }, list)).toBe(false);
-    expect(checkPermission({ permission: "geolocation", origin: "https://ai-apprentice.vercel.app", fromMainWindow: true }, list)).toBe(false);
+    expect(checkPermission({ permission: "media", origin: "https://app.example.com", mediaType: "audio", fromMainWindow: true }, list)).toBe(true);
+    expect(checkPermission({ permission: "media", origin: "https://app.example.com", mediaType: "video", fromMainWindow: true }, list)).toBe(false);
+    expect(checkPermission({ permission: "media", origin: "https://app.example.com.evil.com", mediaType: "audio", fromMainWindow: true }, list)).toBe(false);
+    expect(checkPermission({ permission: "media", origin: "https://app.example.com", mediaType: "audio", fromMainWindow: false }, list)).toBe(false);
+    expect(checkPermission({ permission: "geolocation", origin: "https://app.example.com", fromMainWindow: true }, list)).toBe(false);
   });
 });
 

@@ -10,6 +10,15 @@ type Info = { version: string; platform: string; status: Message | null };
 const EVENT_TYPES = ["status", "activity", "app", "chord", "shortcut"];
 const WINDOW_ACTIONS = ["step-aside", "restore", "focus"];
 
+// First-run setup screen (local file only): save the pasted URL. Main re-checks the sender and https.
+if (location.protocol === "file:") {
+  contextBridge.exposeInMainWorld("apprenticeSetup", {
+    save(url: string): Promise<{ ok: boolean; reason?: string }> {
+      return ipcRenderer.invoke("setup-save-url", String(url));
+    },
+  });
+}
+
 const info = ipcRenderer.sendSync("apprentice-hello") as Info | null;
 
 if (info && typeof info === "object") {

@@ -235,7 +235,7 @@ describe("protocol v2", () => {
     last_question: "Why 0400?",
     last_answer: "Capex.",
     off_record: false,
-    app_url: "https://ai-apprentice.vercel.app/capture",
+    app_url: "https://app.example.com/capture",
   };
 
   it("senders emit exactly the protocol shapes", () => {

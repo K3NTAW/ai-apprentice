@@ -1,8 +1,7 @@
 // APP_URL resolution, the main window's origin allowlist and the COMPANION_WS switch. Electron-free.
-import { compileRule, DEFAULT_ALLOWED_ORIGINS, parseAllowlist, type Allowlist, type OriginRule } from "./origin.mjs";
+import { buildAllowlist, compileRule, type Allowlist } from "./origin.mjs";
 
 export const PRODUCT_NAME = "AI Apprentice";
-export const DEV_APP_URL = "http://localhost:3000";
 export const MAX_APP_URL_LENGTH = 2048;
 /**
  * userData stays where the companion kept it before the rename (settings, dock prefs, window state),
@@ -38,7 +37,7 @@ export function validateAppUrl(raw: unknown): AppUrlResult {
   return { ok: true, url: url.href, origin: url.origin };
 }
 
-/** companion/app.config.json: {"appUrl": "https://..."}. A missing or corrupt file means no value. */
+/** companion/app.config.json: {"appUrl": "https://..." | null}. Missing, null or corrupt means no value. */
 export function parseAppConfig(text: string | null): { appUrl?: string } {
   if (text === null) return {};
   try {
@@ -53,34 +52,23 @@ export function parseAppConfig(text: string | null): { appUrl?: string } {
 }
 
 /**
- * APP_URL (env) wins. Otherwise packaged builds use app.config.json and dev runs use localhost:3000.
+ * APP_URL (env) wins, then app.config.json, then the URL stored by the setup screen (userData). There is
+ * no built-in default: nothing set is 'app_url_unset' (the main window shows the local setup screen).
  * An invalid value is an error (the app shows an error page), never a silent fallback.
  */
-export function resolveAppUrl(opts: { env: string | undefined; configText: string | null; isPackaged: boolean }): AppUrlResult {
-  if (opts.env !== undefined && opts.env !== "") return validateAppUrl(opts.env);
-  if (!opts.isPackaged) return validateAppUrl(DEV_APP_URL);
-  return validateAppUrl(parseAppConfig(opts.configText).appUrl);
+export function resolveAppUrl(opts: { env: string | undefined; configText: string | null; storedText: string | null }): AppUrlResult {
+  if (opts.env !== undefined && opts.env.trim() !== "") return validateAppUrl(opts.env);
+  const configured = parseAppConfig(opts.configText).appUrl;
+  if (configured !== undefined && configured.trim() !== "") return validateAppUrl(configured);
+  const stored = parseAppConfig(opts.storedText).appUrl;
+  if (stored !== undefined && stored.trim() !== "") return validateAppUrl(stored);
+  return { ok: false, reason: "app_url_unset" };
 }
 
 /**
- * The origins the main window may load and that get the bridge, microphone and screen capture.
- * Packaged: the APP_URL origin only. Dev: also localhost:3000 and the Vercel preview patterns.
- * COMPANION_ALLOWED_ORIGINS adds entries in both (explicit opt-in).
+ * The origins the main window may load and that get the bridge, microphone and screen capture: exactly the
+ * APP_URL origin, http://localhost:3000 only when unpackaged, plus exact COMPANION_ALLOWED_ORIGINS entries.
  */
-export function appAllowlist(opts: { appOrigin: string; isPackaged: boolean; env: string | undefined }): Allowlist {
-  const rules: OriginRule[] = [];
-  const errors: string[] = [];
-  const add = (entry: string) => {
-    const r = compileRule(entry);
-    if (r) rules.push(r);
-    else errors.push(`invalid origin rule ignored: ${entry}`);
-  };
-  add(opts.appOrigin);
-  if (!opts.isPackaged) for (const e of DEFAULT_ALLOWED_ORIGINS) add(e);
-  if (opts.env !== undefined && opts.env.trim() !== "") {
-    const extra = parseAllowlist(opts.env);
-    rules.push(...extra.rules);
-    errors.push(...extra.errors);
-  }
-  return { rules, errors };
+export function appAllowlist(opts: { appOrigin: string | null; isPackaged: boolean; env: string | undefined }): Allowlist {
+  return buildAllowlist(opts);
 }

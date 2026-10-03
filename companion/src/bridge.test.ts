@@ -16,8 +16,8 @@ import {
 import { appMessage, chordMessage, shortcutMessage, statusMessage, type ServerMessage } from "./protocol.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const packaged = appAllowlist({ appOrigin: "https://ai-apprentice.vercel.app", isPackaged: true, env: undefined });
-const dev = appAllowlist({ appOrigin: "http://localhost:3000", isPackaged: false, env: undefined });
+const packaged = appAllowlist({ appOrigin: "https://app.example.com", isPackaged: true, env: undefined });
+const dev = appAllowlist({ appOrigin: "https://app.example.com", isPackaged: false, env: undefined });
 const status = statusMessage("0.1.0", { input: true, screen: true, accessibility: false });
 const info = (): BridgeInfo => ({ version: "0.1.0", platform: "darwin", status });
 const main = (url: string) => ({ isMainWebContents: true, isMainFrame: true, url });
@@ -59,7 +59,7 @@ type Apprentice = {
 
 describe("bridge exposure", () => {
   it("exposes window.apprentice only when main answers hello for an allowlisted origin", () => {
-    for (const url of ["https://ai-apprentice.vercel.app/", "https://ai-apprentice.vercel.app/control?x=1"]) {
+    for (const url of ["https://app.example.com/", "https://app.example.com/control?x=1"]) {
       const hello = exposeBridge(main(url), packaged, info);
       expect(hello).not.toBeNull();
       const { api } = loadPreload(hello);
@@ -70,15 +70,15 @@ describe("bridge exposure", () => {
 
   it("exposes nothing for look-alikes, other schemes, iframes and other windows", () => {
     const denied = [
-      main("https://ai-apprentice.vercel.app.evil.com/"),
-      main("https://evil-ai-apprentice.vercel.app/"),
-      main("http://ai-apprentice.vercel.app/"),
-      main("https://user@ai-apprentice.vercel.app/"),
-      main("https://evil.com/?u=https://ai-apprentice.vercel.app"),
+      main("https://app.example.com.evil.com/"),
+      main("https://evil-app.example.com/"),
+      main("http://app.example.com/"),
+      main("https://user@app.example.com/"),
+      main("https://evil.com/?u=https://app.example.com"),
       main("file:///etc/passwd"),
       main("http://localhost:3000/"), // packaged: localhost not allowed
-      { isMainWebContents: true, isMainFrame: false, url: "https://ai-apprentice.vercel.app/" },
-      { isMainWebContents: false, isMainFrame: true, url: "https://ai-apprentice.vercel.app/" },
+      { isMainWebContents: true, isMainFrame: false, url: "https://app.example.com/" },
+      { isMainWebContents: false, isMainFrame: true, url: "https://app.example.com/" },
       main(""),
     ];
     for (const s of denied) {
@@ -90,11 +90,13 @@ describe("bridge exposure", () => {
     }
   });
 
-  it("dev builds also allow localhost:3000 and the Vercel previews; packaged builds do not", () => {
+  it("dev builds also allow localhost:3000; third-party Vercel origins get nothing", () => {
     expect(senderAllowed(main("http://localhost:3000/train"), dev)).toBe(true);
-    expect(senderAllowed(main("https://ai-apprentice-git-x-k3ntaws-projects.vercel.app/"), dev)).toBe(true);
     expect(senderAllowed(main("http://localhost:3001/"), dev)).toBe(false);
-    expect(senderAllowed(main("https://ai-apprentice-git-x-k3ntaws-projects.vercel.app/"), packaged)).toBe(false);
+    for (const url of ["https://ai-apprentice.vercel.app/", "https://evil-k3ntaws-projects.vercel.app/", "https://ai-apprentice-x.vercel.app/"]) {
+      expect(exposeBridge(main(url), dev, info), url).toBeNull();
+      expect(exposeBridge(main(url), packaged, info), url).toBeNull();
+    }
   });
 
   it("the preload is self-contained: no local requires", () => {
@@ -127,7 +129,7 @@ describe("send() validation and routing", () => {
     expect(routeBridgeMessage({ type: "dock.learned", kind: "shortcut", text: "Cmd+K opens search" }, h)).toBe(true);
     expect(h.onDock.mock.calls.map((c) => c[0].type)).toEqual(["dock.show", "dock.hide", "dock.learned"]);
 
-    const session = { type: "session.state", mode: "capture", title: "T", expert: "Sabine", asked: 1, guardrails: 0, last_question: "", last_answer: "", off_record: false, app_url: "https://ai-apprentice.vercel.app/" };
+    const session = { type: "session.state", mode: "capture", title: "T", expert: "Sabine", asked: 1, guardrails: 0, last_question: "", last_answer: "", off_record: false, app_url: "https://app.example.com/" };
     expect(routeBridgeMessage(session, h)).toBe(true);
     expect(h.onSession).toHaveBeenCalledWith(expect.objectContaining({ type: "session.state", mode: "capture" }));
   });

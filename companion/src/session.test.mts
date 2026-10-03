@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseAllowlist } from "./origin.mjs";
+import { buildAllowlist } from "./origin.mjs";
 import { Pairing } from "./pairing.mjs";
 import { CLOSE, DEFAULT_PORT } from "./protocol.mjs";
 import {
@@ -14,13 +14,16 @@ import {
 
 const HOST = `127.0.0.1:${DEFAULT_PORT}`;
 const local = "http://localhost:3000";
-const preview = "https://ai-apprentice-git-main.vercel.app";
+// Exact origins only: the probes are listed one by one through COMPANION_ALLOWED_ORIGINS.
+const fabricated = (i: number) => `https://probe${i}.example.com`;
+const probes = [...Array.from({ length: 40 }, (_, i) => fabricated(i)), fabricated(999)].join(",");
+const preview = "https://app.example.com";
 
 function setup() {
   let n = 0;
   const pairing = new Pairing(() => String(100000 + n++));
   const clock = { now: 1_000_000 };
-  const gate = new SessionGate(parseAllowlist(undefined), DEFAULT_PORT, pairing, () => clock.now);
+  const gate = new SessionGate(buildAllowlist({ appOrigin: preview, isPackaged: false, env: probes }), DEFAULT_PORT, pairing, () => clock.now);
   let id = 0;
   const attempt = (origin: string, token: string) => {
     const conn = ++id;
@@ -92,7 +95,6 @@ describe("per-Origin pairing lockout", () => {
   });
 });
 
-const fabricated = (i: number) => `https://ai-apprentice-probe${i}.vercel.app`;
 
 describe("global pairing budget across Origins", () => {
   it("refuses the 21st hello with 4429 for 60 s after 20 failures across many Origins, then pairs", () => {

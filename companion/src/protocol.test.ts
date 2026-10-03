@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { compileRule, isHostAllowed, isOriginAllowed, parseAllowlist } from "./origin.mjs";
+import { buildAllowlist, compileRule, isHostAllowed, isOriginAllowed, parseAllowlist } from "./origin.mjs";
 import { codesEqual, generateCode, Pairing } from "./pairing.mjs";
 import { CLOSE, DEFAULT_PORT, parseClientMessage, parsePort, statusMessage } from "./protocol.mjs";
 import { MAX_PENDING, SessionGate } from "./session.mjs";
 
 const PORT = DEFAULT_PORT;
 const HOST = `127.0.0.1:${PORT}`;
-const defaults = parseAllowlist(undefined);
+const defaults = buildAllowlist({ appOrigin: "https://app.example.com", isPackaged: false, env: undefined });
 const okOrigin = "http://localhost:3000";
 
 function gateWith(code = "123456") {
@@ -54,33 +54,28 @@ describe("message validation", () => {
 });
 
 describe("origin allowlist", () => {
-  it("allows the default origins and wildcard matches", () => {
-    for (const o of [
-      "http://localhost:3000",
-      "https://ai-apprentice.vercel.app",
-      "https://ai-apprentice-git-main.vercel.app",
-      "https://ai-apprentice-abc123-k3ntaws-projects.vercel.app",
-      "https://feature-x-k3ntaws-projects.vercel.app",
-    ]) {
+  it("allows the APP_URL origin and localhost:3000 (unpackaged)", () => {
+    for (const o of ["http://localhost:3000", "https://app.example.com", "https://app.example.com:443"]) {
       expect(isOriginAllowed(o, defaults), o).toBe(true);
     }
   });
 
-  it("rejects look-alikes, wrong scheme or port, missing and null", () => {
+  it("rejects third-party Vercel origins, look-alikes, wrong scheme or port, missing and null", () => {
     for (const o of [
+      "https://ai-apprentice.vercel.app",
+      "https://evil-k3ntaws-projects.vercel.app",
+      "https://ai-apprentice-x.vercel.app",
+      "https://ai-apprentice-git-main.vercel.app",
       "https://evil.com",
-      "https://ai-apprentice.vercel.app.evil.com",
+      "https://app.example.com.evil.com",
+      "https://x.app.example.com",
       "http://127.0.0.1.evil.com",
       "http://localhost:3000.evil.com",
-      "https://a.b-k3ntaws-projects.vercel.app",
-      "https://evil.com/ai-apprentice.vercel.app",
-      "http://ai-apprentice.vercel.app",
+      "http://app.example.com",
       "https://localhost:3000",
       "http://localhost:3001",
       "http://localhost",
-      "https://ai-apprentice.vercel.app:8443",
-      "https://xai-apprentice.vercel.app",
-      "https://ai-apprentice_x.vercel.app",
+      "https://app.example.com:8443",
       "null",
       "",
       undefined,
@@ -90,33 +85,11 @@ describe("origin allowlist", () => {
     }
   });
 
-  it("treats default ports as equal", () => {
-    const list = parseAllowlist("https://app.example.com");
-    expect(isOriginAllowed("https://app.example.com", list)).toBe(true);
-    expect(isOriginAllowed("https://app.example.com:443", list)).toBe(true);
-  });
-
-  it("compiles wildcard rules only inside the first label", () => {
-    expect(compileRule("*")).toBeNull();
-    expect(compileRule("https://*")).toBeNull();
-    expect(compileRule("https://*.vercel.app")).toBeNull();
-    expect(compileRule("https://app.*.com")).toBeNull();
-    expect(compileRule("https://*.com")).toBeNull();
-    expect(compileRule("ftp://x.example.com")).toBeNull();
-    expect(compileRule("https://pre-*.example.com")).not.toBeNull();
-    const list = parseAllowlist("https://pre-*.example.com");
-    expect(isOriginAllowed("https://pre-.example.com", list)).toBe(true);
-    expect(isOriginAllowed("https://pre-abc-1.example.com", list)).toBe(true);
-    expect(isOriginAllowed("https://pre-a.b.example.com", list)).toBe(false);
-  });
-
-  it("denies everything when the override is empty or has no valid entries", () => {
-    for (const env of ["", " , ", "*", "nonsense"]) {
-      const list = parseAllowlist(env);
-      expect(list.rules).toHaveLength(0);
-      expect(list.errors.length).toBeGreaterThan(0);
-      expect(isOriginAllowed(okOrigin, list)).toBe(false);
+  it("compiles exact origins only; any '*' is invalid", () => {
+    for (const bad of ["*", "https://*", "https://*.vercel.app", "https://pre-*.example.com", "https://app.*.com", "ftp://x.example.com"]) {
+      expect(compileRule(bad), bad).toBeNull();
     }
+    expect(compileRule("https://app.example.com")).not.toBeNull();
   });
 
   it("checks the Host header against loopback and port (DNS rebinding)", () => {

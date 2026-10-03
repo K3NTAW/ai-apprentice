@@ -4,11 +4,13 @@ Run on a packaged build (`npm --prefix companion run package`) on macOS, and whe
 
 ## Install and first run
 - [ ] Open `AI Apprentice.app` (after `xattr -dr com.apple.quarantine`). Window title, Dock name, tray tooltip and About say `AI Apprentice`.
-- [ ] The main window opens about 1280x820 on the control room URL from `app.config.json`. Resize and move it, quit, reopen: size and position are kept.
+- [ ] The main window opens about 1280x820 on the configured control room URL (`APP_URL`, `app.config.json` or the stored setup URL). Resize and move it, quit, reopen: size and position are kept.
 - [ ] Unplug the external display the window was on, reopen: the window opens on the main display at the default size.
 - [ ] Launch the app a second time: no second instance, the first window comes forward.
 - [ ] Close the window: it hides, the Dock icon goes away, the tray stays. `Open AI Apprentice` in the tray brings it back. Cmd+Q quits.
 - [ ] `APP_URL=http://example.com` on launch: error page, no page loaded.
+- [ ] First run with no `APP_URL` and no stored URL: the local setup screen "Paste your AI Apprentice URL" shows; no network request to any remote page. An `http://` URL is refused with a message; an `https://` URL is saved (`app-url.json` in userData) and loaded.
+- [ ] Origin allowlist is exact: with `APP_URL` set to our preview, open `https://ai-apprentice.vercel.app` (third party) via a link: it opens in the system browser, no `window.apprentice`, no mic or capture. `COMPANION_ALLOWED_ORIGINS=https://*.example.com` logs `wildcard origin rejected`.
 
 ## Login flow
 - [ ] Sign in with the email one-time code inside the window. The session survives a quit and relaunch.

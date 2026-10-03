@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'" />
+    <title>AI Apprentice</title>
+    <style>
+      body { margin: 0; height: 100vh; display: grid; place-items: center; background: #0b0b0c; color: #e7e7ea; font: 15px/1.5 -apple-system, "Segoe UI", sans-serif; }
+      main { width: 520px; max-width: 100%; padding: 24px; box-sizing: border-box; }
+      input { width: 100%; box-sizing: border-box; padding: 8px 10px; border-radius: 6px; border: 1px solid #33333a; background: #1c1c20; color: inherit; font: inherit; }
+      button { margin-top: 12px; padding: 8px 14px; border-radius: 6px; border: 0; background: #e7e7ea; color: #0b0b0c; font: inherit; cursor: pointer; }
+      #error { color: #ff8a80; min-height: 1.5em; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Paste your AI Apprentice URL</h1>
+      <p>The address of your AI Apprentice web app, for example <code>https://your-app.example.com</code>. It must start with <code>https://</code>.</p>
+      <form id="form">
+        <input id="url" type="url" placeholder="https://" autocomplete="off" spellcheck="false" required />
+        <button type="submit">Save and open</button>
+      </form>
+      <p id="error" role="alert"></p>
+    </main>
+    <script src="setup.js"></script>
+  </body>
+</html>

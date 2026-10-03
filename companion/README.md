@@ -31,16 +31,35 @@ icon) brings it back. Quit with Cmd+Q or `Quit` in the tray menu.
 
 ## Where the app loads from (APP_URL)
 
-- `APP_URL` env var wins (e.g. `APP_URL=https://staging.example.com npm run dev`).
-- Otherwise a packaged build reads `appUrl` from `companion/app.config.json` (shipped in the app),
-  and a dev run (`npm run dev`) uses `http://localhost:3000`.
-- `https` only (`http` only for localhost / 127.0.0.1), no userinfo. An invalid value shows an error
-  page; there is no silent fallback.
+There is no built-in default URL. Order:
 
-Origin allowlist for the main window (navigation, the bridge, microphone, screen capture):
-packaged builds allow the APP_URL origin only; dev builds also allow `http://localhost:3000` and the
-Vercel preview patterns. `COMPANION_ALLOWED_ORIGINS` adds entries (explicit opt-in). Links to other
-origins open in the system browser (https only); `window.open` never opens an app window.
+1. `APP_URL` env var (`https`, or `http` only for localhost / 127.0.0.1).
+2. `appUrl` in `companion/app.config.json` (shipped in the app). It is `null` in the repo; set it only
+   for a build meant for one fixed deployment you own.
+3. The URL pasted on the first-run setup screen, stored as `app-url.json` in the app's userData folder.
+
+Until one of these is set, the main window shows the local setup screen ("Paste your AI Apprentice
+URL", https only) and nothing remote is loaded. An invalid value shows a local error page; there is no
+silent fallback.
+
+Setting it:
+
+- Dev against the local web app: `APP_URL=http://localhost:3000 npm run dev`.
+- A Vercel preview: copy the exact deployment URL from the Vercel dashboard (project `ai-apprentice`,
+  team `k3ntaws-projects`), e.g. `APP_URL=https://ai-apprentice-<hash>-k3ntaws-projects.vercel.app npm run dev`,
+  or paste it on the setup screen. Each preview URL is its own origin; a new preview needs a new URL.
+- Production: paste the production URL on the setup screen once, or set `appUrl` in `app.config.json`
+  before `npm run package` for a build pinned to it. Only use a domain you control: `ai-apprentice.vercel.app`
+  is not ours.
+- To change a stored URL, quit the app, delete `app-url.json` from the userData folder (on macOS the
+  `AI Apprentice Companion` folder under Application Support), and start again.
+
+Origin allowlist: one exact-origin list, used for everything that decides trust (main window navigation
+and `window.open`, the bridge, microphone and display-capture grants, display media, `app_url` in the
+panel, WebSocket `Origin`). It is exactly the APP_URL origin, plus `http://localhost:3000` only when the
+app is unpackaged, plus exact origins from `COMPANION_ALLOWED_ORIGINS`. There are no wildcards: an
+entry containing `*` is rejected with a log line. Links to other origins open in the system browser
+(https only); `window.open` never opens an app window.
 
 ## Bridge (window.apprentice)
 
@@ -114,8 +133,8 @@ Environment:
 - `COMPANION_DOCK=0` (or `off`, `false`, `no`): rollback switch for the v3 dock. No side dock and the v2
   orb buddy in every mode (no avatar, buddy not hidden in Capture). `dock.*` messages are ignored.
 - `COMPANION_CHORDS=0` (or `off`, `false`, `no`): rollback switch. No `chord` messages are sent.
-- `COMPANION_ALLOWED_ORIGINS` comma separated, e.g. `http://localhost:3000,https://ai-apprentice*.vercel.app`.
-  Unset means the defaults below. Set but empty, or with no valid entry, means deny all.
+- `COMPANION_ALLOWED_ORIGINS` comma separated exact origins added to the allowlist, e.g.
+  `https://staging.example.com`. No wildcards: an entry with `*` is rejected and logged.
 
 ## Tests and build
 
@@ -159,7 +178,7 @@ the Planner runs it before merge.
   shortcuts), `Open control room` (only when `app_url` passes the check below), macOS permissions and
   the shortcut settings. Toggle it from the tray (Windows: left click) or `Option+Shift+A` / `Alt+Shift+A`.
 - **`app_url`** (`appUrl.mts`): `new URL`, `https` (or `http` for `localhost`/`127.0.0.1`), no
-  userinfo, `isOriginAllowed(url.origin)` against the same allowlist as WebSocket clients; the
+  userinfo, `isOriginAllowed(url.origin)` against the single exact-origin allowlist; the
   normalised `href` is opened.
 
 Shortcuts (configurable in the panel, saved to `settings.json` in the app's userData folder):
@@ -322,10 +341,9 @@ for v3 avatars; any other type above 16 KiB is rejected).
 
 Admission:
 
-- `Origin` must exactly match the allowlist (scheme, host, port). Default allowlist:
-  `http://localhost:3000`, `https://*-k3ntaws-projects.vercel.app`, `https://ai-apprentice*.vercel.app`.
-  `*` is allowed only inside the host's first label and matches `[a-z0-9-]*` (never a dot); bare
-  `*` or `*.domain` rules are rejected. Missing or `null` Origin is rejected.
+- `Origin` must exactly match the exact-origin allowlist (scheme, host, port): the APP_URL origin,
+  `http://localhost:3000` only when unpackaged, and exact `COMPANION_ALLOWED_ORIGINS` entries. No
+  wildcards. Missing or `null` Origin is rejected.
 - `Host` must be `127.0.0.1:<port>` or `localhost:<port>` (DNS rebinding guard).
 - First message must be `{"type":"hello","token":"<6-digit code>"}` within 5 s.
 - Codes come from `crypto.randomInt` and are compared in constant time. Each wrong code closes
