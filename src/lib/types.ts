@@ -4,12 +4,40 @@ import { z } from "zod";
 
 const Unit = z.number().min(0).max(1);
 
+// Tolerance for float rounding when checking that a rect stays inside the frame.
+const RECT_EPS = 1e-6;
+
+/** Rect normalised 0..1 of the captured frame (the primary display). Never clamped: out of range is invalid. */
+export const RectSchema = z
+  .object({ x: Unit, y: Unit, w: Unit, h: Unit })
+  .refine((r) => r.x + r.w <= 1 + RECT_EPS && r.y + r.h <= 1 + RECT_EPS, { message: "rect outside the frame" });
+export type Rect = z.infer<typeof RectSchema>;
+
+export const SCREEN_EVENT_TYPES = [
+  "record_opened",
+  "field_changed",
+  "button_clicked",
+  "status_changed",
+  "app_switched",
+  "text_entered",
+  "item_created",
+  "item_sent",
+  "item_deleted",
+  "navigated",
+] as const;
+export type ScreenEventType = (typeof SCREEN_EVENT_TYPES)[number];
+
 export const ScreenEventSchema = z.object({
   id: z.string(),
   t: z.number(),
-  source: z.enum(["vision", "dom"]),
-  type: z.enum(["record_opened", "field_changed", "button_clicked", "status_changed"]),
+  // os: frontmost app or window changes reported by the desktop companion.
+  source: z.enum(["vision", "dom", "os"]),
+  type: z.enum(SCREEN_EVENT_TYPES),
+  // kind is free text, e.g. "email", "slide", "cell", "file".
   entity: z.object({ kind: z.string(), id: z.string() }),
+  app: z.string().optional(),
+  window: z.string().optional(),
+  rect: RectSchema.optional(),
   field: z.string().optional(),
   from: z.string().optional(),
   to: z.string().optional(),
@@ -120,6 +148,7 @@ export const WorkMapStepSchema = z.object({
   screen_moment: z.object({
     t: z.number(),
     frame_ref: z.string().optional(),
+    app: z.string().optional(),
     entity: z.string(),
     field: z.string().optional(),
   }),
@@ -146,6 +175,23 @@ export const WorkMapSchema = z.object({
 });
 export type WorkMap = z.infer<typeof WorkMapSchema>;
 
+export const TEACH_LIST_MAX = 200;
+
+/**
+ * Teach progress, written by the Teach task and read by the control room.
+ * Write semantics: the writer replaces the whole object; mastered and practice are step ids
+ * (writers union mastered with the stored list before writing); interventions is a monotonic
+ * counter written only by the tutor.
+ */
+export const TeachProgressSchema = z.object({
+  workmap_session_id: z.string(),
+  mastered: z.array(z.string()).max(TEACH_LIST_MAX),
+  practice: z.array(z.string()).max(TEACH_LIST_MAX),
+  interventions: z.number().int().min(0),
+  finished_at: z.string().optional(),
+});
+export type TeachProgress = z.infer<typeof TeachProgressSchema>;
+
 export const SessionSchema = z.object({
   id: z.string(),
   kind: z.enum(["capture", "teach"]),
@@ -159,6 +205,7 @@ export const SessionSchema = z.object({
   off_record_ranges: z.array(z.object({ from: z.number(), to: z.number().optional() })),
   // Stored frame files with their capture time, so off-record purges can find them. Optional for older sessions.
   frames: z.array(z.object({ name: z.string(), t: z.number() })).optional(),
+  teach: TeachProgressSchema.optional(),
 });
 export type Session = z.infer<typeof SessionSchema>;
 
