@@ -1,0 +1,17 @@
+html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; width: 100vw; height: 100vh; }
+#root { position: fixed; inset: 0; pointer-events: none; }
+.halo {
+  position: absolute; box-sizing: border-box; border-radius: 12px;
+  border: 3px solid rgba(255, 170, 0, 0.95);
+  box-shadow: 0 0 18px 6px rgba(255, 170, 0, 0.55);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+.bubble {
+  position: absolute; max-width: 320px; padding: 8px 12px; border-radius: 12px;
+  background: rgba(20, 20, 24, 0.92); color: #fff; font: 14px/1.35 -apple-system, system-ui, sans-serif;
+  white-space: pre-wrap; word-wrap: break-word; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 12px 3px rgba(255, 170, 0, 0.45); opacity: 0.85; }
+  50% { box-shadow: 0 0 26px 10px rgba(255, 170, 0, 0.7); opacity: 1; }
+}

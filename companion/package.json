@@ -1,0 +1,46 @@
+{
+  "name": "ai-apprentice-companion",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI Apprentice desktop companion (macOS menu-bar app): activity counts, frontmost app, halo overlay, local WebSocket.",
+  "type": "module",
+  "main": "dist/main.mjs",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "npm run build && electron .",
+    "test": "vitest run",
+    "package": "npm run build && electron-builder --mac dir",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "dependencies": {
+    "get-windows": "^9.3.0",
+    "uiohook-napi": "^1.5.5",
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "@types/ws": "^8.18.2",
+    "electron": "^44.5.1",
+    "electron-builder": "^26.15.3",
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.3"
+  },
+  "build": {
+    "appId": "app.aiapprentice.companion",
+    "productName": "AI Apprentice Companion",
+    "directories": { "output": "release" },
+    "files": ["dist/**", "static/**", "package.json"],
+    "asar": true,
+    "asarUnpack": ["node_modules/uiohook-napi/**", "node_modules/get-windows/**"],
+    "npmRebuild": true,
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": ["dir"],
+      "identity": null,
+      "extendInfo": {
+        "LSUIElement": true,
+        "NSScreenCaptureUsageDescription": "Reads the frontmost window title for the paired AI Apprentice page."
+      }
+    }
+  }
+}

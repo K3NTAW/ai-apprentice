@@ -21,3 +21,9 @@ spikes/out/
 next-env.d.ts
 .DS_Store
 coverage/
+
+# desktop companion build output
+companion/dist/
+companion/out/
+companion/release/
+*.app
