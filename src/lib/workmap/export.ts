@@ -17,7 +17,7 @@ export function exportGuardrailsMarkdown(workmap: WorkMap): string {
   if (!workmap.steps.length) lines.push("No steps captured yet.");
   for (const step of workmap.steps) {
     const m = step.screen_moment;
-    const where = `${m.entity}${m.field ? `, ${m.field.replace(/_/g, " ")}` : ""} [${formatT(m.t)}]`;
+    const where = `${m.app ? `${m.app}: ` : ""}${m.entity}${m.field ? `, ${m.field.replace(/_/g, " ")}` : ""} [${formatT(m.t)}]`;
     lines.push(`${step.n}. **${step.title}**: ${step.decision} (${where})`);
     if (step.reason) lines.push(`   - Why: "${step.reason.quote}" [${formatT(step.reason.t)}, ${step.reason.source.replace(/_/g, " ")}]`);
     else lines.push("   - Why: not stated by the expert.");

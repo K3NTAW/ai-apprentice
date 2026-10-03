@@ -66,6 +66,7 @@ export function verifyWorkMap(workmap: WorkMap, session: Session): WorkMap {
       ? {
           t: ev.t,
           ...(ev.frame_ref ? { frame_ref: ev.frame_ref } : {}),
+          ...(ev.app ? { app: ev.app } : {}),
           entity: entityLabel(ev.entity),
           ...(ev.field ? { field: ev.field } : {}),
         }
@@ -84,14 +85,20 @@ export function verifyWorkMap(workmap: WorkMap, session: Session): WorkMap {
 
 // ---------- deterministic fallback ----------
 
-type Action = "hold" | "second_approval" | "save";
-const ACTIONS: readonly string[] = ["hold", "second_approval", "save"];
-const STATUS_ACTION: Record<string, Action> = { on_hold: "hold", second_approval: "second_approval", saved: "save" };
+type GroupKind = "field" | "text" | "sent" | "deleted" | "created" | "action" | "status" | "open";
+type Group = { kind: GroupKind; events: ScreenEvent[]; field?: string };
 
-type Group = { kind: "field" | Action; events: ScreenEvent[]; field?: string };
+const NAVIGATION: readonly string[] = ["record_opened", "navigated", "app_switched"];
+const ITEM_KIND: Partial<Record<ScreenEvent["type"], GroupKind>> = { item_sent: "sent", item_deleted: "deleted", item_created: "created" };
 
 const groupEntity = (g: Group) => entityLabel(g.events[0].entity);
+const cap = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
+const plain = (s: string) => s.replace(/[_-]+/g, " ").trim();
+const inApp = (e: ScreenEvent) => (e.app ? ` in ${e.app}` : "");
+const unique = <T,>(xs: T[]) => [...new Set(xs)];
+const listWords = (xs: string[]) => (xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
 
+/** Steps from changes, sends, deletes, creates, actions and statuses. Navigation only: one "Open" step per object. */
 function groupEvents(all: ScreenEvent[]): Group[] {
   const dom = all.filter((e) => e.source === "dom");
   const events = [...(dom.length ? dom : all)].sort((a, b) => a.t - b.t);
@@ -99,36 +106,74 @@ function groupEvents(all: ScreenEvent[]): Group[] {
   for (const e of events) {
     const id = entityLabel(e.entity);
     const last = groups[groups.length - 1];
-    if (e.type === "field_changed" && e.field && e.field !== "approval_status") {
-      if (last && last.kind === "field" && last.field === e.field && groupEntity(last) === id) last.events.push(e);
-      else groups.push({ kind: "field", field: e.field, events: [e] });
+    if ((e.type === "field_changed" || e.type === "text_entered") && e.field && e.field !== "approval_status") {
+      const kind: GroupKind = e.type === "field_changed" ? "field" : "text";
+      if (last && last.kind === kind && last.field === e.field && groupEntity(last) === id) last.events.push(e);
+      else groups.push({ kind, field: e.field, events: [e] });
       continue;
     }
-    let action: Action | undefined;
-    if (e.type === "button_clicked" && e.field && ACTIONS.includes(e.field)) action = e.field as Action;
-    else if (e.type === "status_changed" && e.to) action = STATUS_ACTION[e.to];
-    if (!action) continue;
-    const twin = groups.find((g) => g.kind === action && groupEntity(g) === id && Math.abs(g.events[0].t - e.t) <= 5);
+    if (NAVIGATION.includes(e.type)) continue;
+    let kind = ITEM_KIND[e.type];
+    if (e.type === "button_clicked" && (e.field || e.to)) kind = "action";
+    else if (e.type === "status_changed" && e.to) kind = "status";
+    if (!kind) continue;
+    // A status change right after an action on the same object belongs to that action.
+    const twin =
+      kind === "status" && groups.find((g) => g.kind === "action" && groupEntity(g) === id && Math.abs(g.events[0].t - e.t) <= 5);
     if (twin) twin.events.push(e);
-    else groups.push({ kind: action, events: [e] });
+    else groups.push({ kind, events: [e] });
+  }
+  if (groups.length) return groups;
+  const seen = new Set<string>();
+  for (const e of events) {
+    const id = entityLabel(e.entity);
+    if (e.type === "app_switched" || seen.has(id)) continue;
+    seen.add(id);
+    groups.push({ kind: "open", events: [e] });
   }
   return groups;
 }
 
 function describe(g: Group): { title: string; decision: string; judgment: boolean } {
+  const first = g.events[0];
   const entity = groupEntity(g);
-  if (g.kind === "field") {
-    const first = g.events[0];
-    const last = g.events[g.events.length - 1];
-    const label = fieldLabel(g.field ?? "field");
-    const change = first.from !== undefined && last.to !== undefined ? ` from ${first.from} to ${last.to}` : "";
-    return { title: `Change ${label}`, decision: `Change the ${label} of ${entity}${change}`, judgment: true };
+  const kind = plain(first.entity.kind);
+  const where = inApp(first);
+  switch (g.kind) {
+    case "field":
+    case "text": {
+      const last = g.events[g.events.length - 1];
+      const label = fieldLabel(g.field ?? "field");
+      const change = first.from !== undefined && last.to !== undefined ? ` from ${first.from} to ${last.to}` : "";
+      const verb = g.kind === "field" ? "Change" : "Write";
+      return { title: `${verb} ${label} on ${kind}`, decision: `${verb} the ${label} of ${entity}${change}${where}`, judgment: g.kind === "field" };
+    }
+    case "sent": {
+      const verb = first.field ? cap(plain(first.field)) : "Send";
+      return { title: `${verb} ${kind}`, decision: `${verb} ${entity}${first.to ? ` to ${first.to}` : ""}${where}`, judgment: true };
+    }
+    case "deleted":
+      return { title: `Delete ${kind}`, decision: `Delete ${entity}${where}`, judgment: true };
+    case "created":
+      return { title: `Create ${kind}`, decision: `Create ${entity}${where}`, judgment: false };
+    case "action": {
+      const verb = cap(plain(first.field ?? first.to ?? "press"));
+      return { title: `${verb} ${kind}`, decision: `${verb} ${entity}${where}`, judgment: true };
+    }
+    case "status":
+      return { title: `Set status of ${kind}`, decision: `Set ${entity} to ${plain(first.to ?? "")}${where}`, judgment: true };
+    case "open":
+      return { title: `Open ${kind}`, decision: `Open ${entity}${where}`, judgment: false };
   }
-  if (g.kind === "hold") return { title: "Hold invoice", decision: `Put ${entity} on hold`, judgment: true };
-  if (g.kind === "second_approval") {
-    return { title: "Send for second approval", decision: `Send ${entity} for second approval`, judgment: true };
-  }
-  return { title: "Save", decision: `Save ${entity}`, judgment: false };
+}
+
+/** Task title from what the expert did, e.g. "Forward and flag email in Microsoft Outlook". */
+function taskTitle(groups: Group[], titles: string[]): string {
+  if (!groups.length) return "Recorded task";
+  const verbs = unique(titles.map((t) => t.split(" ")[0].toLowerCase()));
+  const kinds = unique(groups.map((g) => plain(g.events[0].entity.kind)));
+  const apps = unique(groups.map((g) => g.events[0].app).filter((a): a is string => !!a));
+  return `${cap(listWords(verbs))} ${listWords(kinds)}${apps.length ? ` in ${listWords(apps)}` : ""}`;
 }
 
 const qaSource = (q: QAPair): ReasonSource => (q.phase === "debrief" ? "debrief" : "live_question");
@@ -159,10 +204,11 @@ function linkQA(groups: Group[], qa: QAPair[]): QAPair[][] {
 export function fallbackWorkMap(session: Session): WorkMap {
   const groups = groupEvents(session.events);
   const qaByGroup = linkQA(groups, session.qa);
+  const described = groups.map(describe);
   const steps = groups.map((g, i): WorkMapStep => {
     const ev = g.events[0];
     const frame = g.events.find((e) => e.frame_ref)?.frame_ref;
-    const { title, decision, judgment } = describe(g);
+    const { title, decision, judgment } = described[i];
     const linked = qaByGroup[i];
     const reasonQA = linked.find((q) => q.about !== "guardrail") ?? linked[0];
     const guardrails: Guardrail[] = linked
@@ -179,6 +225,7 @@ export function fallbackWorkMap(session: Session): WorkMap {
       screen_moment: {
         t: ev.t,
         ...(frame ? { frame_ref: frame } : {}),
+        ...(ev.app ? { app: ev.app } : {}),
         entity: entityLabel(ev.entity),
         ...(ev.field ? { field: ev.field } : {}),
       },
@@ -191,10 +238,8 @@ export function fallbackWorkMap(session: Session): WorkMap {
       scores: { reason_captured: 0, guardrail_captured: 0 },
     };
   });
-  const ids = [...new Set(groups.map((g) => g.events[0].entity.id))];
-  const kind = groups[0]?.events[0].entity.kind ?? "record";
   return {
-    task: ids.length ? `Process ${kind}s ${ids.join(", ")}` : "Recorded task",
+    task: taskTitle(groups, described.map((d) => d.title)),
     expert: session.expert ?? "expert",
     confirmed_by_expert: false,
     steps,
@@ -221,6 +266,7 @@ export const WORKMAP_JSON_SCHEMA = obj({
       screen_moment: obj({
         t: { type: "number" },
         frame_ref: nullable({ type: "string" }),
+        app: nullable({ type: "string" }),
         entity: { type: "string" },
         field: nullable({ type: "string" }),
       }),
@@ -249,8 +295,10 @@ export const WORKMAP_JSON_SCHEMA = obj({
 
 const SYSTEM_PROMPT = `You turn a recorded expert work session into a Work Map: the ordered steps of the task, the decision taken at each step, why, and the rules the expert never breaks.
 Rules:
-- Steps are in the order they happened. Each step's screen_moment copies t, frame_ref, entity and field from one real event in the list (entity as "<kind> <id>", e.g. "invoice 4471").
-- decision is plain words, e.g. "Change the cost center of invoice 4471 from 4711 to 0400".
+- The work can happen in any app (email, slides, spreadsheets, browser, desktop apps). Assume nothing about the domain beyond the events and words given.
+- task is a short title from what the expert did, e.g. "Forward and flag email in Microsoft Outlook".
+- Steps are in the order they happened. Skip pure navigation unless nothing else happened. Each step's screen_moment copies t, frame_ref, app, entity and field from one real event in the list (entity as "<kind> <id>", e.g. "slide 4" or "email Offer Q3").
+- title and decision name the app and the object, e.g. "Delete slide 4 in Microsoft PowerPoint".
 - is_judgment_call is true when the expert chose something the screen alone does not dictate.
 - reason.quote must be copied VERBATIM from an expert transcript entry or a Q&A answer, with that utterance's t and source (live_question for capture-phase Q&A answers, debrief for debrief answers or debrief transcript, narration for capture transcript). If the expert never said why, reason is null. Never invent or paraphrase a quote.
 - guardrails: rules the expert stated. kind is limit (a threshold), exception (when the normal rule does not apply) or stop_and_ask (when to hand over to a human). quote is the verbatim utterance, quote_ref its t. Leave a guardrail out if there is no verbatim quote.
@@ -263,6 +311,8 @@ function sessionPayload(session: Session) {
     events: session.events.map((e) => ({
       t: e.t,
       type: e.type,
+      app: e.app ?? null,
+      window: e.window ?? null,
       entity: entityLabel(e.entity),
       field: e.field ?? null,
       from: e.from ?? null,
@@ -299,7 +349,7 @@ export function workmapRequestBody(session: Session) {
 
 type ModelStep = {
   title: string;
-  screen_moment: { t: number; frame_ref: string | null; entity: string; field: string | null };
+  screen_moment: { t: number; frame_ref: string | null; app?: string | null; entity: string; field: string | null };
   decision: string;
   is_judgment_call: boolean;
   reason: { quote: string; t: number; source: ReasonSource } | null;
@@ -342,6 +392,7 @@ function fromModel(out: ModelOutput, session: Session): WorkMap {
       screen_moment: {
         t: Number(s.screen_moment?.t ?? 0),
         ...(s.screen_moment?.frame_ref ? { frame_ref: s.screen_moment.frame_ref } : {}),
+        ...(s.screen_moment?.app ? { app: String(s.screen_moment.app) } : {}),
         entity: String(s.screen_moment?.entity ?? ""),
         ...(s.screen_moment?.field ? { field: s.screen_moment.field } : {}),
       },

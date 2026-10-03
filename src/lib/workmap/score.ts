@@ -66,12 +66,14 @@ function eventFor(step: WorkMapStep, session?: Session): ScreenEvent | undefined
   const same = session.events.filter(
     (e) => e.t === m.t && normalise(entityLabel(e.entity)) === normalise(m.entity) && (!m.field || e.field === m.field),
   );
-  return same.find((e) => e.type === "field_changed" || e.type === "button_clicked") ?? same[0];
+  return same.find((e) => e.type !== "status_changed" && e.type !== "navigated" && e.type !== "app_switched") ?? same[0];
 }
 
-type Kind = "hold" | "second_approval" | "save" | "field" | "other";
+type Kind = "hold" | "second_approval" | "save" | "field" | "sent" | "deleted" | "other";
 
 function stepKind(step: WorkMapStep, ev?: ScreenEvent): Kind {
+  if (ev?.type === "item_sent") return "sent";
+  if (ev?.type === "item_deleted") return "deleted";
   const f = ev?.field ?? step.screen_moment.field;
   if (f === "hold" || f === "second_approval" || f === "save") return f;
   if (f === "approval_status") {
@@ -81,6 +83,7 @@ function stepKind(step: WorkMapStep, ev?: ScreenEvent): Kind {
     if (to === "saved") return "save";
     return "other";
   }
+  if (ev && ev.type !== "field_changed" && ev.type !== "text_entered") return "other";
   return f ? "field" : "other";
 }
 
@@ -104,6 +107,10 @@ export function suggestedQuestion(step: WorkMapStep, missing: Gap["missing"], se
         return `You sent ${entity} for a second approval. What made you do that?`;
       case "save":
         return `You saved ${entity}. What did you check before saving it?`;
+      case "sent":
+        return `You sent ${entity}${ev?.to ? ` to ${ev.to}` : ""}. Why that person?`;
+      case "deleted":
+        return `You deleted ${entity}. What made you delete it?`;
       default:
         return `At ${entity} you decided to ${step.decision.charAt(0).toLowerCase()}${step.decision.slice(1)}. What made you do that?`;
     }
@@ -112,11 +119,15 @@ export function suggestedQuestion(step: WorkMapStep, missing: Gap["missing"], se
     case "field":
       return `${changeClause(step, ev)} Is there a rule or limit behind that, and when would you stop and ask someone?`;
     case "hold":
-      return `You held ${entity}. Is that for every supplier, and who decides when to release it?`;
+      return `You held ${entity}. Is that always the case, and who decides when to release it?`;
     case "second_approval":
       return `You sent ${entity} for a second approval. When is that required, and is there ever an exception?`;
     case "save":
       return `You saved ${entity}. Is there anything that would stop you from saving it?`;
+    case "sent":
+      return `You sent ${entity} on. When would you not, or stop and ask someone first?`;
+    case "deleted":
+      return `You deleted ${entity}. Is there anything you would never delete, or a case where you would ask first?`;
     default:
       return `At ${entity}, is there a rule you never break, or a case where you would stop and ask someone?`;
   }
