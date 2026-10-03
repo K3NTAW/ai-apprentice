@@ -49,7 +49,7 @@ describe("permission status from macOS permission APIs", () => {
     monitor.check();
     expect(sent).toHaveLength(2);
     expect(sent[1].permissions).toEqual({ input: true, screen: true, accessibility: true, inputVerified: true });
-    expect(Object.keys(sent[1]).sort()).toEqual(["permissions", "type", "version"]);
+    expect(Object.keys(sent[1]).sort()).toEqual(["permissions", "protocol", "type", "version"]);
   });
 
   it("an observed event does not override missing Accessibility or a denied Input Monitoring query", () => {

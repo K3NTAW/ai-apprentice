@@ -103,7 +103,7 @@ function isEnum<T extends string>(v: unknown, values: readonly T[]): v is T {
 }
 
 /** Strip control characters; null when not a string or longer than max code points. */
-function text(v: unknown, max: number): string | null {
+function cleanText(v: unknown, max: number): string | null {
   if (typeof v !== "string") return null;
   // eslint-disable-next-line no-control-regex
   const clean = v.replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, " ");
@@ -131,7 +131,7 @@ function parseSessionState(d: Record<string, unknown>): ParseResult {
   if (mode === undefined) return bad("session_mode");
   const strings: Partial<Record<keyof typeof SESSION_LIMITS, string>> = {};
   for (const key of Object.keys(SESSION_LIMITS) as (keyof typeof SESSION_LIMITS)[]) {
-    const t = d[key] === undefined ? "" : text(d[key], SESSION_LIMITS[key]);
+    const t = d[key] === undefined ? "" : cleanText(d[key], SESSION_LIMITS[key]);
     if (t === null) return bad(`session_${key}`);
     strings[key] = t;
   }
@@ -191,7 +191,7 @@ export function parseClientMessage(raw: unknown): ParseResult {
       if (!isEnum(data.state, BUDDY_MODES)) return bad("buddy_state");
       return { ok: true, msg: { type: "buddy.state", state: data.state } };
     case "buddy.say": {
-      const t = text(data.text, MAX_SAY);
+      const t = cleanText(data.text, MAX_SAY);
       if (t === null || t.trim() === "") return bad("say_text");
       const tt = ttl(data.ttl_ms);
       if (!tt.ok) return bad("say_ttl");
@@ -202,7 +202,7 @@ export function parseClientMessage(raw: unknown): ParseResult {
       const rect = validateRect(data.rect);
       if (!rect.ok) return bad(rect.reason);
       if (!isEnum(data.style, POINT_STYLES)) return bad("point_style");
-      const t = data.text === undefined ? "" : text(data.text, MAX_POINT_TEXT);
+      const t = data.text === undefined ? "" : cleanText(data.text, MAX_POINT_TEXT);
       if (t === null) return bad("point_text");
       const tt = ttl(data.ttl_ms);
       if (!tt.ok) return bad("point_ttl");
