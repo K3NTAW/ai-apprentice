@@ -2,6 +2,7 @@
 // Frames inside an off-record range are neither stored nor sent to the model.
 import { ScreenEventSchema, type VisionEvent } from "@/lib/types";
 import { describeFrame } from "@/lib/perception/vision";
+import { consumeUsage } from "@/lib/usage";
 import { type Api, requireCreatorOrOwner, withApi } from "../session/_http";
 
 export const runtime = "nodejs";
@@ -19,13 +20,15 @@ function bad(error: string) {
   return Response.json({ error }, { status: 400 });
 }
 
-// Order: requireContext, validate the body, creator-or-owner, then saveFrame through the workspace store
+// Order: requireContext, the daily vision cap (one per frame, 429 daily_limit), validate the body, creator-or-owner, then saveFrame through the workspace store
 // (Storage in supabase mode, no local disk). SessionNotFoundError answers 404 via handle().
 export async function POST(req: Request): Promise<Response> {
   return withApi((api) => visionFor(api, req));
 }
 
 async function visionFor(api: Api, req: Request): Promise<Response> {
+  const usage = await consumeUsage(api.ctx, "vision");
+  if (usage instanceof Response) return usage;
   const declared = Number(req.headers.get("content-length"));
   if (Number.isFinite(declared) && declared > MAX_FRAME_BODY_BYTES) return tooLarge();
   let text: string;

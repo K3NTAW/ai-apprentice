@@ -19,6 +19,7 @@ import {
   type CaptureVoice,
 } from "@/lib/capture/controller";
 import { createCaptureSession, createHttpCaptureApi } from "@/lib/capture/httpApi";
+import { dailyLimitNotice, voiceStartNotice } from "./dailyLimit";
 import SidePanel, { type PresenceStatus } from "./SidePanel";
 
 type Loop = {
@@ -38,6 +39,7 @@ type View = {
   feed: ScreenEvent[];
   lastQuestion: string | null;
   openQuestion: string | null;
+  dailyLimit: string[];
 };
 
 const EMPTY: View = {
@@ -49,6 +51,7 @@ const EMPTY: View = {
   feed: [],
   lastQuestion: null,
   openQuestion: null,
+  dailyLimit: [],
 };
 
 function viewOf(c: CaptureController): View {
@@ -62,6 +65,7 @@ function viewOf(c: CaptureController): View {
     feed: c.feed(),
     lastQuestion: c.lastQuestion(),
     openQuestion: c.openQuestion(),
+    dailyLimit: c.dailyLimit(),
   };
 }
 
@@ -184,7 +188,10 @@ function CaptureInner() {
       voiceModeRef.current = false;
       setTextMode(true);
       setNotice(
-        `Voice could not start (${err instanceof Error ? err.message : String(err)}). Text mode: questions appear here, type your answers below.`,
+        voiceStartNotice(
+          err instanceof Error ? err.message : String(err),
+          "Text mode: questions appear here, type your answers below.",
+        ),
       );
     }
     setStarting(false);
@@ -252,6 +259,7 @@ function CaptureInner() {
         textMode={textMode}
         sharing={sharing}
         notice={notice}
+        limitNotice={dailyLimitNotice(view.dailyLimit)}
         expert={expert}
         lastQuestion={view.lastQuestion}
         openQuestion={view.openQuestion}

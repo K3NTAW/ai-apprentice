@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { gaps, isUnderstood, scoreWorkMap, synthesizeWorkMap, teachBackText } from "@/lib/workmap";
+import { consumeUsage } from "@/lib/usage";
 import { notFound, parseBody, requireCreatorOrOwner, withApi } from "../session/_http";
 
 export const runtime = "nodejs";
@@ -10,6 +11,9 @@ const Body = z.object({ session_id: z.string(), rescore_only: z.boolean().option
 
 export function POST(req: Request): Promise<Response> {
   return withApi(async (api) => {
+    // Daily synthesis cap per workspace (429 daily_limit). workmap/confirm is not counted.
+    const usage = await consumeUsage(api.ctx, "workmap");
+    if (usage instanceof Response) return usage;
     const body = await parseBody(req, Body);
     if (!body.ok) return body.res;
     const { session_id, rescore_only } = body.data;

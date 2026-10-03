@@ -14,6 +14,7 @@ import type { WorkMapStep } from "@/lib/types";
 import { buildGuardrailStopTurn, buildMasteryTurn, buildPredictTurn } from "@/lib/voice/prompts";
 import { useVoiceAgent, VoiceProvider, type UseVoiceAgentOptions } from "@/lib/voice/useVoiceAgent";
 import { exportGuardrailsMarkdown } from "@/lib/workmap/export";
+import { voiceStartNotice } from "@/components/capture/dailyLimit";
 import Halo from "./Halo";
 import { loadWorkMap, type LoadedMap } from "./loadWorkMap";
 
@@ -119,7 +120,7 @@ function TeachSession({ loaded }: { loaded: LoadedMap }) {
     } catch (err) {
       voiceModeRef.current = false;
       setVoiceMode(false);
-      setVoiceNote(`Voice could not start (${err instanceof Error ? err.message : String(err)}). Text mode: type your answers here.`);
+      setVoiceNote(voiceStartNotice(err instanceof Error ? err.message : String(err), "Text mode: type your answers here."));
     }
   }
 

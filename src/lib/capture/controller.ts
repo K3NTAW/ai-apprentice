@@ -66,6 +66,16 @@ export type CaptureControllerOptions = {
 
 type Pending = { event: ScreenEvent; decisions: Decisions; since: number };
 
+/** Paid calls the capture loop makes that can hit the workspace daily cap. */
+export type LimitedKind = "vision" | "decide";
+
+/** A 429 daily_limit from /api/vision or /api/decide (the http adapter throws "<url> 429"). */
+export function isDailyLimitError(err: unknown): boolean {
+  if (typeof err === "object" && err !== null && (err as { status?: unknown }).status === 429) return true;
+  const message = err instanceof Error ? err.message : String(err);
+  return /\b429$/.test(message) || message.includes("daily_limit");
+}
+
 /** Plain question for text mode, and the placeholder until the voice agent phrases its own. */
 export function fallbackQuestion(event: ScreenEvent, ask: AskKind): string {
   const obj = describeObject(event);
@@ -89,8 +99,14 @@ export function createCaptureController(opts: CaptureControllerOptions) {
   let capture: FrameCapture | null = null;
   let timer: ReturnType<typeof setInterval> | null = null;
   let unsubscribe: (() => void) | null = null;
+  // Once a kind hits its daily cap, the loop stops calling it for this session.
+  const limited = new Set<LimitedKind>();
 
   const changed = () => onChange?.();
+  const hitLimit = (kind: LimitedKind) => {
+    limited.add(kind);
+    changed();
+  };
   const fail = (where: string) => (err: unknown) => onError?.(where, err);
   // Posts never throw into the loop; failures go to onError.
   const send = (where: string, p: () => Promise<unknown>) => {
@@ -180,6 +196,11 @@ export function createCaptureController(opts: CaptureControllerOptions) {
     seen.push(event);
     send("postEvents", () => api.postEvents([event]));
     voice.injectContext(describeEvent(event));
+    if (limited.has("decide")) {
+      debrief.push({ event, why: "daily_limit" });
+      changed();
+      return;
+    }
     const snap = activity.snapshot();
     const state = {
       event,
@@ -195,6 +216,11 @@ export function createCaptureController(opts: CaptureControllerOptions) {
     try {
       decisions = await api.decide(QUESTIONS, state);
     } catch (err) {
+      if (isDailyLimitError(err)) {
+        hitLimit("decide");
+        debrief.push({ event, why: "daily_limit" });
+        return;
+      }
       fail("decide")(err);
       debrief.push({ event, why: "decide_failed" });
       return;
@@ -271,12 +297,13 @@ export function createCaptureController(opts: CaptureControllerOptions) {
   }
 
   async function onFrame(frame: FrameIn) {
-    if (offRecord || !api.postFrame) return;
+    if (offRecord || !api.postFrame || limited.has("vision")) return;
     try {
       const res = await api.postFrame(frame);
       if (!offRecord && res.events.length) bus.publishVision(res.events, frame.t, res.frame_ref);
     } catch (err) {
-      fail("postFrame")(err);
+      if (isDailyLimitError(err)) hitLimit("vision");
+      else fail("postFrame")(err);
     }
   }
 
@@ -331,6 +358,8 @@ export function createCaptureController(opts: CaptureControllerOptions) {
     feed: (): ScreenEvent[] => seen.slice(-FEED_SIZE).reverse(),
     lastQuestion: () => lastQuestion,
     openQuestion: () => (open ? open.qa.question : null),
+    /** Kinds refused with 429 daily_limit in this session. */
+    dailyLimit: (): LimitedKind[] => [...limited],
     stats,
   };
 }

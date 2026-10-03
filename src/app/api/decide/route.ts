@@ -1,6 +1,7 @@
 import { decideMany } from "@/lib/decide";
 import { DECISION_QUESTIONS, type DecisionQuestionName } from "@/lib/types";
 import { requireContext } from "@/lib/auth/context";
+import { consumeUsage } from "@/lib/usage";
 
 export const runtime = "nodejs";
 // Vercel function limit: 60 s fits the plan (model calls can take tens of seconds).
@@ -14,6 +15,9 @@ export async function POST(req: Request): Promise<Response> {
   // Signed-in member of a workspace only (401 signed out, 503 misconfigured).
   const ctx = await requireContext();
   if (ctx instanceof Response) return ctx;
+  // Daily decide cap per workspace (429 daily_limit).
+  const usage = await consumeUsage(ctx, "decide");
+  if (usage instanceof Response) return usage;
   let body: { question?: unknown; questions?: unknown; state?: unknown };
   try {
     body = await req.json();

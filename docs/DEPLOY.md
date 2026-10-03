@@ -76,3 +76,16 @@ pending invite is accepted and they join your workspace.
 Vercel dashboard, Deployments: pick the last good production deployment, open its menu and choose
 Instant Rollback (or Promote to Production). This switches traffic immediately without a rebuild.
 Database migrations are not rolled back by this; a schema change needs its own reverse migration.
+
+## 9. Daily usage caps
+
+Each workspace has a daily cap per paid call, counted in the `usage_counters` table and reset at
+midnight Europe/Zurich. Over the cap the route answers 429 `{error: "daily_limit", kind}`; Capture,
+Debrief and Teach show a notice and keep running in text mode where they can. Optional, defaults shown:
+
+| Variable | Default | Counts |
+| --- | --- | --- |
+| USAGE_CAP_VISION | 3000 | one per frame sent to /api/vision |
+| USAGE_CAP_DECIDE | 2000 | one per /api/decide call |
+| USAGE_CAP_WORKMAP | 50 | one per Work Map synthesis (/api/workmap; confirm is free) |
+| USAGE_CAP_VOICE | 60 | one per voice session start (/api/voice/signed-url) |

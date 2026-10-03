@@ -1,4 +1,5 @@
 import { requireContext } from "@/lib/auth/context";
+import { consumeUsage } from "@/lib/usage";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,6 +19,9 @@ export async function GET(req: Request): Promise<Response> {
   // Signed-in member of a workspace only (401 signed out, 503 misconfigured).
   const ctx = await requireContext();
   if (ctx instanceof Response) return ctx;
+  // One voice session start per signed URL; daily cap per workspace (429 daily_limit).
+  const usage = await consumeUsage(ctx, "voice");
+  if (usage instanceof Response) return usage;
   const role = new URL(req.url).searchParams.get("role");
   if (!isRole(role)) {
     return Response.json({ error: "unknown_role", allowed: Object.keys(AGENT_ENV) }, { status: 400 });

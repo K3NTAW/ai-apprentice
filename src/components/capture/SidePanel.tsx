@@ -15,6 +15,8 @@ export type SidePanelProps = {
   textMode: boolean;
   sharing: boolean;
   notice: string | null;
+  /** 429 daily_limit from vision or decide. */
+  limitNotice?: string | null;
   expert: string;
   lastQuestion: string | null;
   openQuestion: string | null;
@@ -65,6 +67,12 @@ export default function SidePanel(p: SidePanelProps) {
       {p.offRecord && (
         <div role="status" className="rounded bg-red-600 px-2 py-2 text-center text-xs font-bold text-white">
           OFF THE RECORD - nothing is captured
+        </div>
+      )}
+
+      {p.limitNotice && (
+        <div role="alert" data-testid="daily-limit" className="rounded border border-red-300 bg-red-50 p-2 text-xs text-red-900">
+          {p.limitNotice}
         </div>
       )}
 

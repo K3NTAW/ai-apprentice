@@ -4,6 +4,7 @@
 // Voice is optional: when it cannot start, the question shows on screen and the expert types the answer.
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { voiceStartNotice } from "@/components/capture/dailyLimit";
 import WorkMapView from "@/components/workmap/WorkMapView";
 import { createDebriefController, type DebriefController, type DebriefState } from "@/lib/debrief/controller";
 import { createHttpDebriefApi } from "@/lib/debrief/httpApi";
@@ -94,7 +95,7 @@ function DebriefInner({ sessionId }: { sessionId: string }) {
         await agentRef.current.start({ dynamicVariables: { expert: session.expert ?? "the expert" } });
         voiceModeRef.current = true;
       } catch (err) {
-        setNotice(`Voice could not start (${err instanceof Error ? err.message : String(err)}). Running in text mode.`);
+        setNotice(voiceStartNotice(err instanceof Error ? err.message : String(err), "Running in text mode."));
       }
     }
     setTextMode(!voiceModeRef.current);
@@ -142,7 +143,15 @@ function DebriefInner({ sessionId }: { sessionId: string }) {
 
       {error && <p className="text-sm text-red-600">{error}</p>}
       {notice && <p className="text-sm text-amber-700">{notice}</p>}
-      {view?.error && <p className="text-sm text-red-600">{view.error}</p>}
+      {view?.error &&
+        (view.error.includes("/api/workmap 429") ? (
+          <p role="alert" className="rounded border border-red-300 bg-red-50 p-2 text-sm text-red-900">
+            Daily limit for Work Map building reached in this workspace (resets at midnight). Your answers are saved; build
+            the Work Map again tomorrow.
+          </p>
+        ) : (
+          <p className="text-sm text-red-600">{view.error}</p>
+        ))}
       {!session && !error && <p className="text-sm text-slate-400">Loading…</p>}
 
       {session && !view && (
