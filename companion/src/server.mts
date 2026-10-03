@@ -1,16 +1,25 @@
 // WebSocket glue around SessionGate. No Electron imports.
 import { WebSocketServer, type WebSocket } from "ws";
-import type { Halo } from "./overlay.mjs";
+import type { BuddyAction } from "./buddy.mjs";
 import type { Allowlist } from "./origin.mjs";
 import type { Pairing } from "./pairing.mjs";
-import { CLOSE, MAX_PAYLOAD_BYTES, parseClientMessage, pongMessage, type ServerMessage, type StatusMessage } from "./protocol.mjs";
+import {
+  CLOSE,
+  MAX_PAYLOAD_BYTES,
+  parseClientMessage,
+  pongMessage,
+  toBuddyAction,
+  type ServerMessage,
+  type SessionStateMessage,
+  type StatusMessage,
+} from "./protocol.mjs";
 import { HELLO_TIMEOUT_MS, SessionGate } from "./session.mjs";
 
 export type ServerHooks = {
   status(): StatusMessage;
   onPairedChange(paired: boolean): void;
-  onHalo(halo: Halo): void;
-  onClear(id?: string): void;
+  onBuddy(action: BuddyAction): void;
+  onSession(state: SessionStateMessage): void;
   log(line: string): void;
 };
 
@@ -75,9 +84,12 @@ export function startServer(port: number, allowlist: Allowlist, pairing: Pairing
           }
           const msg = parsed.msg;
           if (msg.type === "ping") ws.send(JSON.stringify(pongMessage()));
-          else if (msg.type === "overlay.halo") hooks.onHalo({ id: msg.id, rect: msg.rect, ...(msg.text ? { text: msg.text } : {}) });
-          else if (msg.type === "overlay.clear") hooks.onClear(msg.id);
-          else hooks.log("ignored message: hello after pairing");
+          else if (msg.type === "session.state") hooks.onSession(msg);
+          else if (msg.type === "hello") hooks.log("ignored message: hello after pairing");
+          else {
+            const action = toBuddyAction(msg);
+            if (action) hooks.onBuddy(action);
+          }
         } catch (err) {
           hooks.log(`message handler error: ${String(err)}`);
         }

@@ -1,7 +1,8 @@
-# AI Apprentice Companion (macOS)
+# AI Apprentice Companion (macOS and Windows)
 
-Menu-bar app that gives the AI Apprentice web app what a browser cannot: global typing and pointer
-activity counts, the frontmost app and window title, and a halo overlay drawn over any app.
+Tray app that gives the AI Apprentice web app what a browser cannot: global typing and pointer
+activity counts, the frontmost app and window title, a cursor buddy that talks and points at things
+over any app, global push-to-talk shortcuts and a small floating panel.
 It talks only to the paired web page over a local WebSocket on `127.0.0.1`.
 
 ## Install
@@ -26,10 +27,9 @@ The app shows up as a ring icon with `AI` in the menu bar. The menu shows pairin
 6-digit pairing code, `New pairing code`, `Show pairing window`, missing permissions, `Pause sensing`
 and `Quit`.
 
-On launch the companion also opens a small `AI Apprentice companion` window (in the Dock while open)
-with the pairing code in large digits, the paired state, buttons for missing macOS permissions and
-`Hide`. It closes by itself once a client is paired. On launch and on every new code it prints one
-line to stdout:
+On launch the companion opens the floating panel (in the Dock while open). Its first-run view shows
+the pairing code in large digits and `New code`; after pairing it shows the session (see below).
+On launch and on every new code it prints one line to stdout:
 
 ```
 [companion] pairing code: 123 456 (enter it in the web app)
@@ -38,14 +38,16 @@ line to stdout:
 ### Can't find the menu-bar item?
 
 On a MacBook with a notch and a full menu bar, macOS hides menu-bar items that do not fit, and the
-companion's item may be one of them. Use the pairing window (open on launch, or click the companion
-in the Dock while it is open) or read the code from the terminal line above. Quitting other
+companion's item may be one of them. Use the panel (open on launch, `Option+Shift+A` toggles it, or
+click the companion in the Dock while it is open) or read the code from the terminal line above. Quitting other
 menu-bar apps or shortening their titles also brings the item back.
 
 Environment:
 
 - `COMPANION_PORT` (default `47321`, 1024..65535). An invalid value or a port in use is shown as an
   error line in the tray menu; the app keeps running without the server.
+- `COMPANION_BUDDY=0` (or `off`, `false`): rollback switch. No cursor buddy, no bubbles, no glances;
+  `stop` points and `overlay.halo` still draw the v1 halo. Same as unticking `Cursor buddy` in the panel.
 - `COMPANION_ALLOWED_ORIGINS` comma separated, e.g. `http://localhost:3000,https://ai-apprentice*.vercel.app`.
   Unset means the defaults below. Set but empty, or with no valid entry, means deny all.
 
@@ -62,6 +64,61 @@ The companion suite runs with the root script `npm run test:companion`
 (`npm --prefix companion ci && npm --prefix companion test && npm --prefix companion run build`);
 the Planner runs it before merge.
 
+## Cursor buddy, panel and shortcuts
+
+- **Buddy**: an 18 px brand-blue orb next to the cursor, drawn in one transparent, click-through,
+  non-focusable, always-on-top overlay window per display. States from `buddy.state`: idle (dim
+  breathe), listening (pulse), thinking (orbiting dots), speaking (waveform ring), paused (grey with a
+  slash). The cursor is polled with `screen.getCursorScreenPoint` every 16 ms only while the buddy is
+  enabled, shown, not paused and paired (or a local bubble is up); otherwise the poll stops. Overlays
+  follow `display-added`, `display-removed` and `display-metrics-changed`.
+- **Bubble**: `buddy.say` shows up to 280 characters right-below the buddy (flipped at the display
+  edge), never over the cursor hotspot, and fades after `ttl_ms` (default 6 s).
+- **Pointing**: `buddy.point` flies the buddy on a curve (400 ms) to the rect on the primary display.
+  `glance` rests 1.2 s and flies back; `stop` draws the halo plus bubble and stays until `buddy.clear`
+  or the same id is re-sent. `overlay.halo` is mapped to `stop` in `protocol.mts` (with its v1 30 s TTL).
+- **Precedence** (`buddy.mts`, a pure reducer with an injected clock): say replaces say; a new point
+  replaces an in-flight glance and the stop with the same id (one halo per id, at most 8); `buddy.state`
+  never cancels a stop; `buddy.clear` without id clears say, glance and stops. `ttl_ms` is clamped to
+  100..30000. `buddy.mts` supersedes the old halo list for drawing; `overlay.mts` stays the rect
+  validation and mapping helper.
+- **Screen capture**: overlay windows use `setContentProtection(true)`, so on macOS and Windows the
+  buddy, bubble and halo are left out of screen captures, including the whole-monitor
+  `getDisplayMedia` frames the web app sends to vision. Where the OS ignores it (older macOS builds
+  with some capture paths), the Capture side sees a small blue orb and an amber halo; vision prompts
+  must treat those as companion UI, not part of the user's app.
+- **Panel**: 380x520, frameless with a drag area, vibrancy on macOS, Mica on Windows 11 22H2+, solid
+  elsewhere; light and dark follow the OS. Shows pairing (first run), mode and title, last question and
+  answer, questions and guardrail counters, `Pause`, `Off the record`, `End task` (same as the
+  shortcuts), `Open control room` (only when `app_url` passes the check below), macOS permissions and
+  the shortcut settings. Toggle it from the tray (Windows: left click) or `Option+Shift+A` / `Alt+Shift+A`.
+- **`app_url`** (`appUrl.mts`): `new URL`, `https` (or `http` for `localhost`/`127.0.0.1`), no
+  userinfo, `isOriginAllowed(url.origin)` against the same allowlist as WebSocket clients; the
+  normalised `href` is opened.
+
+Shortcuts (configurable in the panel, saved to `settings.json` in the app's userData folder):
+
+| Action | macOS | Windows | Sent |
+| --- | --- | --- | --- |
+| Talk (hold) | `Option+Space` | `Alt+Space` | `talk_start` on press, `talk_end` on release |
+| Off the record | `Option+Shift+O` | `Alt+Shift+O` | `off_record_toggle` |
+| End task | `Option+Shift+E` | `Alt+Shift+E` | `end_task` |
+| Pause | `Option+Shift+P` | `Alt+Shift+P` | `pause_toggle` |
+| Panel | `Option+Shift+A` | `Alt+Shift+A` | local only |
+
+- Without a paired page a shortcut shows the bubble `Open the control room to start a session`.
+- Press is `globalShortcut`; release comes from a uiohook `keyup` listener in `shortcuts.mts`, the
+  only module that reads keycodes: it compares the keycode with the talk binding's key, calls release
+  on a match and keeps nothing. `activity.mts` still never sees keycodes or `keyup`.
+- Without the input hook (macOS Input Monitoring or Accessibility missing) talk falls back to
+  press-to-toggle and the panel says so.
+- While paused (tray `Pause sensing`, or `buddy.state` paused) talk is blocked with a bubble; pause,
+  off the record, end task and the panel shortcut keep working.
+- `talk_end` is always sent when a hold ends early: pause, unpair or disconnect, screen lock or sleep,
+  input hook stop, and after a hard 60 s cap.
+- A failed `globalShortcut.register` (taken by the system or another app) is shown next to that
+  binding in the panel and logged; pick another binding there.
+
 ## Package a local unsigned .app
 
 ```sh
@@ -75,6 +132,23 @@ xattr -dr com.apple.quarantine "release/mac-arm64/AI Apprentice Companion.app"
 ```
 
 (or right-click the app, Open, then confirm). `LSUIElement` is set, so there is no dock icon.
+
+## Windows
+
+`npm run package:win` (`electron-builder --win nsis --x64`) builds an unsigned NSIS installer in
+`release/`. Build it on Windows x64 with Node 22+ (`npm install`, then `npm run package:win`), or in
+a CI job on `windows-latest` running the same two commands; `uiohook-napi` and `get-windows` ship
+Windows x64 prebuilds and `npmRebuild` rebuilds them for Electron. Cross-building from macOS needs
+Wine and is not supported here.
+
+On Windows: no permission UI (there are no such prompts), the tray uses `static/icon.ico` and a left
+click toggles the panel, the panel uses Mica on Windows 11 22H2+ and a solid background elsewhere.
+`Alt+Space` replaces the window system menu shortcut while the companion runs.
+
+**Verified on which OS**: everything here was written and unit-tested on macOS (Apple silicon). The
+Windows installer build and the `uiohook-napi` / `get-windows` runtime on Windows are NOT verified:
+no Windows machine or Windows CI run exists for this repo yet. `docs/checks/pivot-buddy.md` lists the
+manual checks to run on both.
 
 ## macOS permissions
 
@@ -134,12 +208,14 @@ Close codes: `4401` bad or missing hello, `4403` origin or host rejected, `4408`
 
 Companion to web:
 
-- `{"type":"status","version":"x.y.z","permissions":{"input":bool,"screen":bool,"accessibility":bool,"inputVerified":bool},"paused":bool}`
-  after hello and on change. `paused` is an optional extension; clients that ignore it see silence
+- `{"type":"status","version":"x.y.z","protocol":2,"permissions":{"input":bool,"screen":bool,"accessibility":bool,"inputVerified":bool},"paused":bool}`
+  after hello and on change. `protocol: 2` means the v2 messages below are understood; a page that
+  sees no `protocol` field talks to a v1 companion and should only send `overlay.*`. `paused` is an optional extension; clients that ignore it see silence
   while paused.
 - `{"type":"activity","t":ms,"typing":bool,"pointer":bool,"keys":int,"clicks":int,"idle_ms":int}` every 500 ms.
 - `{"type":"app","t":ms,"app":"Microsoft Outlook","title":"..."}` when app or title changes.
 - `{"type":"pong"}`.
+- v2: `{"type":"shortcut","action":"talk_start"|"talk_end"|"off_record_toggle"|"pause_toggle"|"end_task"}`.
 
 Web to companion:
 
@@ -148,6 +224,13 @@ Web to companion:
   Same id replaces. At most 8 halos; each lives 30 s unless re-sent.
 - `{"type":"overlay.clear","id":"..."}` (id optional: clears all).
 - `{"type":"ping"}`.
+- v2: `{"type":"buddy.state","state":"idle"|"listening"|"thinking"|"speaking"|"paused"}`.
+- v2: `{"type":"buddy.say","text":"<1..280>","ttl_ms":n}` (ttl optional, default 6000, clamped 100..30000).
+- v2: `{"type":"buddy.point","id":"...","rect":{...},"text":"<max 140>","style":"glance"|"stop","ttl_ms":n}`
+  (rect rules as for halos; a stop without `ttl_ms` stays until cleared).
+- v2: `{"type":"buddy.clear","id":"..."}` (id optional: clears all).
+- v2: `{"type":"session.state","mode":"capture"|"teach"|null,"title":"<200","expert":"<200","asked":int,"guardrails":int,"last_question":"<500","last_answer":"<2000","off_record":bool,"app_url":"<2048"}`;
+  counters are integers 0..1000000. Too long texts, bad enums or counters reject the whole message.
 
 Invalid messages are ignored with a log line. Halos are cleared on disconnect, on pause and on quit.
 
@@ -180,6 +263,9 @@ Invalid messages are ignored with a log line. Halos are cleared on disconnect, o
 - Single-instance lock: a second launch quits immediately.
 
 ## Rollback
+
+Buddy problems on a machine: set `COMPANION_BUDDY=0` or untick `Cursor buddy` in the panel. That
+falls back to the halo-only overlay and does not block Capture.
 
 The change is additive: everything lives in `companion/` plus `docs/checks/pivot-companion.md` and
 a few `.gitignore` lines. Revert the commit to remove it.

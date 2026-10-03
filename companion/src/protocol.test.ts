@@ -25,7 +25,7 @@ describe("message validation", () => {
   });
 
   it("rejects bad input without throwing", () => {
-    for (const raw of ["", "nope", "null", "[]", "42", '{"type":1}', '{"type":"hack"}', '{"type":"hello"}', '{"type":"hello","token":123}', '{"type":"overlay.clear","id":5}', '{"type":"overlay.halo","id":"x"}', undefined, 7, {}]) {
+    for (const raw of ["", "nope", "null", "[]", "42", '{"type":1}', '{"type":"hack"}', '{"type":"hello"}', '{"type":"hello","token":123}', '{"type":"overlay.clear","id":5}', '{"type":"overlay.halo","id":"x"}', '{"type":"buddy.state","state":"x"}', '{"type":"buddy.say"}', '{"type":"buddy.point","id":"x"}', '{"type":"shortcut","action":"end_task"}', undefined, 7, {}]) {
       expect(parseClientMessage(raw).ok).toBe(false);
     }
     expect(parseClientMessage("x".repeat(20_000))).toEqual({ ok: false, reason: "too_large" });
@@ -40,6 +40,7 @@ describe("message validation", () => {
     expect(statusMessage("0.1.0", { input: true, screen: false, accessibility: true })).toEqual({
       type: "status",
       version: "0.1.0",
+      protocol: 2,
       permissions: { input: true, screen: false, accessibility: true },
     });
     expect(statusMessage("0.1.0", { input: false, screen: false, accessibility: false }, true).paused).toBe(true);
