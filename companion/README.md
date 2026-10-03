@@ -22,8 +22,25 @@ npm 11 runs install scripts only for packages listed in `allowScripts` in `packa
 npm run dev        # tsc build to dist/, then `electron .`
 ```
 
-The app shows up as `AI` in the menu bar (no dock icon). The menu shows pairing status, the current
-6-digit pairing code, `New pairing code`, missing permissions, `Pause sensing` and `Quit`.
+The app shows up as a ring icon with `AI` in the menu bar. The menu shows pairing status, the current
+6-digit pairing code, `New pairing code`, `Show pairing window`, missing permissions, `Pause sensing`
+and `Quit`.
+
+On launch the companion also opens a small `AI Apprentice companion` window (in the Dock while open)
+with the pairing code in large digits, the paired state, buttons for missing macOS permissions and
+`Hide`. It closes by itself once a client is paired. On launch and on every new code it prints one
+line to stdout:
+
+```
+[companion] pairing code: 123 456 (enter it in the web app)
+```
+
+### Can't find the menu-bar item?
+
+On a MacBook with a notch and a full menu bar, macOS hides menu-bar items that do not fit, and the
+companion's item may be one of them. Use the pairing window (open on launch, or click the companion
+in the Dock while it is open) or read the code from the terminal line above. Quitting other
+menu-bar apps or shortening their titles also brings the item back.
 
 Environment:
 

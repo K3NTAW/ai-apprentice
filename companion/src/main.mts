@@ -1,5 +1,5 @@
 // Electron main process: tray, sensing, overlay window, WebSocket server.
-import { app, BrowserWindow, Menu, Tray, nativeImage, screen, shell, systemPreferences } from "electron";
+import { app, BrowserWindow, ipcMain, Menu, Tray, nativeImage, screen, shell, systemPreferences } from "electron";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,9 +7,11 @@ import { ActivityAggregator, AppChangeTracker, WINDOW_MS, toInputKind, type Inpu
 import { HaloStore, mapRect, type DisplayInfo } from "./overlay.mjs";
 import { parseAllowlist } from "./origin.mjs";
 import { Pairing } from "./pairing.mjs";
+import { formatPairingLine, isPermissionKey, pairingViewModel } from "./pairingWindow.mjs";
 import { canStartHook, PermissionMonitor, readPermissions } from "./permissions.mjs";
 import { appMessage, parsePort, statusMessage, type Permissions } from "./protocol.mjs";
 import { startServer, type CompanionServer } from "./server.mjs";
+import { trayIconBitmap } from "./trayIcon.mjs";
 
 const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -27,6 +29,7 @@ const log = (line: string) => console.log(`[companion] ${line}`);
 
 let tray: Tray | null = null;
 let overlay: BrowserWindow | null = null;
+let pairingWindow: BrowserWindow | null = null;
 let server: CompanionServer | null = null;
 let serverError: string | null = null;
 let paused = false;
@@ -35,7 +38,10 @@ let hookRunning = false;
 const halos = new HaloStore();
 const aggregator = new ActivityAggregator(Date.now());
 const appTracker = new AppChangeTracker();
-const pairing = new Pairing(undefined, () => rebuildMenu());
+const pairing = new Pairing(undefined, (code) => {
+  console.log(formatPairingLine(code));
+  rebuildMenu();
+});
 
 // uiohook-napi is CommonJS with a native addon; load lazily so a missing permission never blocks startup.
 type Hook = { on(event: string, cb: () => void): void; start(): void; stop(): void };
@@ -184,7 +190,71 @@ function setPaused(next: boolean): void {
   rebuildMenu();
 }
 
+function pairingView() {
+  return pairingViewModel({ code: pairing.current(), paired, permissions: permissions(), serverError });
+}
+
+function pushPairingState(): void {
+  if (!pairingWindow || pairingWindow.isDestroyed()) return;
+  pairingWindow.webContents.send("pairing-state", pairingView());
+}
+
+function hidePairingWindow(): void {
+  if (pairingWindow && !pairingWindow.isDestroyed()) pairingWindow.close();
+}
+
+function showPairingWindow(): void {
+  if (pairingWindow && !pairingWindow.isDestroyed()) {
+    pairingWindow.show();
+    pairingWindow.focus();
+    return;
+  }
+  // Normal window: it shows in the Dock while open, so it is reachable when the tray item is hidden.
+  void app.dock?.show();
+  const win = new BrowserWindow({
+    width: 360,
+    height: 220,
+    resizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    title: "AI Apprentice companion",
+    show: false,
+    webPreferences: {
+      preload: path.join(here, "pairingPreload.cjs"),
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
+    },
+  });
+  pairingWindow = win;
+  win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  win.webContents.on("will-navigate", (e) => e.preventDefault());
+  win.webContents.on("did-finish-load", pushPairingState);
+  win.once("ready-to-show", () => win.show());
+  win.on("closed", () => {
+    if (pairingWindow === win) pairingWindow = null;
+    app.dock?.hide();
+  });
+  void win.loadFile(path.join(here, "..", "static", "pairing.html"));
+}
+
+ipcMain.on("pairing-hide", (e) => {
+  if (pairingWindow && e.sender === pairingWindow.webContents) hidePairingWindow();
+});
+ipcMain.on("pairing-open-settings", (e, key: unknown) => {
+  if (!pairingWindow || e.sender !== pairingWindow.webContents || !isPermissionKey(key)) return;
+  void shell.openExternal(SETTINGS[key]);
+});
+
+function trayImage(): Electron.NativeImage {
+  const img = nativeImage.createFromBitmap(trayIconBitmap(16), { width: 16, height: 16, scaleFactor: 1 });
+  img.addRepresentation({ scaleFactor: 2, width: 32, height: 32, buffer: trayIconBitmap(32) });
+  img.setTemplateImage(true);
+  return img;
+}
+
 function rebuildMenu(): void {
+  pushPairingState();
   if (!tray) return;
   const p = permissions();
   const code = pairing.current();
@@ -192,6 +262,7 @@ function rebuildMenu(): void {
     { label: serverError ? `Error: ${serverError}` : paired ? "Paired with web app" : "Not paired", enabled: false },
     { label: `Pairing code: ${code.slice(0, 3)} ${code.slice(3)}`, enabled: false },
     { label: "New pairing code", click: () => pairing.rotate() },
+    { label: "Show pairing window", click: () => showPairingWindow() },
     { type: "separator" },
   ];
   if (process.platform === "darwin") {
@@ -210,10 +281,12 @@ function rebuildMenu(): void {
 
 async function boot(): Promise<void> {
   app.dock?.hide();
-  tray = new Tray(nativeImage.createEmpty());
+  tray = new Tray(trayImage());
   tray.setToolTip("AI Apprentice Companion");
   rebuildMenu();
   createOverlay();
+  console.log(formatPairingLine(pairing.current()));
+  showPairingWindow();
 
   const allowlist = parseAllowlist(process.env.COMPANION_ALLOWED_ORIGINS);
   for (const e of allowlist.errors) log(e);
@@ -229,6 +302,7 @@ async function boot(): Promise<void> {
           paired = next;
           appTracker.reset();
           if (!next) clearHalos();
+          if (next) hidePairingWindow();
           rebuildMenu();
         },
         onHalo(h) {
