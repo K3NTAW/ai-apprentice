@@ -94,7 +94,7 @@ describe("supabase mode, signed out", () => {
     const res = await proxy(req("http://app.test//capture"));
     expect(res.status).toBe(307);
     expect(loginTarget(res)?.path).toBe("/login");
-    expect(loginTarget(res)?.next).toBe("/capture");
+    expect(loginTarget(res)?.next).toBe("/dashboard");
     const api = await proxy(req("http://app.test/api//session"));
     expect(api.status).toBe(401);
   });
