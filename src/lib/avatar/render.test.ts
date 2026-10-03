@@ -85,8 +85,40 @@ describe("renderAvatarSvg", () => {
       expect(svg).toContain('width="200" height="200"');
     }
     expect(renderAvatarSvg(DEFAULT_AVATAR, "asking", 64)).toContain(">?<");
-    expect(renderAvatarSvg(DEFAULT_AVATAR, "stop", 64)).toContain("#EF4444");
-    expect(renderAvatarSvg(DEFAULT_AVATAR, "paused", 64)).toContain(">z<");
+    expect(renderAvatarSvg(DEFAULT_AVATAR, "stop", 64)).toContain("#FF8A65");
+    expect(renderAvatarSvg(DEFAULT_AVATAR, "stop", 64)).toContain(">!<");
+    expect(renderAvatarSvg(DEFAULT_AVATAR, "paused", 64)).toContain('fill="#2A2A2E"');
+  });
+
+  it("draws the canvas clay: dark outline, tilted oval eyes, glossy highlight", () => {
+    for (const shape of AVATAR_SHAPES) {
+      const svg = renderAvatarSvg({ ...DEFAULT_AVATAR, shape }, "idle", 96);
+      expect(svg).toContain('stroke="#0A0A0C" stroke-width="3.2"');
+      expect(svg).toMatch(/<radialGradient id="av\w+b" cx="0.34" cy="0.3" r="0.75">/);
+      expect(svg).toMatch(/fill="#FFFFFF" opacity="0.7"[^>]*rotate\(-28 /);
+      expect(svg).toContain('operator="out"');
+    }
+    const smile = renderAvatarSvg({ ...DEFAULT_AVATAR, face: "smile" }, "talking", 96);
+    expect(smile).toContain('<ellipse cx="39.5" cy="43" rx="4.5" ry="7" fill="#0A0A0C" transform="rotate(-12 39.5 43)"/>');
+    expect(smile).toContain('<ellipse cx="60.5" cy="41" rx="4.5" ry="7" fill="#0A0A0C" transform="rotate(-12 60.5 41)"/>');
+    expect(renderAvatarSvg({ ...DEFAULT_AVATAR, face: "curious" }, "idle", 96)).toContain('transform="rotate(-10 ');
+    expect(renderAvatarSvg({ ...DEFAULT_AVATAR, face: "smile" }, "idle", 96)).toContain('keyTimes="0;0.93;0.96;1"');
+    expect(renderAvatarSvg({ ...DEFAULT_AVATAR, face: "smile" }, "idle", 96)).toContain('viewBox="0 -2 100 100"');
+  });
+
+  it("renders the dark rounded tile variant", () => {
+    for (const state of AVATAR_STATES) {
+      const svg = renderAvatarSvg(DEFAULT_AVATAR, state, 140, { tile: true });
+      parseXml(svg);
+      expect(svg).toContain('viewBox="0 0 140 140"');
+      expect(svg).toMatch(/<rect width="140" height="140" rx="18" fill="url\(#av\w+\)"\/>/);
+      expect(svg).toContain('stop-color="#232327"');
+      expect(svg).toContain('stop-color="#0A0A0C"');
+      expect(svg).toContain('<g transform="translate(20 20)">');
+      expect(svg).not.toBe(renderAvatarSvg(DEFAULT_AVATAR, state, 140));
+      expect(toDataUrl(svg).length).toBeLessThanOrEqual(MAX_DATA_URL_BYTES);
+    }
+    expect(renderAvatarSvg(DEFAULT_AVATAR, "idle", 140)).not.toContain("#232327");
   });
 
   it("neutralises hostile input", () => {

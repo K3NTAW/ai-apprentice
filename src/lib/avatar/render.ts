@@ -48,151 +48,223 @@ function mix(hex: string, target: string, t: number): string {
   return `#${[16, 8, 0].map((s) => ch(s).toString(16).padStart(2, "0")).join("")}`.toUpperCase();
 }
 
-const n = (v: number) => (Math.round(v * 10) / 10).toString();
+const n = (v: number) => (Math.round(v * 100) / 100).toString();
 
-// Body outlines in a 200x200 box; the face sits around (100, 105).
-function bodyShape(shape: AvatarShape, attrs: string): string {
-  switch (shape) {
-    case "round":
-      return `<circle cx="100" cy="108" r="64" ${attrs}/>`;
-    case "square":
-      return `<rect x="38" y="46" width="124" height="124" rx="34" ${attrs}/>`;
-    case "pill":
-      return `<rect x="52" y="34" width="96" height="144" rx="48" ${attrs}/>`;
-    case "bean":
-      return `<path d="M64 60 C88 30 150 36 160 82 C168 120 150 170 104 172 C62 174 34 148 44 116 C50 98 46 82 64 60 Z" ${attrs}/>`;
-    case "star": {
-      const pts: string[] = [];
-      for (let i = 0; i < 10; i++) {
-        const r = i % 2 === 0 ? 76 : 46;
-        const a = -Math.PI / 2 + (i * Math.PI) / 5;
-        pts.push(`${n(100 + r * Math.cos(a))} ${n(112 + r * Math.sin(a))}`);
-      }
-      return `<path d="M${pts.join(" L")} Z" stroke-linejoin="round" stroke-width="18" ${attrs}/>`;
-    }
-    case "blob":
-    default:
-      return `<path d="M100 42 C140 40 168 70 166 108 C164 146 140 172 100 172 C58 172 34 148 36 110 C38 72 60 44 100 42 Z" ${attrs}/>`;
-  }
+// All geometry below is in the canvas units of Avatar.dc.html: a 100x100 box, ink #0A0A0C.
+const INK = "#0A0A0C";
+const CORAL = "#FF8A65";
+
+type Body = { l: number; t: number; w: number; h: number; rot: number; fx: number; fy: number; fs: number; bl: number; bt: number };
+const BODIES: Record<AvatarShape, Body> = {
+  blob: { l: 12, t: 15, w: 76, h: 72, rot: 0, fx: 0, fy: 2, fs: 1, bl: 64, bt: 9 },
+  round: { l: 12, t: 12, w: 76, h: 76, rot: 0, fx: 0, fy: 2, fs: 1, bl: 66, bt: 8 },
+  square: { l: 13, t: 13, w: 74, h: 74, rot: 0, fx: 0, fy: 2, fs: 1, bl: 68, bt: 7 },
+  pill: { l: 21, t: 9, w: 58, h: 82, rot: 0, fx: 0, fy: 0, fs: 0.88, bl: 58, bt: 4 },
+  bean: { l: 8, t: 19, w: 84, h: 64, rot: -6, fx: 0, fy: 3, fs: 1, bl: 66, bt: 13 },
+  star: { l: 6, t: 6, w: 88, h: 88, rot: 0, fx: 0, fy: 8, fs: 0.76, bl: 44, bt: -3 },
+};
+// CSS border-radius per corner (TL, TR, BR, BL) as fractions of width / height.
+const RADII: Partial<Record<AvatarShape, [number[], number[]]>> = {
+  blob: [[0.58, 0.42, 0.54, 0.46], [0.52, 0.56, 0.44, 0.48]],
+  bean: [[0.48, 0.52, 0.44, 0.56], [0.62, 0.58, 0.42, 0.38]],
+};
+const STAR = [50, 2, 63, 27, 97.6, 36.5, 72, 60, 79.4, 92.5, 50, 80, 20.6, 92.5, 28, 60, 2.4, 36.5, 37, 27];
+
+// A CSS rounded box as a path; radii are scaled down like the browser does when they overlap.
+function roundedRect(l: number, t: number, w: number, h: number, rx: number[], ry: number[]): string {
+  const f = Math.min(1, w / (rx[0] + rx[1]), w / (rx[3] + rx[2]), h / (ry[0] + ry[3]), h / (ry[1] + ry[2]));
+  const [x0, x1, x2, x3] = rx.map((v) => v * f);
+  const [y0, y1, y2, y3] = ry.map((v) => v * f);
+  return (
+    `M${n(l + x0)} ${n(t)}H${n(l + w - x1)}A${n(x1)} ${n(y1)} 0 0 1 ${n(l + w)} ${n(t + y1)}` +
+    `V${n(t + h - y2)}A${n(x2)} ${n(y2)} 0 0 1 ${n(l + w - x2)} ${n(t + h)}` +
+    `H${n(l + x3)}A${n(x3)} ${n(y3)} 0 0 1 ${n(l)} ${n(t + h - y3)}` +
+    `V${n(t + y0)}A${n(x0)} ${n(y0)} 0 0 1 ${n(l + x0)} ${n(t)}Z`
+  );
 }
 
-const INK = "#1F2937";
-
-function eyesFor(face: AvatarFace, state: AvatarState, accent: string): string {
-  const closedArc = (x: number, up: boolean) =>
-    `<path d="M${x - 8} 102 Q${x} ${up ? 92 : 110} ${x + 8} 102" fill="none" stroke="${INK}" stroke-width="4" stroke-linecap="round"/>`;
-  if (state === "happy") return closedArc(82, true) + closedArc(118, true);
-  if (state === "paused") return `<path d="M74 103 H90 M110 103 H126" stroke="${INK}" stroke-width="4" stroke-linecap="round"/>`;
-  const lookY = state === "thinking" ? -5 : 0;
-  const lookX = state === "thinking" ? 3 : 0;
-  const round = (x: number, r = 7) =>
-    `<circle cx="${x + lookX}" cy="${102 + lookY}" r="${r}" fill="${INK}"/><circle cx="${x + lookX + 2.5}" cy="${99 + lookY}" r="2" fill="#FFFFFF"/>`;
-  switch (face) {
-    case "focus":
-      return `<ellipse cx="${82 + lookX}" cy="${103 + lookY}" rx="8" ry="4.5" fill="${INK}"/><ellipse cx="${118 + lookX}" cy="${103 + lookY}" rx="8" ry="4.5" fill="${INK}"/>`;
-    case "curious":
-      return round(82, 6) + round(118, 8);
-    case "calm":
-      return state === "thinking" || state === "listening" ? round(82, 6) + round(118, 6) : closedArc(82, false) + closedArc(118, false);
-    case "wink":
-      return round(82) + closedArc(118, true);
-    case "robot":
-      return `<rect x="${72 + lookX}" y="${94 + lookY}" width="20" height="16" rx="3" fill="${INK}"/><rect x="${108 + lookX}" y="${94 + lookY}" width="20" height="16" rx="3" fill="${INK}"/><rect x="${77 + lookX}" y="${99 + lookY}" width="10" height="6" rx="1.5" fill="${accent}"/><rect x="${113 + lookX}" y="${99 + lookY}" width="10" height="6" rx="1.5" fill="${accent}"/>`;
-    case "smile":
-    default:
-      return round(82) + round(118);
+function bodyPath(shape: AvatarShape): string {
+  const b = BODIES[shape];
+  if (shape === "star") {
+    const pts: string[] = [];
+    for (let i = 0; i < STAR.length; i += 2) pts.push(`${n(b.l + (STAR[i] / 100) * b.w)} ${n(b.t + (STAR[i + 1] / 100) * b.h)}`);
+    return `M${pts.join("L")}Z`;
   }
+  const r = RADII[shape];
+  if (r) return roundedRect(b.l, b.t, b.w, b.h, r[0].map((v) => v * b.w), r[1].map((v) => v * b.h));
+  const k = shape === "round" ? b.w / 2 : shape === "square" ? 0.28 * b.w : 29;
+  return roundedRect(b.l, b.t, b.w, b.h, [k, k, k, k], [k, k, k, k]);
 }
 
-function browsFor(face: AvatarFace, state: AvatarState): string {
-  const line = (d: string) => `<path d="${d}" fill="none" stroke="${INK}" stroke-width="3.5" stroke-linecap="round"/>`;
-  if (state === "stop") return line("M72 86 L92 91") + line("M128 86 L108 91");
-  if (state === "listening" || state === "asking") return line("M72 84 Q82 78 92 84") + line("M108 84 Q118 78 128 84");
-  if (face === "focus") return line("M72 90 L92 90") + line("M108 90 L128 90");
-  if (face === "curious") return line("M74 89 Q82 86 90 89") + line("M108 84 Q118 76 128 82");
-  return "";
+// The visible part of a box that only has a bottom (or top) border and rounded corners on that side:
+// the canvas draws smiles, calm eyes and closed arcs this way.
+function band(l: number, t: number, w: number, h: number, bw: number, radius: number, top = false): string {
+  const r = radius * Math.min(1, w / (2 * radius), h / radius);
+  const ri = r - bw;
+  const y0 = top ? t + r : t + h - r;
+  const yb = top ? t : t + h;
+  const yi = top ? t + bw : t + h - bw;
+  const so = top ? 1 : 0;
+  const si = top ? 0 : 1;
+  const inner =
+    ri > 0
+      ? `A${n(r)} ${n(ri)} 0 0 ${si} ${n(l + w - r)} ${n(yi)}H${n(l + r)}A${n(r)} ${n(ri)} 0 0 ${si} ${n(l)} ${n(y0)}`
+      : `L${n(l + w - r)} ${n(yi)}H${n(l + r)}`;
+  return `<path d="M${n(l)} ${n(y0)}A${n(r)} ${n(r)} 0 0 ${so} ${n(l + r)} ${n(yb)}H${n(l + w - r)}A${n(r)} ${n(r)} 0 0 ${so} ${n(l + w)} ${n(y0)}${inner}Z" fill="${INK}"/>`;
 }
 
-function mouthFor(face: AvatarFace, state: AvatarState): string {
-  const stroke = `fill="none" stroke="${INK}" stroke-width="4" stroke-linecap="round"`;
-  if (state === "talking") {
-    return `<ellipse cx="100" cy="128" rx="10" ry="3" fill="${INK}"><animate attributeName="ry" values="2;8;3;7;2" dur="0.6s" repeatCount="indefinite"/></ellipse>`;
-  }
-  if (state === "happy") return `<path d="M84 122 Q100 142 116 122 Z" fill="${INK}"/>`;
-  if (state === "stop") return `<path d="M88 130 H112" ${stroke}/>`;
-  if (state === "paused") return `<path d="M93 129 Q100 132 107 129" ${stroke}/>`;
-  if (state === "asking" || state === "listening") return `<ellipse cx="100" cy="129" rx="5" ry="6" fill="${INK}"/>`;
-  switch (face) {
-    case "focus":
-      return `<path d="M90 129 H110" ${stroke}/>`;
-    case "curious":
-      return `<circle cx="100" cy="129" r="5" fill="${INK}"/>`;
-    case "calm":
-      return `<path d="M90 126 Q100 133 110 126" ${stroke}/>`;
-    case "robot":
-      return `<rect x="84" y="122" width="32" height="12" rx="3" fill="${INK}"/><path d="M92 122 V134 M100 122 V134 M108 122 V134" stroke="#9CA3AF" stroke-width="1.5"/>`;
-    case "wink":
-    case "smile":
-    default:
-      return `<path d="M86 123 Q100 138 114 123" ${stroke}/>`;
-  }
+// A CSS box with border-radius: 50% rotated about its centre: the tilted oval eye.
+function oval(l: number, t: number, w: number, h: number, rot: number, fill = INK): string {
+  const cx = l + w / 2;
+  const cy = t + h / 2;
+  return `<ellipse cx="${n(cx)}" cy="${n(cy)}" rx="${n(w / 2)}" ry="${n(h / 2)}" fill="${fill}"${rot ? ` transform="rotate(${rot} ${n(cx)} ${n(cy)})"` : ""}/>`;
 }
 
-// Wraps content in a group that scales/rotates around (cx, cy) via SMIL.
+function bar(l: number, t: number, w: number, h: number, r: number, rot = 0, fill = INK): string {
+  const rot2 = rot ? ` transform="rotate(${rot} ${n(l + w / 2)} ${n(t + h / 2)})"` : "";
+  return `<rect x="${n(l)}" y="${n(t)}" width="${n(w)}" height="${n(h)}" rx="${n(Math.min(r, w / 2, h / 2))}" fill="${fill}"${rot2}/>`;
+}
+
+// Wraps content in a group that animates around (cx, cy) via SMIL.
 function around(cx: number, cy: number, anim: string, inner: string): string {
-  return `<g transform="translate(${cx} ${cy})"><g>${anim}<g transform="translate(${-cx} ${-cy})">${inner}</g></g></g>`;
+  return `<g transform="translate(${n(cx)} ${n(cy)})"><g>${anim}<g transform="translate(${n(-cx)} ${n(-cy)})">${inner}</g></g></g>`;
 }
 
-function extrasFor(state: AvatarState, accent: string): { back: string; front: string } {
-  switch (state) {
-    case "listening":
-      return {
-        back: `<circle cx="100" cy="108" r="70" fill="none" stroke="${accent}" stroke-width="3"><animate attributeName="r" values="70;90" dur="1.6s" repeatCount="indefinite"/><animate attributeName="opacity" values="0.7;0" dur="1.6s" repeatCount="indefinite"/></circle>`,
-        front: "",
-      };
-    case "thinking": {
-      const dots = [0, 120, 240]
-        .map((deg) => {
-          const a = (deg * Math.PI) / 180;
-          return `<circle cx="${n(100 + 18 * Math.cos(a))}" cy="${n(26 + 8 * Math.sin(a))}" r="4.5" fill="${accent}"/>`;
-        })
-        .join("");
-      return { back: "", front: around(100, 26, `<animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="2.4s" repeatCount="indefinite"/>`, dots) };
+type EyeKind = "dots" | "bars" | "curious" | "calm" | "wink" | "robot" | "happy" | "closed";
+type MouthKind = "smile" | "calm" | "flat" | "o" | "open" | "big" | "robot";
+const EYE_BY: Record<AvatarFace, EyeKind> = { smile: "dots", focus: "bars", curious: "curious", calm: "calm", wink: "wink", robot: "robot" };
+const MOUTH_BY: Record<AvatarFace, MouthKind> = { smile: "smile", focus: "flat", curious: "o", calm: "calm", wink: "smile", robot: "robot" };
+
+// Same face/mood table as the canvas renderVals().
+function faceKinds(face: AvatarFace, st: AvatarState): { eye: EyeKind; mouth: MouthKind } {
+  let eye = EYE_BY[face];
+  let mouth = MOUTH_BY[face];
+  if (st === "happy") {
+    if (face !== "robot") eye = "happy";
+    mouth = face === "robot" ? "robot" : "big";
+  }
+  if (st === "paused") {
+    if (face !== "robot") eye = "closed";
+    mouth = "flat";
+  }
+  if (st === "talking") mouth = "open";
+  if (st === "asking") mouth = "o";
+  if (st === "stop" || st === "thinking") mouth = face === "robot" ? "robot" : "flat";
+  return { eye, mouth };
+}
+
+const BLINK = `<animateTransform attributeName="transform" type="scale" values="1 1;1 1;1 0.12;1 1" keyTimes="0;0.93;0.96;1" dur="4.5s" repeatCount="indefinite"/>`;
+
+function eyes(kind: EyeKind, st: AvatarState, accent: string, glow: string): string {
+  switch (kind) {
+    case "dots": {
+      const blink = st === "idle" || st === "listening";
+      const eye = (l: number, t: number) => (blink ? around(l + 4.5, t + 7, BLINK, oval(l, t, 9, 14, -12)) : oval(l, t, 9, 14, -12));
+      return eye(35, 36) + eye(56, 34);
     }
+    case "bars":
+      return bar(32, 42, 14, 5, 3, -6) + bar(54, 40, 14, 5, 3, -6);
+    case "curious":
+      return oval(35, 38, 8, 12, -10) + oval(54, 33, 12, 17, -10) + bar(53, 26, 13, 3, 2, -16);
+    case "calm":
+      return band(32, 40, 14, 8, 3.5, 9) + band(54, 39, 14, 8, 3.5, 9);
+    case "wink":
+      return oval(35, 36, 9, 14, -12) + band(54, 42, 14, 8, 3.5, 9, true);
+    case "robot": {
+      const pupil = (l: number) => `<rect x="${l}" y="40" width="5" height="5" rx="1" fill="${accent}" filter="url(#${glow})"/>` + bar(l, 40, 5, 5, 1, 0, accent);
+      return bar(32, 36, 14, 13, 4) + bar(54, 36, 14, 13, 4) + pupil(36) + pupil(58);
+    }
+    case "happy":
+      return band(32, 41, 14, 9, 3.5, 9, true) + band(54, 40, 14, 9, 3.5, 9, true);
+    case "closed":
+      return bar(33, 44, 12, 3.5, 2) + bar(55, 43, 12, 3.5, 2);
+  }
+}
+
+function mouth(kind: MouthKind): string {
+  switch (kind) {
+    case "smile":
+      return band(43, 54, 15, 7, 3.5, 10);
+    case "calm":
+      return band(45, 56, 11, 5, 3, 8);
+    case "flat":
+      return bar(45, 58, 11, 3.5, 2);
+    case "o":
+      return oval(46, 55, 9, 10, 0);
+    case "open":
+      return around(50.5, 59.5, `<animateTransform attributeName="transform" type="scale" values="1 0.35;1 1;1 0.35" keyTimes="0;0.5;1" calcMode="spline" keySplines="0.42 0 0.58 1;0.42 0 0.58 1" dur="0.45s" repeatCount="indefinite"/>`, oval(44, 54, 13, 11, 0));
+    case "big":
+      return `<path d="${roundedRect(41, 53, 19, 11, [3, 3, 12, 12], [3, 3, 12, 12])}" fill="${INK}"/>`;
+    case "robot":
+      return [40, 45, 50, 55, 60].map((x) => `<rect x="${x}" y="57" width="${x === 60 ? 1 : 3}" height="6" fill="${INK}"/>`).join("");
+  }
+}
+
+const EASE = `calcMode="spline" keyTimes="0;0.5;1" keySplines="0.42 0 0.58 1;0.42 0 0.58 1"`;
+
+// aa-bob: translateY(-3px) rotate(-1.5deg) at 50%, around the box centre.
+function bob(dur: string): string {
+  return (
+    `<animateTransform attributeName="transform" type="translate" values="0 0;0 -3;0 0" ${EASE} dur="${dur}" repeatCount="indefinite"/>` +
+    `<animateTransform attributeName="transform" type="rotate" values="0 50 50;-1.5 50 50;0 50 50" ${EASE} dur="${dur}" additive="sum" repeatCount="indefinite"/>`
+  );
+}
+
+const pulse = (from: number, dur: string, begin = "0s") =>
+  `<animate attributeName="opacity" values="${from};1;${from}" dur="${dur}" begin="${begin}" repeatCount="indefinite"/>`;
+
+// The 24x24 badge with a 1.5px border at the top right (asking, stop, paused).
+const badge = (fill: string, inner: string, anim = "") =>
+  `<g>${anim}<circle cx="85.5" cy="11.5" r="12.75" fill="${fill}" stroke="${INK}" stroke-width="1.5"/>${inner}</g>`;
+const badgeText = (ch: string, fill: string) =>
+  `<text x="85.5" y="16.5" text-anchor="middle" font-family="Geist, ui-sans-serif, system-ui, sans-serif" font-size="14" font-weight="700" fill="${fill}">${ch}</text>`;
+
+function overlays(st: AvatarState, accent: string, id: string): { back: string; front: string } {
+  switch (st) {
+    case "listening": {
+      const ring = (begin: string) =>
+        around(50, 50, `<animateTransform attributeName="transform" type="scale" values="0.88;1.24" dur="2s" begin="${begin}" calcMode="spline" keyTimes="0;1" keySplines="0 0 0.58 1" repeatCount="indefinite"/>`,
+          `<circle cx="50" cy="50" r="45" fill="none" stroke="${accent}" stroke-width="2" opacity="0"><animate attributeName="opacity" values="0.8;0" dur="2s" begin="${begin}" calcMode="spline" keyTimes="0;1" keySplines="0 0 0.58 1" repeatCount="indefinite"/></circle>`);
+      return { back: ring("0s") + ring("1s"), front: "" };
+    }
+    case "stop":
+      return {
+        back:
+          `<circle cx="50" cy="50" r="50" fill="none" stroke="${CORAL}" stroke-width="4" opacity="0.45" filter="url(#${id}sg)">${pulse(0.5, "1.6s")}</circle>` +
+          `<circle cx="50" cy="50" r="49" fill="none" stroke="${CORAL}" stroke-width="2"/>`,
+        front: badge(CORAL, badgeText("!", INK)),
+      };
+    case "thinking":
+      return {
+        back: "",
+        front:
+          `<rect x="64.75" y="0.75" width="35.5" height="18.5" rx="9.25" fill="#FFFFFF" stroke="${INK}" stroke-width="1.5"/>` +
+          [75.5, 82.5, 89.5].map((cx, i) => `<circle cx="${cx}" cy="10" r="2" fill="${INK}" opacity="0.25">${pulse(0.25, "1.2s", `${i * 0.2}s`)}</circle>`).join(""),
+      };
+    case "talking":
+      return {
+        back: "",
+        front:
+          `<path d="M91.25 36A5.25 8 0 0 1 91.25 52A2.75 8 0 0 0 91.25 36Z" fill="${accent}" opacity="0.25">${pulse(0.25, "1s")}</path>` +
+          `<path d="M96.25 31A6.25 13 0 0 1 96.25 57A3.75 13 0 0 0 96.25 31Z" fill="${accent}" opacity="0.25">${pulse(0.25, "1s", "0.3s")}</path>`,
+      };
     case "asking":
       return {
         back: "",
-        front: `<g><animateTransform attributeName="transform" type="translate" values="0 0;0 -3;0 0" dur="1.8s" repeatCount="indefinite"/><circle cx="160" cy="40" r="18" fill="#FFFFFF" stroke="${accent}" stroke-width="3"/><path d="M146 52 L140 62 L152 56 Z" fill="#FFFFFF" stroke="${accent}" stroke-width="2" stroke-linejoin="round"/><text x="160" y="48" text-anchor="middle" font-family="sans-serif" font-size="22" font-weight="700" fill="${accent}">?</text></g>`,
+        front: badge(accent, badgeText("?", "#FFFFFF"), `<animateTransform attributeName="transform" type="translate" values="0 0;0 -1.5;0 0" ${EASE} dur="1.8s" repeatCount="indefinite"/>`),
       };
-    case "stop":
+    case "happy":
       return {
-        back: `<circle cx="100" cy="108" r="84" fill="none" stroke="#EF4444" stroke-width="6"><animate attributeName="opacity" values="1;0.45;1" dur="1s" repeatCount="indefinite"/></circle>`,
-        front: `<g transform="translate(158 132)"><rect x="-12" y="-6" width="24" height="26" rx="8" fill="#FFFFFF" stroke="#EF4444" stroke-width="3"/><path d="M-9 -4 V-18 M-3 -6 V-22 M3 -6 V-22 M9 -4 V-17" stroke="#EF4444" stroke-width="5" stroke-linecap="round"/></g>`,
+        back: "",
+        front: bar(82, 8, 9, 9, 2, 45, accent) + bar(8, 20, 6, 6, 1, 45, accent),
       };
     case "paused":
       return {
         back: "",
-        front: `<text x="152" y="52" font-family="sans-serif" font-size="22" font-weight="700" fill="#9CA3AF">z<animate attributeName="opacity" values="0.2;1;0.2" dur="2.4s" repeatCount="indefinite"/></text>`,
+        front: badge("#2A2A2E", bar(81, 7, 3, 9, 1, 0, "#E5E5E5") + bar(87, 7, 3, 9, 1, 0, "#E5E5E5"), pulse(0.6, "2.4s")),
       };
     default:
       return { back: "", front: "" };
-  }
-}
-
-function bodyAnimation(state: AvatarState): { cx: number; cy: number; anim: string } | null {
-  switch (state) {
-    case "idle":
-      return { cx: 100, cy: 172, anim: `<animateTransform attributeName="transform" type="scale" values="1 1;1.015 1.035;1 1" dur="3.6s" repeatCount="indefinite"/>` };
-    case "listening":
-      return { cx: 100, cy: 172, anim: `<animateTransform attributeName="transform" type="scale" values="1 1;1.05 1.05;1.04 1.04" keyTimes="0;0.4;1" dur="2s" repeatCount="indefinite"/>` };
-    case "asking":
-      return { cx: 100, cy: 172, anim: `<animateTransform attributeName="transform" type="rotate" values="0;-9;-9;0" keyTimes="0;0.3;0.8;1" dur="2.4s" repeatCount="indefinite"/>` };
-    case "happy":
-      return { cx: 100, cy: 172, anim: `<animateTransform attributeName="transform" type="translate" values="0 0;0 -12;0 0;0 0" keyTimes="0;0.3;0.6;1" dur="0.9s" repeatCount="indefinite"/>` };
-    case "talking":
-      return { cx: 100, cy: 172, anim: `<animateTransform attributeName="transform" type="scale" values="1 1;1.01 1.02;1 1" dur="0.6s" repeatCount="indefinite"/>` };
-    default:
-      return null;
   }
 }
 
@@ -204,52 +276,72 @@ function idFor(avatar: Avatar, state: AvatarState): string {
   return `av${(h >>> 0).toString(36)}`;
 }
 
-export function renderAvatarSvg(input: Avatar, state: AvatarState, size = 128): string {
+const blur = (id: string, sd: number) => `<filter id="${id}" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="${sd}"/></filter>`;
+
+// CSS inset box-shadow: SourceAlpha minus its blurred offset copy, flooded with a colour.
+function insetShadow(dx: number, dy: number, sd: number, color: string, opacity: number, out: string): string {
+  return (
+    `<feOffset in="SourceAlpha" dx="${dx}" dy="${dy}"/><feGaussianBlur stdDeviation="${sd}" result="${out}b"/>` +
+    `<feComposite in="SourceAlpha" in2="${out}b" operator="out" result="${out}c"/>` +
+    `<feFlood flood-color="${color}" flood-opacity="${opacity}"/><feComposite in2="${out}c" operator="in" result="${out}"/>`
+  );
+}
+
+export type AvatarRenderOptions = { tile?: boolean };
+
+// tile: the dark rounded stage (radius 18, #232327 -> #0A0A0C) the canvas puts behind avatars in grids.
+export function renderAvatarSvg(input: Avatar, state: AvatarState, size = 128, options: AvatarRenderOptions = {}): string {
   const avatar = normalizeAvatar(input);
   const st: AvatarState = AVATAR_STATES.includes(state) ? state : "idle";
   const px = Number.isFinite(size) ? Math.max(16, Math.min(1024, Math.round(size))) : 128;
-  const id = idFor(avatar, st);
-  const base = avatar.color;
-  const light = mix(base, "#FFFFFF", 0.35);
-  const dark = mix(base, "#000000", 0.28);
+  const id = idFor(avatar, st) + (options.tile ? "t" : "");
+  const tone = avatar.color;
+  const accent = avatar.accent;
+  const b = BODIES[avatar.shape];
+  const { eye, mouth: mouthKind } = faceKinds(avatar.face, st);
 
   const defs =
     `<defs>` +
-    `<radialGradient id="${id}b" cx="0.4" cy="0.32" r="0.8"><stop offset="0" stop-color="${light}"/><stop offset="0.55" stop-color="${base}"/><stop offset="1" stop-color="${dark}"/></radialGradient>` +
-    `<linearGradient id="${id}h" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF" stop-opacity="0.55"/><stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/></linearGradient>` +
-    `<linearGradient id="${id}s" x1="0" y1="0" x2="0" y2="1"><stop offset="0.55" stop-color="#000000" stop-opacity="0"/><stop offset="1" stop-color="#000000" stop-opacity="0.22"/></linearGradient>` +
-    `<filter id="${id}f" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="5"/></filter>` +
-    (st === "paused" ? `<filter id="${id}g"><feColorMatrix type="saturate" values="0.1"/></filter>` : "") +
+    `<radialGradient id="${id}b" cx="0.34" cy="0.3" r="0.75"><stop offset="0" stop-color="${mix(tone, "#FFFFFF", 0.7)}"/><stop offset="0.46" stop-color="${tone}"/><stop offset="1" stop-color="${mix(tone, "#000000", 0.26)}"/></radialGradient>` +
+    `<radialGradient id="${id}d" cx="0.35" cy="0.3" r="0.95"><stop offset="0" stop-color="${mix(accent, "#FFFFFF", 0.55)}"/><stop offset="0.65" stop-color="${accent}"/></radialGradient>` +
+    `<filter id="${id}i" x="0" y="0" width="1" height="1">${insetShadow(-5, -7, 6, "#000000", 0.18, "s")}${insetShadow(4, 5, 5, "#FFFFFF", 0.55, "h")}<feMerge><feMergeNode in="SourceGraphic"/><feMergeNode in="s"/><feMergeNode in="h"/></feMerge></filter>` +
+    blur(`${id}f`, 1.5) +
+    blur(`${id}h`, 1) +
+    blur(`${id}c`, 0.3) +
+    (eye === "robot" ? blur(`${id}g`, 2.5) : "") +
+    (st === "stop" ? blur(`${id}sg`, 5) : "") +
+    (st === "paused"
+      ? `<filter id="${id}p"><feColorMatrix type="saturate" values="0"/><feComponentTransfer><feFuncR type="linear" slope="0.72"/><feFuncG type="linear" slope="0.72"/><feFuncB type="linear" slope="0.72"/></feComponentTransfer></filter>`
+      : "") +
+    (options.tile ? `<linearGradient id="${id}t" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#232327"/><stop offset="1" stop-color="#0A0A0C"/></linearGradient>` : "") +
     `</defs>`;
 
-  const body = bodyShape(avatar.shape, `fill="url(#${id}b)" stroke="url(#${id}b)"`);
-  const shade = bodyShape(avatar.shape, `fill="url(#${id}s)" stroke="none"`);
-  const highlight = `<ellipse cx="86" cy="66" rx="30" ry="14" fill="url(#${id}h)" transform="rotate(-14 86 66)"/>`;
-  const cheeks = `<circle cx="68" cy="118" r="7" fill="${avatar.accent}" opacity="0.45"/><circle cx="132" cy="118" r="7" fill="${avatar.accent}" opacity="0.45"/>`;
+  const d = bodyPath(avatar.shape);
+  const rot = b.rot ? ` transform="rotate(${b.rot} ${n(b.l + b.w / 2)} ${n(b.t + b.h / 2)})"` : "";
+  const bead = `<circle cx="${b.bl + 6}" cy="${b.bt + 6}" r="6"`;
+  // Dark outline: the canvas uses four 1.6px drop-shadows around bead + body; a 3.2px stroke under the fills
+  // leaves the same 1.6px ring outside the union.
+  const outline =
+    `<g stroke="${INK}" stroke-width="3.2" stroke-linejoin="round" fill="${INK}">${bead}/><path d="${d}"${rot}/></g>` +
+    `${bead} fill="url(#${id}d)"/><path d="${d}"${rot} fill="url(#${id}b)" filter="url(#${id}i)"/>`;
+  const hl = { l: b.l + b.w * 0.2, t: b.t + b.h * 0.12, w: b.w * 0.22, h: b.h * 0.11 };
+  const highlight = `<ellipse cx="${n(hl.l + hl.w / 2)}" cy="${n(hl.t + hl.h / 2)}" rx="${n(hl.w / 2)}" ry="${n(hl.h / 2)}" fill="#FFFFFF" opacity="0.7" filter="url(#${id}h)" transform="rotate(-28 ${n(hl.l + hl.w / 2)} ${n(hl.t + hl.h / 2)})"/>`;
+  const cheeks = `<g fill="${accent}" opacity="0.45" filter="url(#${id}c)"><ellipse cx="32" cy="57.5" rx="5" ry="2.5"/><ellipse cx="68" cy="57.5" rx="5" ry="2.5"/></g>`;
+  const faceT = b.fs === 1 ? `translate(${b.fx} ${b.fy})` : `translate(${b.fx} ${b.fy}) translate(50 50) scale(${b.fs}) translate(-50 -50)`;
+  const face = `<g transform="${faceT}">${cheeks}${eyes(eye, st, accent, `${id}g`)}${mouth(mouthKind)}</g>`;
+  const shadow = `<ellipse cx="50" cy="93.5" rx="28" ry="3.5" fill="#000000" opacity="0.35" filter="url(#${id}f)"/>`;
 
-  let eyes = eyesFor(avatar.face, st, avatar.accent);
-  if (st === "idle" || st === "listening") {
-    // Occasional blink: eyes squash for a moment every few seconds.
-    eyes = around(100, 102, `<animateTransform attributeName="transform" type="scale" values="1 1;1 1;1 0.1;1 1" keyTimes="0;0.92;0.96;1" dur="4.5s" repeatCount="indefinite"/>`, eyes);
-  }
-  const face = `<g>${browsFor(avatar.face, st)}${eyes}${mouthFor(avatar.face, st)}</g>`;
-  let figure = body + shade + highlight + cheeks + face;
-  const anim = bodyAnimation(st);
-  if (anim) figure = around(anim.cx, anim.cy, anim.anim, figure);
+  const anim = st === "idle" || st === "listening" || st === "talking" ? bob("3.4s") : st === "happy" ? bob("1.1s") : "";
+  const paused = st === "paused" ? ` filter="url(#${id}p)"` : "";
+  const extras = overlays(st, accent, id);
+  const figure = `${extras.back}<g${paused}>${anim}${shadow}${outline}${highlight}${face}</g>${extras.front}`;
 
-  const extras = extrasFor(st, avatar.accent);
-  const shadow = `<ellipse cx="100" cy="182" rx="52" ry="8" fill="#000000" opacity="0.28" filter="url(#${id}f)"/>`;
-  const grey = st === "paused" ? ` filter="url(#${id}g)" opacity="0.85"` : "";
-
-  return (
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${px}" height="${px}" viewBox="0 0 200 200" role="img" aria-label="avatar ${st}">` +
-    defs +
-    shadow +
-    extras.back +
-    `<g${grey}>${figure}</g>` +
-    extras.front +
-    `</svg>`
-  );
+  const head = `<svg xmlns="http://www.w3.org/2000/svg" width="${px}" height="${px}"`;
+  const tail = ` role="img" aria-label="avatar ${st}">${defs}`;
+  if (options.tile)
+    return `${head} viewBox="0 0 140 140"${tail}<rect width="140" height="140" rx="18" fill="url(#${id}t)"/><g transform="translate(20 20)">${figure}</g></svg>`;
+  // The badges sit at top: -2px on the canvas; shifting the view up 2 units keeps them whole.
+  return `${head} viewBox="0 -2 100 100"${tail}${figure}</svg>`;
 }
 
 function base64Utf8(text: string): string {
