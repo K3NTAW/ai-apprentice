@@ -3,7 +3,7 @@
 // Work Map for one session: build it if missing, view it, export guardrails, open in Teach.
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import WorkMapView from "@/components/workmap/WorkMapView";
 import type { Session, WorkMap } from "@/lib/types";
 
@@ -13,19 +13,22 @@ export default function MapPage() {
   const [error, setError] = useState<string | null>(null);
   const [building, setBuilding] = useState(false);
 
-  const load = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/session/${encodeURIComponent(id)}`, { cache: "no-store" });
-      if (!res.ok) throw new Error(res.status === 404 ? "Session not found." : `GET session ${res.status}`);
-      setSession((await res.json()) as Session);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    }
-  }, [id]);
-
   useEffect(() => {
-    void load();
-  }, [load]);
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/session/${encodeURIComponent(id)}`, { cache: "no-store" });
+        if (!res.ok) throw new Error(res.status === 404 ? "Session not found." : `GET session ${res.status}`);
+        const s = (await res.json()) as Session;
+        if (!cancelled) setSession(s);
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
 
   const build = async () => {
     setBuilding(true);
