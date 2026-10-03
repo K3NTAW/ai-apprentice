@@ -133,28 +133,37 @@ function describe(g: Group): { title: string; decision: string; judgment: boolea
 
 const qaSource = (q: QAPair): ReasonSource => (q.phase === "debrief" ? "debrief" : "live_question");
 
-function linkedQA(g: Group, qa: QAPair[], claimed: Set<string>): QAPair[] {
-  const ids = new Set(g.events.map((e) => e.id));
-  const byId = qa.filter((q) => q.answer && q.event_id && ids.has(q.event_id));
-  if (byId.length) return byId;
-  const t = g.events[0].t;
-  let best: QAPair | undefined;
+/** Q&A per group: linked by event_id, else the group nearest in time (within QA_WINDOW_S). */
+function linkQA(groups: Group[], qa: QAPair[]): QAPair[][] {
+  const out: QAPair[][] = groups.map(() => []);
+  const byId = new Map<string, number>();
+  groups.forEach((g, i) => g.events.forEach((e) => byId.set(e.id, i)));
   for (const q of qa) {
-    if (!q.answer || claimed.has(q.id) || Math.abs(q.t_question - t) > QA_WINDOW_S) continue;
-    if (!best || Math.abs(q.t_question - t) < Math.abs(best.t_question - t)) best = q;
+    if (!q.answer) continue;
+    const linked = q.event_id !== undefined ? byId.get(q.event_id) : undefined;
+    if (linked !== undefined) {
+      out[linked].push(q);
+      continue;
+    }
+    if (q.event_id !== undefined) continue;
+    let best = -1;
+    groups.forEach((g, i) => {
+      const d = Math.abs(q.t_question - g.events[0].t);
+      if (d <= QA_WINDOW_S && (best < 0 || d < Math.abs(q.t_question - groups[best].events[0].t))) best = i;
+    });
+    if (best >= 0) out[best].push(q);
   }
-  return best ? [best] : [];
+  return out;
 }
 
 export function fallbackWorkMap(session: Session): WorkMap {
   const groups = groupEvents(session.events);
-  const claimed = new Set(session.qa.filter((q) => q.event_id).map((q) => q.id));
+  const qaByGroup = linkQA(groups, session.qa);
   const steps = groups.map((g, i): WorkMapStep => {
     const ev = g.events[0];
     const frame = g.events.find((e) => e.frame_ref)?.frame_ref;
     const { title, decision, judgment } = describe(g);
-    const linked = linkedQA(g, session.qa, claimed);
-    for (const q of linked) claimed.add(q.id);
+    const linked = qaByGroup[i];
     const reasonQA = linked.find((q) => q.about !== "guardrail") ?? linked[0];
     const guardrails: Guardrail[] = linked
       .filter((q) => q.about === "guardrail")
