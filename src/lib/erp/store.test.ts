@@ -81,10 +81,7 @@ describe("store", () => {
 });
 
 describe("save hook guard", () => {
-  const holder = (s: ErpState) => {
-    let cur = s;
-    return { get: () => cur };
-  };
+  const holder = (s: ErpState) => ({ get: () => s });
 
   it("blocks on allow:false: no status change, no events, message passed through", async () => {
     const st = holder(setField(initialState("capture"), "4471", "cost_center", "0400").state);
