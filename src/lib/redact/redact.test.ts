@@ -80,6 +80,7 @@ describe("redactText adjacency", () => {
 describe("redactTextAsync", () => {
   afterEach(() => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
   });
@@ -97,6 +98,12 @@ describe("redactTextAsync", () => {
 
   it("falls back to local recognizers when Presidio hangs", async () => {
     vi.useFakeTimers();
+    // Node's AbortSignal.timeout ignores fake timers, so route it through the faked setTimeout.
+    const timeout = vi.spyOn(AbortSignal, "timeout").mockImplementation((ms) => {
+      const c = new AbortController();
+      setTimeout(() => c.abort(new DOMException("timed out", "TimeoutError")), ms);
+      return c.signal;
+    });
     vi.stubEnv("PRESIDIO_URL", "http://presidio.local");
     const fetchMock = vi.fn(
       (_url: string, init?: RequestInit) =>
@@ -109,5 +116,6 @@ describe("redactTextAsync", () => {
     await vi.advanceTimersByTimeAsync(3000);
     expect((await pending).text).toBe("Frau <PERSON>");
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(timeout).toHaveBeenCalledWith(3000);
   });
 });
