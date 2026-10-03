@@ -14,7 +14,7 @@ export const CLOSE = {
   HELLO_TIMEOUT: 4408,
   /** Another client is already paired, or too many pending sockets. */
   BUSY: 4409,
-  /** Too many failed pairing attempts: the code was rotated. */
+  /** Too many failed pairing attempts from this Origin within the lockout window. */
   LOCKED: 4429,
 } as const;
 

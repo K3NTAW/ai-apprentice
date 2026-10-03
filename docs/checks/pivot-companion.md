@@ -2,18 +2,23 @@
 
 Run on macOS with the web app on `http://localhost:3000` and `cd companion && npm install && npm run dev`.
 
+Automated: the root gate does not cover `companion/`. The companion suite runs with
+`npm run test:companion` from the repo root (`npm --prefix companion ci && npm --prefix companion test
+&& npm --prefix companion run build`); the Planner runs it before merge.
+
 1. **Menu bar**: `AI` appears in the menu bar, no dock icon. Menu shows `Not paired`, a pairing code,
    `New pairing code`, `Pause sensing`, `Quit`. A second `npm run dev` exits at once (single instance).
 2. **Permissions missing**: on a fresh machine the menu lists `Grant Accessibility…`,
    `Check Input Monitoring…`, `Grant Screen Recording (window titles)…`; each opens the matching
    System Settings pane.
 3. **Permissions granted**: enable Accessibility, Input Monitoring and Screen Recording. Within a few
-   seconds the missing items disappear (Input Monitoring after the first key or mouse move) and the
-   web app console shows a new `status` with all three `true`.
+   seconds the missing items disappear, without any key or mouse move, and the web app console
+   shows a new `status` with all three `true`.
 4. **Pairing from the web app console**:
    `ws = new WebSocket("ws://127.0.0.1:47321"); ws.onmessage = e => console.log(e.data); ws.onclose = e => console.log("closed", e.code); ws.onopen = () => ws.send(JSON.stringify({type:"hello",token:"<code>"}))`
-   logs `status`; the tray shows `Paired with web app`. A wrong code logs `closed 4401`; five wrong
-   codes log `closed 4429` and the tray shows a new code. No hello for 5 s logs `closed 4408`.
+   logs `status`; the tray shows `Paired with web app` and a new code. A wrong code logs `closed 4401`;
+   after five wrong codes the next connection from that page logs `closed 4429` (for 10 minutes), the
+   tray code stays the same, and a page on another allowed Origin still pairs. No hello for 5 s logs `closed 4408`.
    A second tab while paired logs `closed 4409`. The same snippet from `https://example.com` logs `closed 4403`.
 5. **Activity while typing in another app**: with the page paired, type in TextEdit or Outlook.
    The console shows `activity` every 500 ms with `typing:true` and `keys>0`; stop and `idle_ms` grows.

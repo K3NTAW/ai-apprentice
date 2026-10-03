@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { compileRule, isHostAllowed, isOriginAllowed, parseAllowlist } from "./origin.mjs";
-import { codesEqual, generateCode, MAX_FAILED_ATTEMPTS, Pairing } from "./pairing.mjs";
+import { codesEqual, generateCode, Pairing } from "./pairing.mjs";
 import { CLOSE, DEFAULT_PORT, parseClientMessage, parsePort, statusMessage } from "./protocol.mjs";
 import { MAX_PENDING, SessionGate } from "./session.mjs";
 
@@ -139,15 +139,14 @@ describe("pairing", () => {
     expect(codesEqual("123456", "")).toBe(false);
   });
 
-  it("rotates the code after too many failures", () => {
+  it("rotates only on demand", () => {
     let n = 0;
     const p = new Pairing(() => String(100000 + n++));
     const first = p.current();
-    for (let i = 1; i < MAX_FAILED_ATTEMPTS; i++) expect(p.check("000000")).toBe("bad");
-    expect(p.check("000000")).toBe("locked");
-    expect(p.current()).not.toBe(first);
-    expect(p.check(first)).toBe("bad");
-    expect(p.check(p.current())).toBe("ok");
+    expect(p.check("000000")).toBe(false);
+    expect(p.check(first)).toBe(true);
+    expect(p.rotate()).not.toBe(first);
+    expect(p.check(first)).toBe(false);
   });
 });
 
@@ -186,14 +185,4 @@ describe("session gate", () => {
     expect(gate.admit(99, { origin: okOrigin, host: HOST })).toMatchObject({ ok: false, code: CLOSE.BUSY });
   });
 
-  it("locks with 4429 after repeated wrong codes", () => {
-    const { gate } = gateWith();
-    let last;
-    for (let i = 0; i < MAX_FAILED_ATTEMPTS; i++) {
-      gate.admit(i, { origin: okOrigin, host: HOST });
-      last = gate.hello(i, "000000");
-      gate.close(i);
-    }
-    expect(last).toMatchObject({ ok: false, code: CLOSE.LOCKED });
-  });
 });

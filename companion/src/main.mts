@@ -7,6 +7,7 @@ import { ActivityAggregator, AppChangeTracker, WINDOW_MS, toInputKind, type Inpu
 import { HaloStore, mapRect, type DisplayInfo } from "./overlay.mjs";
 import { parseAllowlist } from "./origin.mjs";
 import { Pairing } from "./pairing.mjs";
+import { PermissionMonitor, readPermissions } from "./permissions.mjs";
 import { appMessage, parsePort, statusMessage, type Permissions } from "./protocol.mjs";
 import { startServer, type CompanionServer } from "./server.mjs";
 
@@ -31,8 +32,6 @@ let serverError: string | null = null;
 let paused = false;
 let paired = false;
 let hookRunning = false;
-let hookSawInput = false;
-let lastPermissions = "";
 const halos = new HaloStore();
 const aggregator = new ActivityAggregator(Date.now());
 const appTracker = new AppChangeTracker();
@@ -42,18 +41,20 @@ const pairing = new Pairing(undefined, () => rebuildMenu());
 type Hook = { on(event: string, cb: () => void): void; start(): void; stop(): void };
 let hook: Hook | null = null;
 
+// input comes from the permission APIs (see permissions.mts), never from observed input events.
+// Electron has no Input Monitoring query, so inputMonitoringStatus is not passed.
 function permissions(): Permissions {
-  if (process.platform !== "darwin") return { input: hookRunning && hookSawInput, screen: true, accessibility: true };
-  const accessibility = systemPreferences.isTrustedAccessibilityClient(false);
-  const screenOk = systemPreferences.getMediaAccessStatus("screen") === "granted";
-  // macOS exposes no query for Input Monitoring: input is true once the running hook has delivered an event.
-  return { input: hookRunning && hookSawInput, screen: screenOk, accessibility };
+  return readPermissions({
+    platform: process.platform,
+    isTrustedAccessibilityClient: (prompt) => systemPreferences.isTrustedAccessibilityClient(prompt),
+    getMediaAccessStatus: (type) => systemPreferences.getMediaAccessStatus(type),
+  });
 }
 
 const status = () => statusMessage(app.getVersion(), permissions(), paused);
 
 function startHook(): void {
-  if (hookRunning || paused || !permissions().accessibility) return;
+  if (hookRunning || paused || !permissions().input) return;
   try {
     if (!hook) {
       hook = (require("uiohook-napi") as { uIOhook: Hook }).uIOhook;
@@ -62,7 +63,6 @@ function startHook(): void {
         hook.on(name, () => {
           const kind: InputKind | null = toInputKind(name);
           if (!kind || paused) return;
-          hookSawInput = true;
           aggregator.record(kind, Date.now());
         });
       }
@@ -82,7 +82,6 @@ function stopHook(): void {
     log(`input hook stop failed: ${String(err)}`);
   }
   hookRunning = false;
-  hookSawInput = false;
 }
 
 let appPollBusy = false;
@@ -100,14 +99,11 @@ async function pollApp(): Promise<void> {
   }
 }
 
-function checkPermissions(): void {
-  const p = JSON.stringify(permissions());
-  if (p === lastPermissions) return;
-  lastPermissions = p;
+const permissionMonitor = new PermissionMonitor(permissions, () => {
   startHook();
   server?.send(status());
   rebuildMenu();
-}
+});
 
 function primaryDisplay(): DisplayInfo {
   const d = screen.getPrimaryDisplay();
@@ -249,11 +245,11 @@ async function boot(): Promise<void> {
     if (paired && !paused) server?.send(msg);
   }, WINDOW_MS);
   setInterval(() => void pollApp(), APP_POLL_MS);
-  setInterval(checkPermissions, PERMISSION_POLL_MS);
+  setInterval(() => permissionMonitor.check(), PERMISSION_POLL_MS);
   setInterval(() => {
     if (halos.expire(Date.now())) pushHalos();
   }, 1_000);
-  checkPermissions();
+  permissionMonitor.start();
 }
 
 if (!app.requestSingleInstanceLock()) {

@@ -9,7 +9,8 @@
     "start": "next start",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:companion": "npm --prefix companion ci && npm --prefix companion test && npm --prefix companion run build"
   },
   "dependencies": {
     "@elevenlabs/react": "^1.16.0",

@@ -12,6 +12,7 @@ export default defineConfig([
     "spikes/**",
     "wt/**",
     "skills/**",
+    "companion/**",
     ".orchestrator/**",
     ".claude/**",
   ]),

@@ -39,8 +39,11 @@ npm test           # Vitest, pure modules only, no Electron runtime
 npm run build      # tsc -p tsconfig.json
 ```
 
-The repo root gate (`.claude/hooks/tests-green.sh`) does not run these; run both commands for
-changes under `companion/`.
+The repo root gate (`.claude/hooks/tests-green.sh`) does not run these, and the root typecheck,
+lint, tests and `next build` exclude `companion/` (they pass without `companion/node_modules`).
+The companion suite runs with the root script `npm run test:companion`
+(`npm --prefix companion ci && npm --prefix companion test && npm --prefix companion run build`);
+the Planner runs it before merge.
 
 ## Package a local unsigned .app
 
@@ -74,9 +77,11 @@ How `status.permissions` is derived:
 
 - `accessibility`: `systemPreferences.isTrustedAccessibilityClient(false)`.
 - `screen`: `systemPreferences.getMediaAccessStatus('screen') === 'granted'`.
-- `input`: macOS has no query API for Input Monitoring in Electron, so `input` is `true` once the
-  hook is running and has delivered at least one event. It is `false` right after start until the
-  first key or mouse move.
+- `input`: from the permission APIs, never from observed input: `true` when
+  `isTrustedAccessibilityClient(false)` is true and the Input Monitoring status, where a query is
+  available, is not denied. Electron has no Input Monitoring query, so today Accessibility is the
+  gate. It is reported in the first `status` right after launch and re-sent on change. The hook
+  only starts when `input` is true.
 
 ## Protocol summary
 
@@ -90,13 +95,16 @@ Admission:
   `*` or `*.domain` rules are rejected. Missing or `null` Origin is rejected.
 - `Host` must be `127.0.0.1:<port>` or `localhost:<port>` (DNS rebinding guard).
 - First message must be `{"type":"hello","token":"<6-digit code>"}` within 5 s.
-- Codes come from `crypto.randomInt` and are compared in constant time. After 5 wrong codes the
-  code rotates.
+- Codes come from `crypto.randomInt` and are compared in constant time. Each wrong code closes
+  that connection with `4401` and counts against its Origin. After 5 failures from one Origin
+  within 10 minutes, new connections from that Origin are refused with `4429` until the failures
+  age out of the window. Other Origins are not affected. Failures never change the displayed
+  code; it rotates only on `New pairing code` or after a successful pairing.
 - One paired client at a time. Unauthenticated sockets do not take the paired slot, but at most 4
   may wait for hello; new connections while a client is paired are refused.
 
 Close codes: `4401` bad or missing hello, `4403` origin or host rejected, `4408` hello timeout,
-`4409` another client is paired or too many pending sockets, `4429` too many wrong codes (code rotated).
+`4409` another client is paired or too many pending sockets, `4429` too many wrong codes from this Origin in the last 10 minutes.
 
 Companion to web:
 
