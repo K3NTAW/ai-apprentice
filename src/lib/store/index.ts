@@ -5,14 +5,16 @@ import { createSupabaseStore } from "./supabase";
 import type { SessionStore, StoreContext } from "./types";
 
 export {
+  AgentNotFoundError,
   frameName,
   InvalidOffRecordRangeError,
   InvalidSessionIdError,
+  isValidAgentId,
   isValidFrameName,
   isValidSessionId,
   SessionNotFoundError,
 } from "./types";
-export type { OffRecordRange, SaveFrameResult, SessionStore, SessionSummary, StoreContext } from "./types";
+export type { AgentInput, AgentPatch, OffRecordRange, SaveFrameResult, SessionStore, SessionSummary, StoreContext } from "./types";
 export { dataDir, fileStore, framePath } from "./file";
 export { createSupabaseStore } from "./supabase";
 

@@ -142,3 +142,29 @@ describe("types", () => {
     expect(newId("ev")).toMatch(/^ev_[a-z0-9]+$/);
   });
 });
+
+describe("avatar and agent", () => {
+  const avatar = { shape: "blob", face: "smile", color: "#3366FF", accent: "#ffcc00" };
+
+  it("accepts the avatar contract and rejects other shapes, faces, colours and keys", async () => {
+    const { AvatarSchema } = await import("./types");
+    expect(AvatarSchema.parse(avatar)).toEqual(avatar);
+    expect(AvatarSchema.safeParse({ ...avatar, shape: "cube" }).success).toBe(false);
+    expect(AvatarSchema.safeParse({ ...avatar, face: "angry" }).success).toBe(false);
+    expect(AvatarSchema.safeParse({ ...avatar, color: "#36F" }).success).toBe(false);
+    expect(AvatarSchema.safeParse({ ...avatar, accent: "red" }).success).toBe(false);
+    expect(AvatarSchema.safeParse({ ...avatar, script: "x" }).success).toBe(false);
+  });
+
+  it("bounds agent name and role and keeps agent_id optional on sessions", async () => {
+    const { AgentSchema } = await import("./types");
+    const agent = { id: "a", workspace_id: "w", name: "Senior Sales Person", role: "Sales", avatar, created_at: "x", updated_at: "x" };
+    expect(AgentSchema.safeParse(agent).success).toBe(true);
+    expect(AgentSchema.safeParse({ ...agent, name: "" }).success).toBe(false);
+    expect(AgentSchema.safeParse({ ...agent, name: "n".repeat(61) }).success).toBe(false);
+    expect(AgentSchema.safeParse({ ...agent, role: "r".repeat(81) }).success).toBe(false);
+    const base = { id: "s", kind: "capture", started_at: "x", events: [], transcript: [], qa: [], off_record_ranges: [] };
+    expect(SessionSchema.parse(base).agent_id).toBeUndefined();
+    expect(SessionSchema.parse({ ...base, agent_id: "a" }).agent_id).toBe("a");
+  });
+});

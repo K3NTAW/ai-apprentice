@@ -206,8 +206,43 @@ export const SessionSchema = z.object({
   // Stored frame files with their capture time, so off-record purges can find them. Optional for older sessions.
   frames: z.array(z.object({ name: z.string(), t: z.number() })).optional(),
   teach: TeachProgressSchema.optional(),
+  // The agent this session trains or teaches. Set at creation only; null in the DB after the agent is deleted.
+  agent_id: z.string().optional(),
 });
 export type Session = z.infer<typeof SessionSchema>;
+
+// AVATAR CONTRACT, shared by the web app, src/lib/avatar/render.ts and the API. Single source: AvatarSchema.
+export const AVATAR_SHAPES = ["blob", "round", "square", "pill", "bean", "star"] as const;
+export const AVATAR_FACES = ["smile", "focus", "curious", "calm", "wink", "robot"] as const;
+export const AVATAR_STATES = ["idle", "listening", "thinking", "talking", "asking", "stop", "happy", "paused"] as const;
+export type AvatarState = (typeof AVATAR_STATES)[number];
+
+const HexColor = z.string().regex(/^#[0-9A-Fa-f]{6}$/, "colour must be #RRGGBB");
+
+/** Strict: unknown keys are rejected. */
+export const AvatarSchema = z.strictObject({
+  shape: z.enum(AVATAR_SHAPES),
+  face: z.enum(AVATAR_FACES),
+  color: HexColor,
+  accent: HexColor,
+});
+export type Avatar = z.infer<typeof AvatarSchema>;
+
+export const AGENT_NAME_MAX = 60;
+export const AGENT_ROLE_MAX = 80;
+export const AGENT_EXPERT_NAME_MAX = 80;
+
+export const AgentSchema = z.object({
+  id: z.string(),
+  workspace_id: z.string(),
+  name: z.string().min(1).max(AGENT_NAME_MAX),
+  role: z.string().min(1).max(AGENT_ROLE_MAX),
+  expert_name: z.string().max(AGENT_EXPERT_NAME_MAX).optional(),
+  avatar: AvatarSchema,
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+export type Agent = z.infer<typeof AgentSchema>;
 
 export const InvoiceSchema = z.object({
   id: z.string(),

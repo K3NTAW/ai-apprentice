@@ -1,7 +1,7 @@
 // Store contract shared by the file and supabase backends. Leaf module: imports nothing from ./index, ./file or ./supabase.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { RedactOptions } from "@/lib/redact";
-import type { QAPair, ScreenEvent, Session, TranscriptEntry, WorkMap } from "@/lib/types";
+import type { Agent, Avatar, QAPair, ScreenEvent, Session, TranscriptEntry, WorkMap } from "@/lib/types";
 
 export type SessionSummary = {
   id: string;
@@ -11,14 +11,20 @@ export type SessionSummary = {
   expert?: string;
   counts: { events: number; transcript: number; qa: number };
   has_workmap: boolean;
+  agent_id?: string;
 };
+
+export type AgentInput = { name: string; role: string; expert_name?: string; avatar: Avatar };
+/** PATCH semantics: given keys replace the stored value (avatar as a whole); expert_name null clears it. */
+export type AgentPatch = { name?: string; role?: string; expert_name?: string | null; avatar?: Avatar };
 
 export type OffRecordRange = Session["off_record_ranges"][number];
 
 export type SaveFrameResult = { stored: true; name: string } | { stored: false; reason: "off_record" };
 
 export interface SessionStore {
-  createSession(input: { kind: Session["kind"]; expert?: string }): Promise<Session>;
+  /** agent_id must name an agent of the same workspace, else AgentNotFoundError. */
+  createSession(input: { kind: Session["kind"]; expert?: string; agent_id?: string }): Promise<Session>;
   getSession(id: string): Promise<Session | null>;
   listSessions(): Promise<SessionSummary[]>;
   appendEvents(id: string, events: ScreenEvent[]): Promise<Session>;
@@ -29,6 +35,15 @@ export interface SessionStore {
   endSession(id: string): Promise<Session>;
   saveFrame(id: string, t: number, data: Buffer): Promise<SaveFrameResult>;
   readFrame(id: string, name: string): Promise<Buffer | null>;
+  /** Newest first. */
+  listAgents(): Promise<Agent[]>;
+  /** null for a missing agent, an agent of another workspace and a malformed id alike. */
+  getAgent(id: string): Promise<Agent | null>;
+  createAgent(input: AgentInput): Promise<Agent>;
+  /** Throws AgentNotFoundError when missing or outside the workspace. */
+  updateAgent(id: string, patch: AgentPatch): Promise<Agent>;
+  /** False when missing or outside the workspace. Sessions keep their history; their agent_id is cleared. */
+  deleteAgent(id: string): Promise<boolean>;
 }
 
 /**
@@ -52,6 +67,20 @@ export class SessionNotFoundError extends Error {
     super(`session not found: ${id}`);
     this.name = "SessionNotFoundError";
   }
+}
+
+export class AgentNotFoundError extends Error {
+  constructor(id: string) {
+    super(`agent not found: ${id}`);
+    this.name = "AgentNotFoundError";
+  }
+}
+
+// Agent ids are UUIDs in both backends (gen_random_uuid in the DB, randomUUID in the file backend).
+const AGENT_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isValidAgentId(id: unknown): id is string {
+  return typeof id === "string" && AGENT_ID_RE.test(id);
 }
 
 export class InvalidOffRecordRangeError extends Error {

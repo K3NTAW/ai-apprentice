@@ -2,8 +2,9 @@
 // Events and transcript are appended in non-decreasing t; QA and frames are compared as sets keyed by id / name.
 import { beforeEach, describe, expect, it } from "vitest";
 import { redactText } from "@/lib/redact";
-import type { QAPair, ScreenEvent, TranscriptEntry, WorkMap } from "@/lib/types";
+import type { Avatar, QAPair, ScreenEvent, TranscriptEntry, WorkMap } from "@/lib/types";
 import {
+  AgentNotFoundError,
   frameName,
   InvalidOffRecordRangeError,
   InvalidSessionIdError,
@@ -38,6 +39,8 @@ export const qaPair = (id: string, t: number, extra: Partial<QAPair> = {}): QAPa
 });
 
 const workmap: WorkMap = { task: "pay invoice", expert: "Sabine", confirmed_by_expert: false, steps: [], open_questions: [] };
+const avatar: Avatar = { shape: "blob", face: "smile", color: "#3366FF", accent: "#FFCC00" };
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const byKey = <T,>(xs: T[], k: (x: T) => string) => [...xs].sort((a, b) => k(a).localeCompare(k(b)));
 
 export function runStoreContract(name: string, makeStore: () => SessionStore | Promise<SessionStore>): void {
@@ -134,6 +137,49 @@ export function runStoreContract(name: string, makeStore: () => SessionStore | P
       await store.setOffRecord(s.id, { from: 10 });
       await expect(store.setOffRecord(s.id, { from: 10, to: 5 })).rejects.toBeInstanceOf(InvalidOffRecordRangeError);
       expect((await store.getSession(s.id))?.off_record_ranges).toEqual([{ from: 10 }]);
+    });
+
+    it("creates, lists, gets, patches and deletes agents", async () => {
+      const a = await store.createAgent({ name: "Senior Sales Person", role: "Sales", expert_name: "Sabine", avatar });
+      expect(a).toMatchObject({ name: "Senior Sales Person", role: "Sales", expert_name: "Sabine", avatar });
+      expect(a.id).toMatch(UUID_RE);
+      expect(new Date(a.created_at).toISOString()).toBe(a.created_at);
+      const b = await store.createAgent({ name: "Controller", role: "Finance", avatar });
+      expect(b.expert_name).toBeUndefined();
+      expect(await store.getAgent(a.id)).toEqual(a);
+      const list = await store.listAgents();
+      expect(list.map((x) => x.id)).toEqual(expect.arrayContaining([a.id, b.id]));
+      expect(list.map((x) => x.created_at)).toEqual(list.map((x) => x.created_at).sort().reverse());
+
+      const other: Avatar = { shape: "star", face: "robot", color: "#000000", accent: "#FFFFFF" };
+      const p = await store.updateAgent(a.id, { name: "Sales Lead", avatar: other, expert_name: null });
+      expect(p).toMatchObject({ id: a.id, name: "Sales Lead", role: "Sales", avatar: other, created_at: a.created_at });
+      expect(p.expert_name).toBeUndefined();
+      expect(await store.getAgent(a.id)).toEqual(p);
+
+      expect(await store.deleteAgent(b.id)).toBe(true);
+      expect(await store.deleteAgent(b.id)).toBe(false);
+      expect(await store.getAgent(b.id)).toBeNull();
+      await expect(store.updateAgent(b.id, { name: "x" })).rejects.toBeInstanceOf(AgentNotFoundError);
+      expect(await store.getAgent("not-a-uuid")).toBeNull();
+      expect(await store.deleteAgent("not-a-uuid")).toBe(false);
+    });
+
+    it("links a session to an agent and clears the link when the agent is deleted", async () => {
+      const a = await store.createAgent({ name: "Senior Sales Person", role: "Sales", avatar });
+      const s = await store.createSession({ kind: "capture", expert: "Sabine", agent_id: a.id });
+      expect(s.agent_id).toBe(a.id);
+      expect((await store.getSession(s.id))?.agent_id).toBe(a.id);
+      expect((await store.listSessions()).find((x) => x.id === s.id)?.agent_id).toBe(a.id);
+      const plain = await store.createSession({ kind: "teach" });
+      expect(plain.agent_id).toBeUndefined();
+      await expect(store.createSession({ kind: "teach", agent_id: "00000000-0000-4000-8000-00000000dead" })).rejects.toBeInstanceOf(
+        AgentNotFoundError,
+      );
+      await store.deleteAgent(a.id);
+      const kept = await store.getSession(s.id);
+      expect(kept?.agent_id).toBeUndefined();
+      expect(kept?.expert).toBe("Sabine");
     });
 
     it("reports missing sessions and invalid ids", async () => {

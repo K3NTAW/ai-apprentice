@@ -391,8 +391,13 @@ function check9Rollback(sql: string, rollback: string): string[] {
   const policiesGoWithTable = /\bpolic(?:y|ies)\b/.test(comments) && /\btables?\b/.test(comments);
   for (const t of parseTables(sql))
     if (!droppedTables.has(`public.${t}`)) out.push(`9: rollback lacks drop table if exists public.${t}`);
-  for (const f of parseFunctions(sql))
-    if (!droppedFns.has(f.name)) out.push(`9: rollback lacks drop function if exists public.${f.name}`);
+  // A function the migration replaces (create or replace) is handled when the rollback restores it the same way.
+  const restoredFns = new Set(parseFunctions(rollback).filter((f) => f.header.startsWith("create or replace ")).map((f) => f.name));
+  for (const f of parseFunctions(sql)) {
+    if (droppedFns.has(f.name)) continue;
+    if (f.header.startsWith("create or replace ") && restoredFns.has(f.name)) continue;
+    out.push(`9: rollback lacks drop function if exists public.${f.name}`);
+  }
   for (const p of parsePolicies(sql)) {
     if (droppedPolicies.has(`${p.name} on ${p.table}`)) continue;
     if (p.table.startsWith("public.") && droppedTables.has(p.table) && policiesGoWithTable) continue;
@@ -637,6 +642,90 @@ describe.each(migrationFiles)("migration %s", (file) => {
       expect(check(sql)).toEqual([]);
     });
   }
+});
+
+const AGENTS = "20261004000000_agents.sql";
+
+describe("agents migration", () => {
+  const sql = readFileSync(path.join(MIGRATIONS, AGENTS), "utf8");
+  const rollback = readFileSync(path.join(ROLLBACKS, AGENTS.replace(/\.sql$/, ".down.sql")), "utf8");
+  const stmts = normStatements(sql);
+  const policy = (name: string) => parsePolicies(sql).find((p) => p.name === name);
+  const fnBody = (name: string) => norm(parseFunctions(sql).find((f) => f.name === name)?.body ?? "");
+
+  it("creates public.agents with the contract columns and the (workspace_id, id) key", () => {
+    const t = stmts.find((s) => s.startsWith("create table public.agents"));
+    expect(t).toBeDefined();
+    for (const col of [
+      "id uuid primary key default gen_random_uuid()",
+      "workspace_id uuid not null references public.workspaces on delete cascade",
+      "name text not null check (char_length(name) between 1 and 60)",
+      "role text not null check (char_length(role) between 1 and 80)",
+      "expert_name text",
+      "avatar jsonb not null",
+      "created_by uuid references auth.users on delete set null",
+      "created_at timestamptz not null default now()",
+      "updated_at timestamptz not null default now()",
+      "constraint agents_workspace_id_id_key unique (workspace_id, id)",
+    ])
+      expect(t).toContain(col);
+    expect(stmts).toContain("create index agents_workspace_created_idx on public.agents (workspace_id, created_at desc)");
+    expect(stmts).toContain("revoke all on table public.agents from public, anon");
+  });
+
+  it("links sessions to an agent of the same workspace and nulls the link on agent delete", () => {
+    expect(stmts).toContain("alter table public.sessions add column agent_id uuid");
+    expect(stmts).toContain(
+      "alter table public.sessions add constraint sessions_agent_fkey foreign key (workspace_id, agent_id) references public.agents (workspace_id, id) on delete set null (agent_id)",
+    );
+  });
+
+  it("has the four agents policies with the role rules", () => {
+    expect(policy("agents_select")).toMatchObject({ command: "select", roles: ["authenticated"] });
+    expect(compact(policy("agents_select")!.using!)).toBe("public.is_workspace_member(workspace_id)");
+    const ins = policy("agents_insert");
+    expect(ins).toMatchObject({ command: "insert", roles: ["authenticated"] });
+    expect(compact(ins!.withCheck!)).toBe(
+      "created_by = auth.uid()and public.workspace_role(workspace_id)in('owner','expert')",
+    );
+    const upd = policy("agents_update");
+    expect(upd).toMatchObject({ command: "update", roles: ["authenticated"] });
+    expect(compact(upd!.using!)).toBe("public.workspace_role(workspace_id)in('owner','expert')");
+    expect(compact(policy("agents_delete")!.using!)).toBe("public.workspace_role(workspace_id)= 'owner'");
+  });
+
+  it("guards agents id, workspace_id, created_by and created_at, and touches updated_at", () => {
+    const ts = parseTriggers(sql);
+    expect(ts.filter((t) => t.table === "public.agents" && t.timing === "before" && t.events.includes("update"))).toHaveLength(2);
+    const guard = fnBody("agents_guard_update");
+    for (const col of ["id", "workspace_id", "created_by", "created_at"])
+      expect(guard).toContain(`new.${col} is distinct from old.${col}`);
+    expect(guard).toContain("new.created_by is null and auth.uid() is null");
+    expect(fnBody("agents_touch_updated_at")).toContain("new.updated_at := now()");
+  });
+
+  it("replaces sessions_guard_update with the agent_id rule and keeps search_path ''", () => {
+    const f = parseFunctions(sql).find((x) => x.name === "sessions_guard_update");
+    expect(f?.header).toMatch(/^create or replace function/);
+    expect(f?.header).toMatch(/set search_path = ''/);
+    expect(norm(f!.body)).toContain("new.agent_id is distinct from old.agent_id and new.agent_id is not null");
+  });
+
+  it("rollback uses if exists everywhere, keeps the order and restores the init sessions guard", () => {
+    const down = deepStatements(rollback).map(norm);
+    for (const s of down.filter((x) => /\bdrop\b/.test(x))) expect(s).toMatch(/\bif exists\b/);
+    const at = (re: RegExp) => down.findIndex((s) => re.test(s));
+    const policies = at(/drop policy if exists agents_select/);
+    const restore = at(/^create or replace function public\.sessions_guard_update/);
+    const column = at(/drop column if exists agent_id/);
+    const table = at(/^drop table if exists public\.agents$/);
+    const fns = at(/^drop function if exists public\.agents_guard_update/);
+    expect(policies).toBeGreaterThanOrEqual(0);
+    expect([policies, restore, column, table, fns].every((x, i, a) => x >= 0 && (i === 0 || a[i - 1] < x))).toBe(true);
+    const restored = parseFunctions(rollback).find((f) => f.name === "sessions_guard_update");
+    expect(norm(restored!.body)).not.toContain("agent_id");
+    expect(norm(commentText(rollback))).toContain("lossy");
+  });
 });
 
 describe("negative fixtures", () => {

@@ -3,6 +3,8 @@
 // Modelled: filters and ordering, primary keys (23505), the max-rows cap, RLS as a set of visible workspace ids
 // (42501 on writes to an invisible session), the sessions insert policy (created_by = auth.uid()), the
 // session_frames.storage_path prefix check, timestamptz output strings and the storage not-found error shape.
+// Agents: RLS by workspace, the insert policy (created_by = auth.uid()), the sessions (workspace_id, agent_id)
+// foreign key (23503) and its on delete set null (agent_id). Not modelled: triggers (updated_at, guards).
 // Not modelled: workspace roles (owner/expert/learner), column projection on count queries.
 
 type Row = Record<string, unknown>;
@@ -13,6 +15,7 @@ type Order = { col: string; ascending: boolean; nullsFirst: boolean };
 
 const PKS: Record<string, string[]> = {
   sessions: ["id"],
+  agents: ["id"],
   session_events: ["id"],
   session_transcript: ["id"],
   session_qa: ["session_id", "qa_id"],
@@ -21,11 +24,12 @@ const PKS: Record<string, string[]> = {
 const SERIAL = new Set(["session_events", "session_transcript"]);
 // Nullable columns come back as null, like Postgres, when an insert leaves them out.
 const DEFAULTS: Record<string, Row> = {
-  sessions: { created_by: null, expert: null, ended_at: null, workmap: null, off_record_ranges: [] },
+  sessions: { created_by: null, expert: null, ended_at: null, workmap: null, off_record_ranges: [], agent_id: null },
+  agents: { created_by: null, expert_name: null },
   session_qa: { t: null },
   session_frames: { t: null },
 };
-const TIMESTAMPTZ = new Set(["started_at", "ended_at", "created_at"]);
+const TIMESTAMPTZ = new Set(["started_at", "ended_at", "created_at", "updated_at"]);
 
 function unsupported(what: string): never {
   throw new Error(`fakeSupabase: unsupported ${what}`);
@@ -105,14 +109,19 @@ export class FakeSupabase {
   }
 
   rowVisible(table: string, row: Row): boolean {
-    if (table === "sessions") return this.visibleWorkspaces.has(row.workspace_id as string);
+    if (table === "sessions" || table === "agents") return this.visibleWorkspaces.has(row.workspace_id as string);
     return this.sessionVisible(row.session_id);
   }
 
   /** Returns an RLS error for a row the current user may not write, else null. */
   writeDenied(table: string, row: Row): FakeError | null {
-    if (table === "sessions") {
+    if (table === "sessions" || table === "agents") {
       if (row.created_by !== this.uid || !this.visibleWorkspaces.has(row.workspace_id as string)) return rlsError(table);
+      if (table === "sessions" && row.agent_id != null) {
+        // Foreign keys are checked past RLS.
+        const ok = this.tables.agents.some((a) => a.id === row.agent_id && a.workspace_id === row.workspace_id);
+        if (!ok) return { message: 'insert or update on table "sessions" violates foreign key constraint "sessions_agent_fkey"', code: "23503" };
+      }
       return null;
     }
     if (!this.sessionVisible(row.session_id)) return rlsError(table);
@@ -128,7 +137,8 @@ export class FakeSupabase {
     for (const k of Object.keys(out)) if (TIMESTAMPTZ.has(k)) out[k] = pgTs(out[k]);
     if (!insert) return out;
     for (const [k, v] of Object.entries(DEFAULTS[table] ?? {})) if (out[k] === undefined) out[k] = structuredClone(v);
-    if (table === "sessions" && out.created_at === undefined) out.created_at = pgTs(new Date().toISOString());
+    if ((table === "sessions" || table === "agents") && out.created_at === undefined) out.created_at = pgTs(new Date().toISOString());
+    if (table === "agents" && out.updated_at === undefined) out.updated_at = out.created_at;
     if (SERIAL.has(table) && out.id === undefined) out.id = ++this.serial;
     return out;
   }
@@ -403,6 +413,10 @@ class FakeQuery {
     if (this.op === "delete") {
       const out = all.filter((r) => this.fake.rowVisible(this.table, r) && this.matches(r));
       this.fake.tables[this.table] = all.filter((r) => !out.includes(r));
+      if (this.table === "agents") {
+        const gone = new Set(out.map((r) => r.id));
+        for (const r of this.fake.tables.sessions) if (gone.has(r.agent_id)) r.agent_id = null;
+      }
       return this.finish(out);
     }
 

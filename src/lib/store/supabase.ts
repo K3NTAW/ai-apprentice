@@ -11,10 +11,22 @@
 // (https://supabase.com/docs/guides/api/rest/max-rows, https://supabase.com/docs/reference/javascript/range).
 // Every multi-row select has an explicit order and is paged with .range() until a short page.
 // pageSize must not exceed the project's max-rows, otherwise a capped page looks short and paging stops.
+import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { redactText } from "@/lib/redact";
-import { newId, SessionSchema, type QAPair, type ScreenEvent, type Session, type TranscriptEntry } from "@/lib/types";
 import {
+  AgentSchema,
+  newId,
+  SessionSchema,
+  type Agent,
+  type Avatar,
+  type QAPair,
+  type ScreenEvent,
+  type Session,
+  type TranscriptEntry,
+} from "@/lib/types";
+import {
+  AgentNotFoundError,
   assertFrameName,
   assertId,
   assertRange,
@@ -22,6 +34,7 @@ import {
   hasOpenRange,
   inRange,
   isOffRecord,
+  isValidAgentId,
   redactOpts,
   SessionNotFoundError,
   type OffRecordRange,
@@ -44,6 +57,18 @@ type SessionRow = {
   ended_at: string | null;
   off_record_ranges: OffRecordRange[] | null;
   workmap: Session["workmap"] | null;
+  agent_id?: string | null;
+};
+type AgentRow = {
+  id: string;
+  workspace_id: string;
+  name: string;
+  role: string;
+  expert_name: string | null;
+  avatar: Avatar;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
 };
 type PayloadRow<T> = { id: number; t: number; payload: T };
 type FrameRow = { name: string; t: number | null; storage_path: string };
@@ -60,6 +85,19 @@ function fail(op: string, error: unknown): never {
 function check<T>(op: string, res: Result<T>): T | null {
   if (res.error) fail(op, res.error);
   return res.data;
+}
+
+function toAgent(row: AgentRow): Agent {
+  return AgentSchema.parse({
+    id: row.id,
+    workspace_id: row.workspace_id,
+    name: row.name,
+    role: row.role,
+    ...(row.expert_name !== null ? { expert_name: row.expert_name } : {}),
+    avatar: row.avatar,
+    created_at: normTs(row.created_at),
+    updated_at: normTs(row.updated_at),
+  });
 }
 
 /** Postgres returns timestamptz as e.g. 2026-10-03T19:35:00.123+00:00; the app uses toISOString() form. */
@@ -173,6 +211,7 @@ export function createSupabaseStore(
       ...(row.workmap !== null ? { workmap: row.workmap } : {}),
       off_record_ranges: row.off_record_ranges ?? [],
       ...(frameList.length > 0 ? { frames: frameList } : {}),
+      ...(row.agent_id ? { agent_id: row.agent_id } : {}),
     });
   }
 
@@ -270,6 +309,8 @@ export function createSupabaseStore(
 
   const store: SessionStore = {
     async createSession(input) {
+      // The composite foreign key also enforces this; checking first gives a typed error.
+      if (input.agent_id !== undefined && !(await store.getAgent(input.agent_id))) throw new AgentNotFoundError(input.agent_id);
       // Unique violation on the id is thrown, no retry.
       const res = await client
         .from("sessions")
@@ -281,6 +322,7 @@ export function createSupabaseStore(
           expert: input.expert ? input.expert : null,
           started_at: new Date().toISOString(),
           off_record_ranges: [],
+          ...(input.agent_id ? { agent_id: input.agent_id } : {}),
         })
         .select("*")
         .single();
@@ -324,6 +366,7 @@ export function createSupabaseStore(
           ...(r.expert !== null ? { expert: r.expert } : {}),
           counts: { events, transcript, qa },
           has_workmap: r.workmap !== null,
+          ...(r.agent_id ? { agent_id: r.agent_id } : {}),
         });
       }
       return out;
@@ -449,6 +492,64 @@ export function createSupabaseStore(
         fail("storage download", res.error);
       }
       return Buffer.from(await (res.data as Blob).arrayBuffer());
+    },
+
+    async listAgents() {
+      const rows = await selectAll<AgentRow>("select agents", () =>
+        client
+          .from("agents")
+          .select("*")
+          .eq("workspace_id", workspaceId)
+          .order("created_at", { ascending: false })
+          .order("id", { ascending: false }),
+      );
+      return rows.map(toAgent);
+    },
+
+    async getAgent(id) {
+      if (!isValidAgentId(id)) return null;
+      const res = await client.from("agents").select("*").eq("id", id).eq("workspace_id", workspaceId).maybeSingle();
+      const row = check("select agents", res) as AgentRow | null;
+      return row ? toAgent(row) : null;
+    },
+
+    async createAgent(input) {
+      const res = await client
+        .from("agents")
+        .insert({
+          id: randomUUID(),
+          workspace_id: workspaceId,
+          created_by: userId,
+          name: input.name,
+          role: input.role,
+          expert_name: input.expert_name ? input.expert_name : null,
+          avatar: input.avatar,
+        })
+        .select("*")
+        .single();
+      return toAgent(check("insert agents", res) as AgentRow);
+    },
+
+    // updated_at is also set by agents_touch_updated_at_trg.
+    async updateAgent(id, patch) {
+      if (!isValidAgentId(id)) throw new AgentNotFoundError(id);
+      const values: Partial<AgentRow> = { updated_at: new Date().toISOString() };
+      if (patch.name !== undefined) values.name = patch.name;
+      if (patch.role !== undefined) values.role = patch.role;
+      if (patch.expert_name !== undefined) values.expert_name = patch.expert_name || null;
+      if (patch.avatar !== undefined) values.avatar = patch.avatar;
+      const res = await client.from("agents").update(values).eq("id", id).eq("workspace_id", workspaceId).select("*");
+      const rows = check("update agents", res) as AgentRow[] | null;
+      if (!rows || rows.length === 0) throw new AgentNotFoundError(id);
+      return toAgent(rows[0]);
+    },
+
+    // sessions_agent_fkey (on delete set null (agent_id)) clears the link on the sessions.
+    async deleteAgent(id) {
+      if (!isValidAgentId(id)) return false;
+      const res = await client.from("agents").delete().eq("id", id).eq("workspace_id", workspaceId).select("id");
+      const rows = check("delete agents", res) as unknown[] | null;
+      return !!rows && rows.length > 0;
     },
   };
   return store;

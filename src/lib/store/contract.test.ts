@@ -144,6 +144,31 @@ describe("supabase store only", () => {
     expect(s.started_at).toMatch(/Z$/);
   });
 
+  it("hides agents of another workspace and rejects a session linked to one", async () => {
+    const { fake, client, store } = supabaseFixture();
+    const otherWs = randomUUID();
+    fake.visibleWorkspaces.add(otherWs);
+    const other = createSupabaseStore(client, { workspaceId: otherWs, userId: UID });
+    const foreign = await other.createAgent({
+      name: "Elsewhere",
+      role: "Other",
+      avatar: { shape: "pill", face: "calm", color: "#123456", accent: "#654321" },
+    });
+    expect(await store.getAgent(foreign.id)).toBeNull();
+    expect((await store.listAgents()).map((a) => a.id)).not.toContain(foreign.id);
+    await expect(store.updateAgent(foreign.id, { name: "x" })).rejects.toThrow(/agent not found/);
+    expect(await store.deleteAgent(foreign.id)).toBe(false);
+    await expect(store.createSession({ kind: "capture", agent_id: foreign.id })).rejects.toThrow(/agent not found/);
+    expect(fake.tables.agents).toHaveLength(1);
+  });
+
+  it("takes agents workspace_id and created_by from the context", async () => {
+    const { fake, store, workspaceId } = supabaseFixture();
+    const a = await store.createAgent({ name: "A", role: "R", avatar: { shape: "bean", face: "wink", color: "#ABCDEF", accent: "#000000" } });
+    expect(fake.tables.agents[0]).toMatchObject({ id: a.id, workspace_id: workspaceId, created_by: UID });
+    expect(a.created_at).toMatch(/Z$/);
+  });
+
   it("throws when userId is not the authenticated user (sessions insert policy)", async () => {
     const workspaceId = randomUUID();
     const fake = new FakeSupabase({ uid: UID, workspaces: [workspaceId] });

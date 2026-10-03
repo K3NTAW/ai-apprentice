@@ -1,12 +1,14 @@
 // File backend: JSON files under DATA_DIR (default ./data), one directory per session.
 // Moved from index.ts; only the shared helpers now come from ./types. Server only. Writes are serialised per session and land atomically (temp file + rename).
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { redactText } from "@/lib/redact";
 import {
+  AgentSchema,
   newId,
   SessionSchema,
+  type Agent,
   type QAPair,
   type ScreenEvent,
   type Session,
@@ -14,6 +16,7 @@ import {
   type WorkMap,
 } from "@/lib/types";
 import {
+  AgentNotFoundError,
   assertFrameName,
   assertId,
   assertRange,
@@ -21,9 +24,12 @@ import {
   hasOpenRange,
   inRange,
   isOffRecord,
+  isValidAgentId,
   isValidSessionId,
   redactOpts,
   SessionNotFoundError,
+  type AgentInput,
+  type AgentPatch,
   type OffRecordRange,
   type SaveFrameResult,
   type SessionStore,
@@ -74,12 +80,15 @@ async function readSession(id: string): Promise<Session | null> {
   return SessionSchema.parse(JSON.parse(raw));
 }
 
-async function writeSession(s: Session): Promise<void> {
-  const file = sessionFile(s.id);
+async function writeAtomic(file: string, value: unknown): Promise<void> {
   await mkdir(path.dirname(file), { recursive: true });
   const tmp = `${file}.${randomBytes(6).toString("hex")}.tmp`;
-  await writeFile(tmp, JSON.stringify(s, null, 2));
+  await writeFile(tmp, JSON.stringify(value, null, 2));
   await rename(tmp, file);
+}
+
+function writeSession(s: Session): Promise<void> {
+  return writeAtomic(sessionFile(s.id), s);
 }
 
 async function mutate(id: string, fn: (s: Session) => void | Promise<void>): Promise<Session> {
@@ -93,12 +102,105 @@ async function mutate(id: string, fn: (s: Session) => void | Promise<void>): Pro
   });
 }
 
-async function createSession(input: { kind: Session["kind"]; expert?: string }): Promise<Session> {
+// Agents: one JSON array in data/agents.json, written atomically (temp file + rename) through one write queue.
+// Local mode has a single 'local' workspace and the owner role; roles are checked by the routes.
+// Ids are randomUUID(), like gen_random_uuid() in the DB.
+const agentsFile = () => path.join(dataDir(), "agents.json");
+// Not a valid session id, so it never shares a queue with a session.
+const AGENTS_QUEUE = "\0agents";
+const LOCAL_WORKSPACE = "local";
+
+async function readAgents(): Promise<Agent[]> {
+  let raw: string;
+  try {
+    raw = await readFile(agentsFile(), "utf8");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw err;
+  }
+  return AgentSchema.array().parse(JSON.parse(raw));
+}
+
+function mutateAgents<T>(fn: (agents: Agent[]) => { agents: Agent[]; result: T }): Promise<T> {
+  return enqueue(AGENTS_QUEUE, async () => {
+    const { agents, result } = fn(await readAgents());
+    await writeAtomic(agentsFile(), agents);
+    return result;
+  });
+}
+
+const newestFirst = (a: Agent, b: Agent) => b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id);
+
+async function listAgents(): Promise<Agent[]> {
+  return (await readAgents()).sort(newestFirst);
+}
+
+async function getAgent(id: string): Promise<Agent | null> {
+  if (!isValidAgentId(id)) return null;
+  return (await readAgents()).find((a) => a.id === id) ?? null;
+}
+
+function createAgent(input: AgentInput): Promise<Agent> {
+  const now = new Date().toISOString();
+  const agent = AgentSchema.parse({
+    id: randomUUID(),
+    workspace_id: LOCAL_WORKSPACE,
+    name: input.name,
+    role: input.role,
+    ...(input.expert_name ? { expert_name: input.expert_name } : {}),
+    avatar: input.avatar,
+    created_at: now,
+    updated_at: now,
+  });
+  return mutateAgents((agents) => ({ agents: [...agents, agent], result: agent }));
+}
+
+function updateAgent(id: string, patch: AgentPatch): Promise<Agent> {
+  if (!isValidAgentId(id)) return Promise.reject(new AgentNotFoundError(id));
+  return mutateAgents((agents) => {
+    const i = agents.findIndex((a) => a.id === id);
+    if (i < 0) throw new AgentNotFoundError(id);
+    const { expert_name, ...rest } = agents[i];
+    const keep = patch.expert_name === undefined ? expert_name : patch.expert_name || undefined;
+    const next = AgentSchema.parse({
+      ...rest,
+      ...(patch.name !== undefined ? { name: patch.name } : {}),
+      ...(patch.role !== undefined ? { role: patch.role } : {}),
+      ...(patch.avatar !== undefined ? { avatar: patch.avatar } : {}),
+      ...(keep ? { expert_name: keep } : {}),
+      updated_at: new Date().toISOString(),
+    });
+    return { agents: agents.map((a, j) => (j === i ? next : a)), result: next };
+  });
+}
+
+async function deleteAgent(id: string): Promise<boolean> {
+  if (!isValidAgentId(id)) return false;
+  const deleted = await mutateAgents((agents) => {
+    const left = agents.filter((a) => a.id !== id);
+    return { agents: left, result: left.length !== agents.length };
+  });
+  if (!deleted) return false;
+  // Like on delete set null (agent_id): sessions stay, the link goes.
+  for (const s of await listSessions()) {
+    if (s.agent_id !== id) continue;
+    await mutate(s.id, (x) => {
+      if (x.agent_id === id) delete x.agent_id;
+    }).catch((err) => {
+      if (!(err instanceof SessionNotFoundError)) throw err;
+    });
+  }
+  return true;
+}
+
+async function createSession(input: { kind: Session["kind"]; expert?: string; agent_id?: string }): Promise<Session> {
+  if (input.agent_id !== undefined && !(await getAgent(input.agent_id))) throw new AgentNotFoundError(input.agent_id);
   const s: Session = {
     id: newId("s"),
     kind: input.kind,
     started_at: new Date().toISOString(),
     ...(input.expert ? { expert: input.expert } : {}),
+    ...(input.agent_id ? { agent_id: input.agent_id } : {}),
     events: [],
     transcript: [],
     qa: [],
@@ -133,6 +235,7 @@ async function listSessions(): Promise<SessionSummary[]> {
       expert: s.expert,
       counts: { events: s.events.length, transcript: s.transcript.length, qa: s.qa.length },
       has_workmap: s.workmap !== undefined,
+      ...(s.agent_id ? { agent_id: s.agent_id } : {}),
     });
   }
   return out.sort((a, b) => b.started_at.localeCompare(a.started_at));
@@ -256,4 +359,9 @@ export const fileStore: SessionStore = {
   endSession,
   saveFrame,
   readFrame,
+  listAgents,
+  getAgent,
+  createAgent,
+  updateAgent,
+  deleteAgent,
 };
