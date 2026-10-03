@@ -3,6 +3,7 @@
 // Teach (docs/BUILD_SPEC.md Module 3): the learner works in the teach-mode ERP while the tutor
 // predicts, intercepts guardrail breaks in the save hook, replays the expert's moment and sums up mastery.
 // Voice is optional: if the tutor cannot start, everything runs in text mode in the side panel.
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ErpSandbox from "@/components/erp/ErpSandbox";
 import StepMoment from "@/components/workmap/StepMoment";
@@ -16,13 +17,15 @@ import { useVoiceAgent, VoiceProvider, type UseVoiceAgentOptions } from "@/lib/v
 import { exportGuardrailsMarkdown } from "@/lib/workmap/export";
 import { voiceStartNotice } from "@/components/capture/dailyLimit";
 import Halo from "./Halo";
-import { loadWorkMap, type LoadedMap } from "./loadWorkMap";
+import { loadPickerOptions, loadWorkMap, preselect, SAMPLE_ID, type LoadedMap, type PickerOption } from "./loadWorkMap";
 
 type Stop = Required<Pick<CheckResult, "step" | "explanation">> & Pick<CheckResult, "field" | "guardrail">;
 type Prediction = { invoiceId: string; step: WorkMapStep; answer?: string; correct?: boolean };
 
-export default function TeachApp({ sessionId }: { sessionId: string | null }) {
+export default function TeachApp({ sessionId, localMode }: { sessionId: string | null; localMode: boolean }) {
+  const router = useRouter();
   const [loaded, setLoaded] = useState<LoadedMap | null>(null);
+  const [options, setOptions] = useState<PickerOption[] | null>(null);
   useEffect(() => {
     let cancelled = false;
     void loadWorkMap(sessionId).then((l) => {
@@ -32,12 +35,46 @@ export default function TeachApp({ sessionId }: { sessionId: string | null }) {
       cancelled = true;
     };
   }, [sessionId]);
+  useEffect(() => {
+    let cancelled = false;
+    void loadPickerOptions(localMode).then((o) => {
+      if (!cancelled) setOptions(o);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [localMode]);
 
-  if (!loaded) return <main className="p-8 text-sm text-slate-400">Loading Work Map…</main>;
+  const loadedId = loaded ? (loaded.sessionId ?? SAMPLE_ID) : null;
+  const selected = options && loadedId && options.some((o) => o.id === loadedId) ? loadedId : options ? (preselect(options, sessionId) ?? "") : "";
+
   return (
-    <VoiceProvider>
-      <TeachSession loaded={loaded} />
-    </VoiceProvider>
+    <>
+      {options && (
+        <label className="flex flex-wrap items-center gap-2 px-4 pt-3 text-sm">
+          <span className="text-slate-600">Work Map</span>
+          <select
+            value={selected}
+            onChange={(e) => router.push(`/teach?session=${encodeURIComponent(e.target.value)}`)}
+            className="max-w-full rounded border border-slate-300 px-2 py-1"
+          >
+            {!options.some((o) => o.id === selected) && <option value="">Choose a Work Map</option>}
+            {options.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      {!loaded ? (
+        <main className="p-8 text-sm text-slate-400">Loading Work Map…</main>
+      ) : (
+        <VoiceProvider>
+          <TeachSession key={loadedId} loaded={loaded} />
+        </VoiceProvider>
+      )}
+    </>
   );
 }
 

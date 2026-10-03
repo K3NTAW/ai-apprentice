@@ -8,6 +8,7 @@ import {
   type MemberRowInput,
 } from "@/lib/auth/context";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import AppShell from "@/components/shell/AppShell";
 import WorkspaceClient from "./WorkspaceClient";
 
 export const dynamic = "force-dynamic";
@@ -46,6 +47,10 @@ function Message({ title, text }: { title: string; text: string }) {
 }
 
 export default async function WorkspacePage() {
+  return <AppShell>{await workspaceBody()}</AppShell>;
+}
+
+async function workspaceBody() {
   const result = await getRequestContext();
   if (result.kind === "signed_out") redirect("/login?next=/workspace");
   if (result.kind === "misconfigured") return <Message title="Workspace" text="Sign-in is not configured on this deployment." />;

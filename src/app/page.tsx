@@ -1,10 +1,11 @@
-import Link from "next/link";
-import { connection } from "next/server";
+import Landing from "@/components/landing/Landing";
 import { appMode } from "@/lib/supabase/env";
 
-export default async function Home() {
-  await connection();
-  if (appMode() === "misconfigured") {
+export const dynamic = "force-dynamic";
+
+export default function Home() {
+  const mode = appMode();
+  if (mode === "misconfigured") {
     return (
       <main className="flex max-w-xl flex-col gap-2 p-8">
         <h1 className="text-lg font-semibold">AI Apprentice</h1>
@@ -16,18 +17,5 @@ export default async function Home() {
       </main>
     );
   }
-  return (
-    <main className="flex flex-col gap-2 p-8">
-      <h1 className="text-lg font-semibold">AI Apprentice</h1>
-      <Link className="underline" href="/capture">
-        Capture
-      </Link>
-      <Link className="underline" href="/map">
-        Work Maps
-      </Link>
-      <Link className="underline" href="/teach">
-        Teach
-      </Link>
-    </main>
-  );
+  return <Landing mode={mode} />;
 }
