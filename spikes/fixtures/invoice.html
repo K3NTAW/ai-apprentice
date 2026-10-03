@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AP - Invoice 4471</title>
+<style>
+  body { font-family: Arial, Helvetica, sans-serif; margin: 0; background: #eef1f5; color: #222; }
+  header { background: #2b4a6f; color: #fff; padding: 10px 20px; font-size: 15px; }
+  header b { font-size: 17px; }
+  main { padding: 20px; }
+  .card { background: #fff; border: 1px solid #c9d1dc; padding: 18px 22px; max-width: 1160px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .status { display: inline-block; background: #fff4d6; border: 1px solid #e0c060; padding: 2px 8px; font-size: 13px; }
+  .grid { display: grid; grid-template-columns: 180px 1fr 180px 1fr; gap: 10px 14px; margin-top: 18px; align-items: center; }
+  label { font-size: 13px; color: #555; text-align: right; }
+  input { font-size: 14px; padding: 5px 7px; border: 1px solid #aab4c2; }
+  input.changed { background: #fffbe0; border-color: #d4a000; }
+  .buttons { margin-top: 24px; display: flex; gap: 10px; }
+  button { font-size: 14px; padding: 7px 16px; border: 1px solid #8090a8; background: #f5f7fa; }
+  button.primary { background: #2b4a6f; color: #fff; border-color: #2b4a6f; }
+</style>
+</head>
+<body>
+<header><b>FinERP</b> &nbsp; Accounts Payable &rsaquo; Invoices &rsaquo; Invoice detail</header>
+<main>
+  <div class="card">
+    <h1>Invoice 4471</h1>
+    <span class="status">Status: Awaiting approval</span>
+    <div class="grid">
+      <label>Invoice number</label><input value="4471" readonly>
+      <label>Invoice date</label><input value="2026-09-28" readonly>
+      <label>Supplier</label><input value="Hydrotek Maschinen GmbH" readonly>
+      <label>Supplier number</label><input value="S-20931" readonly>
+      <label>Description</label><input value="Hydraulic press HP-200" readonly>
+      <label>Amount</label><input value="EUR 7,400.00" readonly>
+      <label>Cost center</label><input class="changed" value="0400">
+      <label>Asset number</label><input value="" placeholder="(empty)">
+      <label>GL account</label><input value="6200" readonly>
+      <label>Due date</label><input value="2026-10-28" readonly>
+    </div>
+    <div class="buttons">
+      <button class="primary">Save</button>
+      <button>Hold</button>
+      <button>Send for 2nd approval</button>
+    </div>
+  </div>
+</main>
+</body>
+</html>
