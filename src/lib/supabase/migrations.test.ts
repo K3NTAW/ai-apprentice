@@ -4,6 +4,7 @@ import { readdirSync, readFileSync, existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { AVATAR_FACES, AVATAR_SHAPES } from "@/lib/types";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const MIGRATIONS = path.join(ROOT, "supabase/migrations");
@@ -671,6 +672,23 @@ describe("agents migration", () => {
       expect(t).toContain(col);
     expect(stmts).toContain("create index agents_workspace_created_idx on public.agents (workspace_id, created_at desc)");
     expect(stmts).toContain("revoke all on table public.agents from public, anon");
+  });
+
+  it("enforces the avatar contract with check constraints (keys, enums, colours, size)", () => {
+    const t = compact(stmts.find((s) => s.startsWith("create table public.agents"))!);
+    for (const c of [
+      "constraint agents_avatar_keys check(jsonb_typeof(avatar)= 'object' and avatar ?& array['shape','face','color','accent'] and avatar - array['shape','face','color','accent'] = '{}'::jsonb)",
+      "constraint agents_avatar_shape check(jsonb_typeof(avatar -> 'shape')= 'string' and avatar ->> 'shape' in('blob','round','square','pill','bean','star'))",
+      "constraint agents_avatar_face check(jsonb_typeof(avatar -> 'face')= 'string' and avatar ->> 'face' in('smile','focus','curious','calm','wink','robot'))",
+      // norm lowercases, so A-Fa-f reads a-fa-f here.
+      "constraint agents_avatar_colors check(jsonb_typeof(avatar -> 'color')= 'string' and avatar ->> 'color' ~ '^#[0-9a-fa-f]{6}$' and jsonb_typeof(avatar -> 'accent')= 'string' and avatar ->> 'accent' ~ '^#[0-9a-fa-f]{6}$')",
+      "constraint agents_avatar_size check(pg_column_size(avatar)<= 1024)",
+    ])
+      expect(t).toContain(c);
+    // The enums in the DB are the enums of AvatarSchema.
+    expect(sql).toContain(`in (${AVATAR_SHAPES.map((x) => `'${x}'`).join(", ")})`);
+    expect(sql).toContain(`in (${AVATAR_FACES.map((x) => `'${x}'`).join(", ")})`);
+    expect(sql).toContain("'^#[0-9A-Fa-f]{6}$'");
   });
 
   it("links sessions to an agent of the same workspace and nulls the link on agent delete", () => {

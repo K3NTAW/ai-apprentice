@@ -170,6 +170,17 @@ describe("/api/agents", () => {
     expect(state.fake.tables.sessions).toHaveLength(0);
   });
 
+  it("POST /api/session answers 404 when the agent is deleted between the check and the insert (23503)", async () => {
+    const id = await seed(WS_A, USER);
+    state.fake.failNext("sessions", {
+      message: 'insert or update on table "sessions" violates foreign key constraint "sessions_agent_fkey"',
+      code: "23503",
+    });
+    const res = await sessionPost(req("POST", { kind: "teach", agent_id: id }));
+    expect(res.status).toBe(404);
+    expect(state.fake.tables.sessions).toHaveLength(0);
+  });
+
   it("answers 401 when signed out", async () => {
     state.signedIn = false;
     for (const res of [

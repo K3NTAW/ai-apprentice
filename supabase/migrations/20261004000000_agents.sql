@@ -18,18 +18,41 @@
 -- Tables
 -- ---------------------------------------------------------------------------
 
--- avatar follows the AVATAR CONTRACT (AvatarSchema in src/lib/types.ts); the API validates it.
+-- avatar follows the AVATAR CONTRACT (AvatarSchema in src/lib/types.ts). The API validates it, and the
+-- agents_avatar_* checks enforce the same shape for direct PostgREST writes: exactly the keys shape, face,
+-- color and accent; shape and face from the contract enums; colours as #RRGGBB; at most 1024 bytes.
+-- Each key is checked to be a JSON string first, so a JSON null never passes through a null comparison.
 create table public.agents (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid not null references public.workspaces on delete cascade,
   name text not null check (char_length(name) between 1 and 60),
   role text not null check (char_length(role) between 1 and 80),
   expert_name text check (expert_name is null or char_length(expert_name) <= 80),
-  avatar jsonb not null check (jsonb_typeof(avatar) = 'object'),
+  avatar jsonb not null,
   created_by uuid references auth.users on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  constraint agents_workspace_id_id_key unique (workspace_id, id)
+  constraint agents_workspace_id_id_key unique (workspace_id, id),
+  constraint agents_avatar_keys check (
+    jsonb_typeof(avatar) = 'object'
+    and avatar ?& array['shape', 'face', 'color', 'accent']
+    and avatar - array['shape', 'face', 'color', 'accent'] = '{}'::jsonb
+  ),
+  constraint agents_avatar_shape check (
+    jsonb_typeof(avatar -> 'shape') = 'string'
+    and avatar ->> 'shape' in ('blob', 'round', 'square', 'pill', 'bean', 'star')
+  ),
+  constraint agents_avatar_face check (
+    jsonb_typeof(avatar -> 'face') = 'string'
+    and avatar ->> 'face' in ('smile', 'focus', 'curious', 'calm', 'wink', 'robot')
+  ),
+  constraint agents_avatar_colors check (
+    jsonb_typeof(avatar -> 'color') = 'string'
+    and avatar ->> 'color' ~ '^#[0-9A-Fa-f]{6}$'
+    and jsonb_typeof(avatar -> 'accent') = 'string'
+    and avatar ->> 'accent' ~ '^#[0-9A-Fa-f]{6}$'
+  ),
+  constraint agents_avatar_size check (pg_column_size(avatar) <= 1024)
 );
 
 create index agents_workspace_created_idx on public.agents (workspace_id, created_at desc);

@@ -8,7 +8,7 @@ import { entry, event, qaPair, runStoreContract } from "./contract";
 import { FakeSupabase } from "./fakeSupabase";
 import { fileStore, getStore } from "./index";
 import { createSupabaseStore } from "./supabase";
-import { frameName, SessionNotFoundError } from "./types";
+import { AgentNotFoundError, frameName, SessionNotFoundError } from "./types";
 
 const UID = "00000000-0000-4000-8000-000000000001";
 const jpg = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
@@ -160,6 +160,37 @@ describe("supabase store only", () => {
     expect(await store.deleteAgent(foreign.id)).toBe(false);
     await expect(store.createSession({ kind: "capture", agent_id: foreign.id })).rejects.toThrow(/agent not found/);
     expect(fake.tables.agents).toHaveLength(1);
+  });
+
+  it("skips a malformed agent row on listAgents and getAgent with a log line naming the id", async () => {
+    const { fake, store } = supabaseFixture();
+    const good = await store.createAgent({ name: "Good", role: "R", avatar: { shape: "star", face: "robot", color: "#112233", accent: "#445566" } });
+    const badId = randomUUID();
+    fake.tables.agents.push({ ...fake.tables.agents[0], id: badId, avatar: { shape: "cube", face: "smile", color: "red", accent: "#000000" } });
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      expect((await store.listAgents()).map((a) => a.id)).toEqual([good.id]);
+      expect(await store.getAgent(badId)).toBeNull();
+      expect(await store.getAgent(good.id)).toMatchObject({ id: good.id });
+      expect(log).toHaveBeenCalledWith(expect.stringContaining(badId));
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it("maps a 23503 on sessions_agent_fkey in createSession to AgentNotFoundError (delete race)", async () => {
+    const { fake, store } = supabaseFixture();
+    const a = await store.createAgent({ name: "A", role: "R", avatar: { shape: "bean", face: "wink", color: "#ABCDEF", accent: "#000000" } });
+    fake.failNext("sessions", {
+      message: 'insert or update on table "sessions" violates foreign key constraint "sessions_agent_fkey"',
+      code: "23503",
+    });
+    await expect(store.createSession({ kind: "teach", agent_id: a.id })).rejects.toBeInstanceOf(AgentNotFoundError);
+    // Another foreign key violation is not an agent problem and stays a plain error.
+    fake.failNext("sessions", { message: 'violates foreign key constraint "sessions_workspace_id_fkey"', code: "23503" });
+    const err = await store.createSession({ kind: "teach", agent_id: a.id }).catch((e: unknown) => e);
+    expect(err).not.toBeInstanceOf(AgentNotFoundError);
+    expect(String(err)).toMatch(/23503/);
   });
 
   it("takes agents workspace_id and created_by from the context", async () => {

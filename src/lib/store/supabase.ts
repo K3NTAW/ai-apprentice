@@ -100,6 +100,25 @@ function toAgent(row: AgentRow): Agent {
   });
 }
 
+/**
+ * Reads skip a row that fails AgentSchema (logged by agent id) instead of throwing,
+ * so one bad row never turns GET /api/agents into a 500.
+ */
+function toAgentOrSkip(row: AgentRow): Agent | null {
+  try {
+    return toAgent(row);
+  } catch {
+    console.error(`supabase agents: skipped agent ${row.id}: row does not match AgentSchema`);
+    return null;
+  }
+}
+
+/** SQLSTATE 23503 on sessions_agent_fkey: the agent was deleted between the check and the insert. */
+function isAgentFkViolation(error: unknown): boolean {
+  const e = (error ?? {}) as { code?: unknown; message?: unknown; details?: unknown };
+  return e.code === "23503" && [e.message, e.details].some((v) => typeof v === "string" && v.includes("sessions_agent_fkey"));
+}
+
 /** Postgres returns timestamptz as e.g. 2026-10-03T19:35:00.123+00:00; the app uses toISOString() form. */
 function normTs(v: string): string {
   const d = new Date(v);
@@ -326,6 +345,8 @@ export function createSupabaseStore(
         })
         .select("*")
         .single();
+      // Delete race: the agent went away after the check above; the route answers 404 either way.
+      if (input.agent_id !== undefined && isAgentFkViolation(res.error)) throw new AgentNotFoundError(input.agent_id);
       const row = check("insert sessions", res) as SessionRow;
       return assemble(row);
     },
@@ -503,14 +524,14 @@ export function createSupabaseStore(
           .order("created_at", { ascending: false })
           .order("id", { ascending: false }),
       );
-      return rows.map(toAgent);
+      return rows.map(toAgentOrSkip).filter((a): a is Agent => a !== null);
     },
 
     async getAgent(id) {
       if (!isValidAgentId(id)) return null;
       const res = await client.from("agents").select("*").eq("id", id).eq("workspace_id", workspaceId).maybeSingle();
       const row = check("select agents", res) as AgentRow | null;
-      return row ? toAgent(row) : null;
+      return row ? toAgentOrSkip(row) : null;
     },
 
     async createAgent(input) {

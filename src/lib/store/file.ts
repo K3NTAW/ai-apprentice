@@ -174,23 +174,40 @@ function updateAgent(id: string, patch: AgentPatch): Promise<Agent> {
   });
 }
 
-async function deleteAgent(id: string): Promise<boolean> {
-  if (!isValidAgentId(id)) return false;
-  const deleted = await mutateAgents((agents) => {
+// Like on delete set null (agent_id): sessions stay, the link goes. The links are cleared inside the
+// agents write queue, so the next agents write only runs once they are gone.
+function deleteAgent(id: string): Promise<boolean> {
+  if (!isValidAgentId(id)) return Promise.resolve(false);
+  return enqueue(AGENTS_QUEUE, async () => {
+    const agents = await readAgents();
     const left = agents.filter((a) => a.id !== id);
-    return { agents: left, result: left.length !== agents.length };
+    if (left.length === agents.length) return false;
+    await writeAtomic(agentsFile(), left);
+    for (const s of await readSessions()) {
+      if (s.agent_id !== id) continue;
+      await mutate(s.id, (x) => {
+        if (x.agent_id === id) delete x.agent_id;
+      }).catch((err) => {
+        if (!(err instanceof SessionNotFoundError)) throw err;
+      });
+    }
+    return true;
   });
-  if (!deleted) return false;
-  // Like on delete set null (agent_id): sessions stay, the link goes.
-  for (const s of await listSessions()) {
-    if (s.agent_id !== id) continue;
-    await mutate(s.id, (x) => {
-      if (x.agent_id === id) delete x.agent_id;
-    }).catch((err) => {
-      if (!(err instanceof SessionNotFoundError)) throw err;
-    });
-  }
-  return true;
+}
+
+/**
+ * Readers treat an agent_id with no matching agent as absent (a session created while its agent was being deleted).
+ * The stored file keeps the id; only the returned value drops it.
+ */
+function withoutDanglingAgent<T extends { agent_id?: string }>(s: T, agentIds: Set<string>): T {
+  if (s.agent_id === undefined || agentIds.has(s.agent_id)) return s;
+  const rest = { ...s };
+  delete rest.agent_id;
+  return rest;
+}
+
+async function agentIdSet(): Promise<Set<string>> {
+  return new Set((await readAgents()).map((a) => a.id));
 }
 
 async function createSession(input: { kind: Session["kind"]; expert?: string; agent_id?: string }): Promise<Session> {
@@ -212,10 +229,20 @@ async function createSession(input: { kind: Session["kind"]; expert?: string; ag
 
 async function getSession(id: string): Promise<Session | null> {
   assertId(id);
-  return readSession(id);
+  const s = await readSession(id);
+  if (!s?.agent_id) return s;
+  return withoutDanglingAgent(s, await agentIdSet());
 }
 
 async function listSessions(): Promise<SessionSummary[]> {
+  const sessions = await readSessions();
+  if (!sessions.some((s) => s.agent_id)) return sessions;
+  const agentIds = await agentIdSet();
+  return sessions.map((s) => withoutDanglingAgent(s, agentIds));
+}
+
+/** Every session summary as stored, links included. */
+async function readSessions(): Promise<SessionSummary[]> {
   let ids: string[];
   try {
     ids = await readdir(sessionsDir());

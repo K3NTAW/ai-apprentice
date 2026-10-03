@@ -150,6 +150,39 @@ describe("store", () => {
   });
 });
 
+describe("file backend agent links", () => {
+  const avatar = { shape: "blob", face: "calm", color: "#123456", accent: "#ABCDEF" } as const;
+
+  it("reads an agent_id with no matching agent as absent", async () => {
+    const a = await fileStore.createAgent({ name: "Gone", role: "R", avatar });
+    const s = await createSession({ kind: "teach", agent_id: a.id });
+    // The agent vanishes without the link cleanup (the createSession vs deleteAgent race).
+    const file = path.join(dir, "agents.json");
+    const agents = JSON.parse(await readFile(file, "utf8")) as { id: string }[];
+    await writeFile(file, JSON.stringify(agents.filter((x) => x.id !== a.id)));
+    expect(JSON.parse(await sessionJson(s.id)).agent_id).toBe(a.id);
+    expect((await getSession(s.id))?.agent_id).toBeUndefined();
+    const summary = (await listSessions()).find((x) => x.id === s.id);
+    expect(summary).toBeDefined();
+    expect(summary?.agent_id).toBeUndefined();
+  });
+
+  it("deleteAgent clears session links in the same write queue as the agent removal", async () => {
+    const a = await fileStore.createAgent({ name: "Doomed", role: "R", avatar });
+    const keep = await fileStore.createAgent({ name: "Kept", role: "R", avatar });
+    const linked = await Promise.all([1, 2, 3].map(() => createSession({ kind: "capture", agent_id: a.id })));
+    const other = await createSession({ kind: "capture", agent_id: keep.id });
+    const deleted = fileStore.deleteAgent(a.id);
+    // Queued behind the delete: when it lands, the links must already be gone from disk.
+    await fileStore.updateAgent(keep.id, { name: "Kept 2" });
+    for (const s of linked) expect(JSON.parse(await sessionJson(s.id)).agent_id).toBeUndefined();
+    expect(JSON.parse(await sessionJson(other.id)).agent_id).toBe(keep.id);
+    expect(await deleted).toBe(true);
+    expect(await fileStore.getAgent(a.id)).toBeNull();
+    expect(await fileStore.deleteAgent(a.id)).toBe(false);
+  });
+});
+
 describe("frames route", () => {
   const call = (id: string, name: string) =>
     getFrame(new Request("http://x/"), { params: Promise.resolve({ id, name }) });
