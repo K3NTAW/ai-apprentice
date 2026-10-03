@@ -76,17 +76,16 @@ export class FakeSupabase {
     this.uid = opts.uid;
     this.maxRows = opts.maxRows ?? 1000;
     for (const w of opts.workspaces ?? []) this.visibleWorkspaces.add(w);
-    const fake = this;
     const storage = strict(
       {
-        from(bucket: string) {
+        from: (bucket: string) => {
           if (bucket !== "frames") unsupported(`bucket ${bucket}`);
-          return fake.bucket();
+          return this.bucket();
         },
       },
       "storage",
     );
-    this.client = strict({ from: (table: string) => fake.query(table), storage }, "client");
+    this.client = strict({ from: (table: string) => this.query(table), storage }, "client");
   }
 
   /** Makes the next call on a table (or on storage, target 'storage') return this error. */
@@ -140,7 +139,6 @@ export class FakeSupabase {
   }
 
   private bucket() {
-    const fake = this;
     const notFound: FakeStorageError = { name: "StorageApiError", message: "Object not found", status: 400, statusCode: "404" };
     const denied: FakeStorageError = {
       name: "StorageApiError",
@@ -150,37 +148,37 @@ export class FakeSupabase {
     };
     const writable = (p: string) => {
       const [ws, sid] = p.split("/");
-      const s = fake.tables.sessions.find((r) => r.id === sid);
-      return !!s && s.workspace_id === ws && fake.visibleWorkspaces.has(ws);
+      const s = this.tables.sessions.find((r) => r.id === sid);
+      return !!s && s.workspace_id === ws && this.visibleWorkspaces.has(ws);
     };
     return strict(
       {
-        async upload(p: string, body: Buffer | Uint8Array, opts?: { upsert?: boolean; contentType?: string }) {
+        upload: async (p: string, body: Buffer | Uint8Array, opts?: { upsert?: boolean; contentType?: string }) => {
           checkOpts("upload", opts, ["upsert", "contentType"]);
-          const failure = fake.takeFailure("storage");
+          const failure = this.takeFailure("storage");
           if (failure) return { data: null, error: failure };
           if (!writable(p)) return { data: null, error: denied };
-          if (fake.objects.has(p) && !opts?.upsert)
+          if (this.objects.has(p) && !opts?.upsert)
             return { data: null, error: { name: "StorageApiError", message: "The resource already exists", status: 400, statusCode: "409" } };
-          fake.objects.set(p, new Uint8Array(body));
+          this.objects.set(p, new Uint8Array(body));
           return { data: { path: p }, error: null };
         },
-        async download(p: string, opts?: unknown) {
+        download: async (p: string, opts?: unknown) => {
           checkOpts("download", opts, []);
-          const failure = fake.takeFailure("storage");
+          const failure = this.takeFailure("storage");
           if (failure) return { data: null, error: failure };
           const ws = p.split("/")[0];
-          const bytes = fake.objects.get(p);
-          if (!bytes || !fake.visibleWorkspaces.has(ws)) return { data: null, error: notFound };
+          const bytes = this.objects.get(p);
+          if (!bytes || !this.visibleWorkspaces.has(ws)) return { data: null, error: notFound };
           return { data: new Blob([new Uint8Array(bytes)]), error: null };
         },
-        async remove(paths: string[]) {
-          const failure = fake.takeFailure("storage");
+        remove: async (paths: string[]) => {
+          const failure = this.takeFailure("storage");
           if (failure) return { data: null, error: failure };
           const removed = [];
           for (const p of paths) {
-            if (fake.objects.has(p) && writable(p)) {
-              fake.objects.delete(p);
+            if (this.objects.has(p) && writable(p)) {
+              this.objects.delete(p);
               removed.push({ name: p });
             }
           }
