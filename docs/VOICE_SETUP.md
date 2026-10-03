@@ -7,6 +7,26 @@ One-time dashboard setup for the two voice agents. Code: `src/lib/voice/`, route
 1. elevenlabs.io -> profile -> API Keys -> create a key with Conversational AI (Agents) access.
 2. Put it in `.env.local` as `ELEVENLABS_API_KEY=...`. Never commit it. The key stays on the server; the browser only gets a signed URL.
 
+## Create the agents by script
+
+Instead of sections 2 to 4 you can create both agents through the API:
+
+```
+node scripts/create-agents.mjs --dry-run   # prints the two request bodies, no key, no network
+node scripts/create-agents.mjs             # needs ELEVENLABS_API_KEY in .env.local (or SPIKE_ENV_FILE)
+```
+
+It lists existing agents first and reuses any agent already named `Apprentice Interviewer` or `Apprentice Tutor`, so a rerun does not create duplicates. It sets the prompts and first messages from `prompts.ts`, the voices (Sarah for the interviewer, George for the tutor), English, the client tools from section 3, the tutor dynamic variables, the overrides and authentication from section 4. LLM defaults to `gemini-2.5-flash` (`AGENT_LLM` overrides), TTS to `eleven_v3_conversational` with Expressive Mode (`AGENT_TTS_MODEL` overrides).
+
+On success it prints one `created` or `reused` line per agent and two lines to paste into `.env.local`:
+
+```
+ELEVENLABS_AGENT_ID_INTERVIEWER=agent_...
+ELEVENLABS_AGENT_ID_TUTOR=agent_...
+```
+
+On an API error it prints the HTTP status and the response body verbatim and exits non-zero; an agent created before the error is listed and reused on the next run. The dashboard steps below remain valid as the manual path.
+
 ## 2. Create the agents
 
 In the dashboard go to Agents -> Create agent -> Blank agent. Do this twice:
