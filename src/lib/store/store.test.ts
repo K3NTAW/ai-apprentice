@@ -1,14 +1,16 @@
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { GET as getFrame } from "@/app/api/session/[id]/frames/[name]/route";
+import { POST as postOffRecord } from "@/app/api/session/[id]/off-record/route";
 import type { ScreenEvent, TranscriptEntry } from "@/lib/types";
 import {
   appendEvents,
   appendTranscript,
   createSession,
   endSession,
+  InvalidOffRecordRangeError,
   getSession,
   listSessions,
   setOffRecord,
@@ -113,6 +115,31 @@ describe("store", () => {
     expect(new Set(got?.events.map((e) => e.id)).size).toBe(20);
   });
 
+  it("rejects an off-record range with to < from and keeps an open range open", async () => {
+    const s = await createSession({ kind: "capture" });
+    await setOffRecord(s.id, { from: 40 });
+    await expect(setOffRecord(s.id, { from: 50, to: 45 })).rejects.toBeInstanceOf(InvalidOffRecordRangeError);
+    expect((await getSession(s.id))?.off_record_ranges).toEqual([{ from: 40 }]);
+    await appendTranscript(s.id, [entry(55, "still off record")]);
+    expect((await getSession(s.id))?.transcript).toEqual([]);
+    await setOffRecord(s.id, { from: 40, to: 40 });
+    expect((await getSession(s.id))?.off_record_ranges).toEqual([{ from: 40, to: 40 }]);
+  });
+
+  it("shares the write queue Map on globalThis across module re-imports", async () => {
+    const key = Symbol.for("apprentice.store.writeQueues");
+    const g = globalThis as Record<symbol, unknown>;
+    const first = g[key];
+    expect(first).toBeInstanceOf(Map);
+    vi.resetModules();
+    const again = await import("./index");
+    expect(g[key]).toBe(first);
+    const s = await createSession({ kind: "capture" });
+    const pending = again.endSession(s.id);
+    expect((first as Map<string, unknown>).has(s.id)).toBe(true);
+    await pending;
+  });
+
   it("rejects invalid session ids", async () => {
     await expect(getSession("../up")).rejects.toThrow(/invalid session id/);
     await expect(appendEvents("a/b", [])).rejects.toThrow(/invalid session id/);
@@ -131,6 +158,7 @@ describe("frames route", () => {
     const res = await call(s.id, "f_001.jpg");
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toBe("image/jpeg");
+    expect(res.headers.get("cache-control")).toBe("no-store");
     expect((await call(s.id, "missing.jpg")).status).toBe(404);
   });
 
@@ -142,5 +170,19 @@ describe("frames route", () => {
     ]) {
       expect([400, 404]).toContain((await call(id, name)).status);
     }
+  });
+});
+
+describe("off-record route", () => {
+  const post = (id: string, body: unknown) =>
+    postOffRecord(new Request("http://x/", { method: "POST", body: JSON.stringify(body) }), {
+      params: Promise.resolve({ id }),
+    });
+
+  it("returns 400 for to < from and 200 for a valid range", async () => {
+    const s = await createSession({ kind: "capture" });
+    expect((await post(s.id, { from: 20, to: 10 })).status).toBe(400);
+    expect((await getSession(s.id))?.off_record_ranges).toEqual([]);
+    expect((await post(s.id, { from: 10, to: 20 })).status).toBe(200);
   });
 });

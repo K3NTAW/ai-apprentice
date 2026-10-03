@@ -43,6 +43,13 @@ export class SessionNotFoundError extends Error {
   }
 }
 
+export class InvalidOffRecordRangeError extends Error {
+  constructor(range: { from: number; to?: number }) {
+    super(`invalid off-record range: to (${range.to}) is before from (${range.from})`);
+    this.name = "InvalidOffRecordRangeError";
+  }
+}
+
 export function isValidSessionId(id: string): boolean {
   return ID_RE.test(id);
 }
@@ -70,7 +77,12 @@ export function framePath(id: string, name: string): string {
 }
 
 // Per-session write queue: each mutation runs after the previous one settles.
-const queues = new Map<string, Promise<unknown>>();
+// Kept on globalThis because route handlers are bundled separately and would otherwise each get their own Map.
+const QUEUES_KEY = Symbol.for("apprentice.store.writeQueues");
+const queues: Map<string, Promise<unknown>> = ((globalThis as Record<symbol, unknown>)[QUEUES_KEY] ??= new Map<
+  string,
+  Promise<unknown>
+>()) as Map<string, Promise<unknown>>;
 
 function enqueue<T>(id: string, fn: () => Promise<T>): Promise<T> {
   const prev = queues.get(id) ?? Promise.resolve();
@@ -199,9 +211,13 @@ export function upsertQA(id: string, qa: QAPair): Promise<Session> {
   });
 }
 
-/** Opens a range ({from}) or closes one ({from, to}). Data already stored inside a closed range is purged. */
+/**
+ * Opens a range ({from}) or closes one ({from, to}). Data already stored inside a closed range is purged.
+ * Rejects with InvalidOffRecordRangeError when to < from; stored ranges stay untouched.
+ */
 export function setOffRecord(id: string, range: { from: number; to?: number }): Promise<Session> {
   return mutate(id, (s) => {
+    if (range.to !== undefined && range.to < range.from) throw new InvalidOffRecordRangeError(range);
     const open = s.off_record_ranges.find((r) => r.to === undefined);
     if (range.to === undefined) {
       if (!open) s.off_record_ranges.push({ from: range.from });

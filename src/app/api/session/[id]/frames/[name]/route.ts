@@ -7,6 +7,6 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string; na
   const buf = await readFrame(id, name);
   if (!buf) return notFound();
   return new Response(new Uint8Array(buf), {
-    headers: { "content-type": "image/jpeg", "cache-control": "private, max-age=3600" },
+    headers: { "content-type": "image/jpeg", "cache-control": "no-store" },
   });
 }

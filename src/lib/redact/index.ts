@@ -1,6 +1,8 @@
 // PII redaction with Presidio-style recognizers and placeholders (docs/BUILD_SPEC.md section 7).
 // Pure: no I/O except the optional Presidio round trip in redactTextAsync.
 
+const PRESIDIO_TIMEOUT_MS = 3000;
+
 export type RedactEntity = { type: string; start: number; end: number };
 export type RedactResult = { text: string; entities: RedactEntity[] };
 export type RedactOptions = {
@@ -14,12 +16,24 @@ type Candidate = RedactEntity & { value: string };
 
 const NAME_WORD = String.raw`\p{Lu}[\p{L}'-]+`;
 
-const IBAN = /\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]){11,30}\b/g;
+// IBAN: a contiguous body, or space-separated groups of 4 with a final group of 1..4. Never eats following words.
+const IBAN = /\b[A-Z]{2}\d{2}(?:[A-Z0-9]{11,30}|(?: [A-Z0-9]{4}){2,7}(?: [A-Z0-9]{1,4})?)\b/g;
 const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
-const PHONE = /(?<![\w+])(?:(?:\+|00)[1-9]|0[1-9])[\d /.()-]{6,}\d(?!\w)/g;
-const CREDIT_CARD = /(?<!\d)\d(?:[ -]?\d){12,18}(?!\d)/g;
+// Phone: international (+ or 00 and a country code) or national (0, area code), then digit groups.
+const PHONE_GROUPS = String.raw`(?:[ ./-]?(?:\(\d{1,4}\)|\d+))+`;
+const PHONE = new RegExp(
+  String.raw`(?<![\w+])(?:(?:\+|00)[1-9]\d{0,2}|0[1-9]\d{1,3})${PHONE_GROUPS}(?!\w)`,
+  "g",
+);
+// Card: 13..19 digits, contiguous or single space/dash separated, not inside a longer digit run.
+const CREDIT_CARD = /(?<!\d[ -]?)\d(?:[ -]?\d){12,18}(?![ -]?\d)/g;
+const ISO_DATE = /(?<!\d)\d{4}-\d{2}-\d{2}(?!\d)/g;
+// Words that look capitalised but are not surnames (EN/DE business terms): Invoice, Rechnung, Order,
+// Bestellung, Cost, Kostenstelle, IBAN, PO, EUR, CHF.
+const NAME_STOP = String.raw`(?:Invoice|Rechnung|Order|Bestellung|Cost|Kostenstelle|IBAN|PO|EUR|CHF)(?!\p{L})`;
+const SPACE = String.raw`[^\S\r\n]+`;
 const TITLED_NAME = new RegExp(
-  String.raw`\b(?:Herr|Frau|Mrs|Mr|Ms|Dr)\.?\s+(${NAME_WORD}(?:\s+${NAME_WORD})?)`,
+  String.raw`\b(?:Herr|Frau|Mrs|Mr|Ms|Dr)\.?${SPACE}(?!${NAME_STOP})(${NAME_WORD}(?:${SPACE}(?!${NAME_STOP})${NAME_WORD}(?![\p{L}'-]|${SPACE}\d))?)`,
   "gud",
 );
 const CONTACT_NAME = new RegExp(
@@ -28,6 +42,53 @@ const CONTACT_NAME = new RegExp(
 );
 
 const digitCount = (s: string) => s.replace(/\D/g, "").length;
+
+function luhn(digits: string): boolean {
+  let sum = 0;
+  for (let i = 0; i < digits.length; i++) {
+    let d = Number(digits[digits.length - 1 - i]);
+    if (i % 2 === 1) {
+      d *= 2;
+      if (d > 9) d -= 9;
+    }
+    sum += d;
+  }
+  return sum % 10 === 0;
+}
+
+function cardCandidates(text: string) {
+  // ISO dates are masked so a card match can neither start nor end inside one.
+  const masked = text.replace(ISO_DATE, (m) => "#".repeat(m.length));
+  return collect(masked, CREDIT_CARD, "CREDIT_CARD", (v) => luhn(v.replace(/\D/g, ""))).map((c) => ({
+    ...c,
+    value: text.slice(c.start, c.end),
+  }));
+}
+
+function isPhone(v: string): boolean {
+  const n = digitCount(v);
+  if (n < 9 || n > 15) return false;
+  // A run made only of 4-digit groups (cost centers, account fragments) is not a phone number.
+  const groups = v.split(/[ ./()-]+/).filter(Boolean);
+  return !(groups.length > 1 && groups.every((g) => /^\d{4}$/.test(g)));
+}
+
+function titledNameCandidates(text: string, keep: Set<string>) {
+  const out: Candidate[] = [];
+  for (const m of text.matchAll(TITLED_NAME)) {
+    const span = m.indices?.[1];
+    if (!span) continue;
+    const words = [...m[1].matchAll(/\S+/g)].map((w) => ({
+      value: w[0],
+      start: span[0] + w.index,
+      end: span[0] + w.index + w[0].length,
+    }));
+    const redact = words.filter((w) => !keep.has(w.value.toLowerCase()));
+    if (redact.length === words.length) out.push({ type: "PERSON", start: span[0], end: span[1], value: m[1] });
+    else for (const w of redact) out.push({ type: "PERSON", ...w });
+  }
+  return out;
+}
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 function collect(text: string, re: RegExp, type: string, accept: (v: string) => boolean = () => true) {
@@ -77,12 +138,9 @@ export function analyze(text: string, opts: RedactOptions = {}): RedactEntity[] 
       return n >= 15 && n <= 34;
     }),
     ...collect(text, EMAIL, "EMAIL_ADDRESS"),
-    ...collect(text, PHONE, "PHONE_NUMBER", (v) => {
-      const n = digitCount(v);
-      return n >= 9 && n <= 15;
-    }),
-    ...collect(text, CREDIT_CARD, "CREDIT_CARD"),
-    ...collectGroup(text, TITLED_NAME, "PERSON"),
+    ...collect(text, PHONE, "PHONE_NUMBER", isPhone),
+    ...cardCandidates(text),
+    ...titledNameCandidates(text, keep),
     ...collectGroup(text, CONTACT_NAME, "PERSON"),
     ...knownNameCandidates(text, opts.knownNames ?? [], keep),
   ].filter((c) => c.type !== "PERSON" || !isKept(c.value));
@@ -127,6 +185,7 @@ export async function redactTextAsync(text: string, opts: RedactOptions = {}): P
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
+        signal: AbortSignal.timeout(PRESIDIO_TIMEOUT_MS),
       });
       if (!res.ok) throw new Error(`presidio ${path} ${res.status}`);
       return res.json();

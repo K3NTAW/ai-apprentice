@@ -1,6 +1,6 @@
 // Shared helpers for the /api/session route handlers.
 import type { z } from "zod";
-import { InvalidSessionIdError, SessionNotFoundError } from "@/lib/store";
+import { InvalidOffRecordRangeError, InvalidSessionIdError, SessionNotFoundError } from "@/lib/store";
 
 export const badRequest = (error: string, details?: unknown) =>
   Response.json({ error, ...(details !== undefined ? { details } : {}) }, { status: 400 });
@@ -28,6 +28,7 @@ export async function handle(fn: () => Promise<Response>): Promise<Response> {
     return await fn();
   } catch (err) {
     if (err instanceof InvalidSessionIdError) return badRequest(err.message);
+    if (err instanceof InvalidOffRecordRangeError) return badRequest(err.message);
     if (err instanceof SessionNotFoundError) return notFound(err.message);
     throw err;
   }
