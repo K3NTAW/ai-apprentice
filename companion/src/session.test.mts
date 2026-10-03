@@ -99,8 +99,8 @@ describe("global pairing budget across Origins", () => {
     const { attempt, clock, pairing } = setup();
     const shown = pairing.current();
     for (let i = 0; i < GLOBAL_MAX_FAILURES; i++) {
-      expect(attempt(fabricated(i), "000000")).toMatchObject({ ok: false, code: CLOSE.UNAUTHORIZED });
       clock.now += 1_000;
+      expect(attempt(fabricated(i), "000000")).toMatchObject({ ok: false, code: CLOSE.UNAUTHORIZED });
     }
     // Fresh Origins and the right code are refused too.
     expect(attempt(fabricated(999), shown)).toMatchObject({ ok: false, code: CLOSE.LOCKED });
