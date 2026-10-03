@@ -2,6 +2,8 @@ import { z } from "zod";
 import { redactTextAsync } from "@/lib/redact";
 import { requireContext } from "@/lib/auth/context";
 
+export const runtime = "nodejs";
+
 const Body = z.object({ text: z.string() });
 
 export async function POST(req: Request) {

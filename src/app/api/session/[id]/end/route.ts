@@ -1,5 +1,7 @@
 import { requireCreatorOrOwner, withApi, type IdContext } from "../../_http";
 
+export const runtime = "nodejs";
+
 export async function POST(_req: Request, ctx: IdContext) {
   return withApi(async (api) => {
     const { id } = await ctx.params;

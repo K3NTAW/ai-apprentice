@@ -3,6 +3,8 @@ import { DECISION_QUESTIONS, type DecisionQuestionName } from "@/lib/types";
 import { requireContext } from "@/lib/auth/context";
 
 export const runtime = "nodejs";
+// Vercel function limit: 60 s fits the plan (model calls can take tens of seconds).
+export const maxDuration = 60;
 
 function isQuestion(q: unknown): q is DecisionQuestionName {
   return typeof q === "string" && Object.prototype.hasOwnProperty.call(DECISION_QUESTIONS, q);

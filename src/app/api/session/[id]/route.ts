@@ -1,5 +1,7 @@
 import { notFound, withApi, type IdContext } from "../_http";
 
+export const runtime = "nodejs";
+
 // Any member reads any session of the active workspace.
 export async function GET(_req: Request, ctx: IdContext) {
   return withApi(async ({ store }) => {

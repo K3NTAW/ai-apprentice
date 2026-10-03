@@ -2,6 +2,8 @@ import { z } from "zod";
 import { TranscriptEntrySchema } from "@/lib/types";
 import { parseBody, requireCreatorOrOwner, withApi, type IdContext } from "../../_http";
 
+export const runtime = "nodejs";
+
 // The store sets redacted itself, so clients may omit it.
 const Body = z.object({
   entries: z.array(TranscriptEntrySchema.extend({ redacted: z.boolean().default(false) })),

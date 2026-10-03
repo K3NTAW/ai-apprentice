@@ -3,6 +3,8 @@ import { requireRole } from "@/lib/auth/context";
 import { SessionSchema } from "@/lib/types";
 import { parseBody, withApi } from "./_http";
 
+export const runtime = "nodejs";
+
 const CreateBody = z.object({ kind: SessionSchema.shape.kind, expert: z.string().optional() });
 
 // capture: owner or expert. teach: any member.

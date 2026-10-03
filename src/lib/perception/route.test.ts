@@ -82,3 +82,18 @@ describe("POST /api/vision", () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe("POST /api/vision frame size limit", () => {
+  it("answers 413 frame_too_large for a body over 2 MB without calling the model or the store", async () => {
+    const s = await createSession({ kind: "capture" });
+    const saveFrame = vi.spyOn(fileStore, "saveFrame");
+    const frame = "data:image/jpeg;base64," + "A".repeat(2 * 1024 * 1024 + 1);
+    const res = await post({ session_id: s.id, t: 5, frame });
+    expect(res.status).toBe(413);
+    expect(await res.json()).toEqual({ error: "frame_too_large" });
+    expect(describeFrame).not.toHaveBeenCalled();
+    expect(saveFrame).not.toHaveBeenCalled();
+    expect(await onDisk(s.id, "0005.jpg")).toBe(false);
+    saveFrame.mockRestore();
+  });
+});

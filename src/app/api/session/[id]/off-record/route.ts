@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { parseBody, requireCreatorOrOwner, withApi, type IdContext } from "../../_http";
 
+export const runtime = "nodejs";
+
 const Body = z.object({ from: z.number(), to: z.number().optional() });
 
 export async function POST(req: Request, ctx: IdContext) {

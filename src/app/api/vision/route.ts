@@ -4,7 +4,16 @@ import { ScreenEventSchema, type VisionEvent } from "@/lib/types";
 import { describeFrame } from "@/lib/perception/vision";
 import { type Api, requireCreatorOrOwner, withApi } from "../session/_http";
 
+export const runtime = "nodejs";
+// Vercel function limit: 60 s fits the plan (model calls can take tens of seconds).
+export const maxDuration = 60;
+
 const SESSION_ID = /^[a-zA-Z0-9_-]+$/;
+
+// Request bodies over 2 MB answer 413 before any model or storage call (Vercel caps bodies at 4.5 MB).
+export const MAX_FRAME_BODY_BYTES = 2 * 1024 * 1024;
+
+const tooLarge = () => Response.json({ error: "frame_too_large" }, { status: 413 });
 
 function bad(error: string) {
   return Response.json({ error }, { status: 400 });
@@ -17,9 +26,18 @@ export async function POST(req: Request): Promise<Response> {
 }
 
 async function visionFor(api: Api, req: Request): Promise<Response> {
+  const declared = Number(req.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > MAX_FRAME_BODY_BYTES) return tooLarge();
+  let text: string;
+  try {
+    text = await req.text();
+  } catch {
+    return bad("invalid json");
+  }
+  if (Buffer.byteLength(text) > MAX_FRAME_BODY_BYTES) return tooLarge();
   let body: unknown;
   try {
-    body = await req.json();
+    body = JSON.parse(text);
   } catch {
     return bad("invalid json");
   }

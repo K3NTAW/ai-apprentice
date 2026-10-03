@@ -3,6 +3,8 @@ import { gaps, isUnderstood, scoreWorkMap, synthesizeWorkMap, teachBackText } fr
 import { notFound, parseBody, requireCreatorOrOwner, withApi } from "../session/_http";
 
 export const runtime = "nodejs";
+// Vercel function limit: 60 s fits the plan (model calls can take tens of seconds).
+export const maxDuration = 60;
 
 const Body = z.object({ session_id: z.string(), rescore_only: z.boolean().optional() });
 

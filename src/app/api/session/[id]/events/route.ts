@@ -2,6 +2,8 @@ import { z } from "zod";
 import { ScreenEventSchema } from "@/lib/types";
 import { parseBody, requireCreatorOrOwner, withApi, type IdContext } from "../../_http";
 
+export const runtime = "nodejs";
+
 const Body = z.object({ events: z.array(ScreenEventSchema) });
 
 export async function POST(req: Request, ctx: IdContext) {
