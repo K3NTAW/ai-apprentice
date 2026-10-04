@@ -66,9 +66,31 @@ export function storeFor(ctx: RequestContext): SessionStore {
  * Store calls go through api.store, which is scoped to the active workspace.
  */
 export async function withApi(fn: (api: Api) => Promise<Response>): Promise<Response> {
+  const t0 = performance.now();
   const ctx = await requireContext();
-  if (ctx instanceof Response) return ctx;
-  return handle(() => fn({ ctx, store: storeFor(ctx) }));
+  const auth = performance.now() - t0;
+  if (ctx instanceof Response) return withServerTiming(ctx, { auth });
+  const t1 = performance.now();
+  const res = await handle(() => fn({ ctx, store: storeFor(ctx) }));
+  return withServerTiming(res, { auth, db: performance.now() - t1 });
+}
+
+/**
+ * Server-Timing (ms): auth is requireContext (getUser plus memberships), db is the handler body, which store
+ * queries dominate. A response with immutable headers is copied first.
+ */
+export function withServerTiming(res: Response, timings: Record<string, number>): Response {
+  const value = Object.entries(timings)
+    .map(([name, ms]) => `${name};dur=${ms.toFixed(1)}`)
+    .join(", ");
+  try {
+    res.headers.append("Server-Timing", value);
+    return res;
+  } catch {
+    const copy = new Response(res.body, res);
+    copy.headers.append("Server-Timing", value);
+    return copy;
+  }
 }
 
 /**

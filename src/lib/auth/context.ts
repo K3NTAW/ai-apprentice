@@ -2,6 +2,7 @@
 // Only auth.getUser() is used, never getSession(): getUser revalidates the token with Supabase Auth.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
+import { cache } from "react";
 import type { z } from "zod";
 import { appMode } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -97,7 +98,7 @@ function localContext(): RequestContext {
   };
 }
 
-export async function getRequestContext(): Promise<ContextResult> {
+async function resolveRequestContext(): Promise<ContextResult> {
   const mode = appMode();
   if (mode === "local") return { kind: "ok", ctx: localContext() };
   if (mode !== "supabase") return { kind: "misconfigured" };
@@ -147,10 +148,24 @@ export async function getRequestContext(): Promise<ContextResult> {
   };
 }
 
+/**
+ * Read path for server components (AppShell, pages, loaders): memoized per request with React cache(), so one render
+ * resolves the user, memberships and workspace once (one getUser) however many components ask. cache() keys on the
+ * React server request: nothing is shared across requests, and outside a server render it does not memoize at all.
+ */
+export const getRequestContext = cache(resolveRequestContext);
+
+/** Always resolves again, never from the cache. requireContext (route handlers, where every mutation lives) uses it. */
+export const getFreshRequestContext = resolveRequestContext;
+
 const json = (error: string, status: number) => Response.json({ error }, { status });
 
+/**
+ * Route handlers: the fresh context, never the request cache, so mutating paths (bootstrap, workspace switch,
+ * invites, session writes) always see the current user and memberships.
+ */
 export async function requireContext(): Promise<RequestContext | Response> {
-  const result = await getRequestContext();
+  const result = await getFreshRequestContext();
   switch (result.kind) {
     case "ok":
       return result.ctx;
