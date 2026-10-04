@@ -301,17 +301,24 @@ test("11 Capture and Teach in the browser show the desktop-app notice", async ({
 test("12 user menu: theme toggle, account, sign out and sign in again", async ({ app: { page, shot } }) => {
   await page.goto("/agents");
   const html = page.locator("html");
-  const theme = async () => (await html.getAttribute("data-theme")) ?? (await html.getAttribute("class")) ?? "";
-  const before = await theme();
-  await page.getByLabel("Open user menu").click();
-  await expect(page.getByRole("menu", { name: "User menu" })).toBeVisible();
+  const menu = page.getByRole("menu", { name: "User menu" });
+  // The Theme group: menuitemradio Dark / Light / System (ThemeToggle).
+  const choice = (name: string) => menu.getByRole("group", { name: "Theme" }).getByRole("menuitemradio", { name, exact: true });
+  const openMenu = async () => {
+    if (!(await menu.isVisible())) await page.getByLabel("Open user menu").click();
+    await expect(menu).toBeVisible();
+  };
+  await openMenu();
   await shot("user menu");
-  await page.getByRole("menuitem", { name: /theme$/ }).first().click();
-  await expect.poll(theme).not.toBe(before);
+  const checked = (await menu.getByRole("group", { name: "Theme" }).getByRole("menuitemradio", { checked: true }).textContent())?.trim() ?? "System";
+  const next = (await html.getAttribute("data-theme")) === "dark" ? "Light" : "Dark";
+  await choice(next).click();
+  await expect(choice(next)).toHaveAttribute("aria-checked", "true");
+  await expect(html).toHaveAttribute("data-theme", next.toLowerCase());
   await shot("theme toggled");
-  if (!(await page.getByRole("menuitem", { name: /theme$/ }).first().isVisible())) await page.getByLabel("Open user menu").click();
-  await page.getByRole("menuitem", { name: /theme$/ }).first().click();
-  await expect.poll(theme).toBe(before);
+  await openMenu();
+  await choice(checked).click();
+  await expect(choice(checked)).toHaveAttribute("aria-checked", "true");
   if (!(await page.getByRole("menuitem", { name: "Account and workspace" }).isVisible())) await page.getByLabel("Open user menu").click();
   await page.getByRole("menuitem", { name: "Account and workspace" }).click();
   await expect(page).toHaveURL(/\/workspace$/);
