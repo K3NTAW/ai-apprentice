@@ -3,6 +3,8 @@
 // renders AppShell (capture, teach, debrief, map) pass shell={false}.
 // Delayed: the placeholders stay transparent for 400 ms and fade in over 150 ms (.aa-skel-delay in globals.css), so a
 // navigation that finishes quickly shows only the empty frame. Reduced motion: shown at once, without the fade.
+// The placeholder is a <div role="status">, never a <main>: while the page streams in, React keeps the resolved page
+// (with its own <main>) hidden next to the fallback until the reveal, so a skeleton <main> made two of them (T-0257).
 
 export type SkeletonVariant = "list" | "grid" | "detail" | "console" | "form";
 
@@ -68,13 +70,13 @@ function Body({ variant }: { variant: SkeletonVariant }) {
 
 export function PageSkeleton({ label, variant = "list", shell = true }: { label: string; variant?: SkeletonVariant; shell?: boolean }) {
   const content = (
-    <main role="status" aria-busy="true" aria-live="polite" className="flex min-w-0 flex-1 flex-col gap-6" style={{ padding: "28px 40px 56px" }}>
+    <div role="status" aria-busy="true" aria-live="polite" className="flex min-w-0 flex-1 flex-col gap-6" style={{ padding: "28px 40px 56px" }}>
       <span className="sr-only">Loading {label}…</span>
       <DelayedSkeleton className="flex flex-col gap-6">
         <Skeleton className="h-7 w-56" />
         <Body variant={variant} />
       </DelayedSkeleton>
-    </main>
+    </div>
   );
   if (!shell) return content;
   return (

@@ -50,3 +50,17 @@ describe("learn -> teach for a process", () => {
     expect(teachHref("agent-a", "cap-1", null)).toBe("/teach?agent=agent-a&session=cap-1");
   });
 });
+
+describe("/learn while it streams in (T-0257, live run 2026-10-04)", () => {
+  it("the loading skeleton is a status, not a <main>: next to the resolved page there is exactly one <main>, with the content", async () => {
+    const { default: Loading } = await import("./loading");
+    const skeleton = renderToStaticMarkup(<Loading />);
+    expect(skeleton).toContain('role="status"');
+    expect(skeleton).not.toContain("<main");
+    // React keeps the resolved page hidden next to the fallback until the reveal: both are in the DOM at once.
+    const page = renderToStaticMarkup(<LearnView agents={learnAgents([AGENT_A], SESSIONS)} selected={null} processes={[]} unknownAgent={false} firstName="Sabine" />);
+    const both = skeleton + page;
+    expect(both.match(/<main[\s>]/g)).toHaveLength(1);
+    expect(page).toMatch(/<main[^>]*>[\s\S]*Hi Sabine[\s\S]*<h1[^>]*>Learn<\/h1>[\s\S]*Senior Sales Person[\s\S]*<\/main>/);
+  });
+});

@@ -28,3 +28,13 @@ describe("delayed skeleton", () => {
     expect(reduced).toMatch(/\.aa-skel-delay \{ opacity: 1; \}/);
   });
 });
+
+describe("page skeleton landmark", () => {
+  it("is a role=status region, never a <main> (the streamed page brings its own)", () => {
+    for (const shell of [true, false]) {
+      const html = renderToStaticMarkup(<PageSkeleton label="learn" variant="grid" shell={shell} />);
+      expect(html).not.toContain("<main");
+      expect(html).toMatch(/<div role="status" aria-busy="true"/);
+    }
+  });
+});
