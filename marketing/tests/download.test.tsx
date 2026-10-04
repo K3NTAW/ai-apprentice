@@ -31,7 +31,7 @@ describe("download page logic", () => {
     expect(html).not.toContain("Download for Windows");
   });
 
-  it("the page renders all three builds, the release link, the which-build hint and the Gatekeeper install steps", async () => {
+  it("the page renders all three builds, the release link, the which-build hint, the notarized note and the simplified install steps", async () => {
     const { default: DownloadPage } = await import("@/app/download/page");
     const html = renderToStaticMarkup(<DownloadPage />);
     expect(html).toContain('data-screen="download"');
@@ -42,13 +42,11 @@ describe("download page logic", () => {
     expect(html).toContain("data-install-steps");
     const steps = html.slice(html.indexOf("data-install-steps"));
     const order = [
-      "drag AI Apprentice to Applications",
-      "macOS says it cannot verify the app. Click Done, open System Settings &gt; Privacy &amp; Security and click Open Anyway. Or right-click the app and choose Open.",
-      "If macOS says the app is damaged, run this once in Terminal:",
-      'select-all',
-      "xattr -cr &quot;/Applications/AI Apprentice.app&quot;</code>",
+      "Open the .dmg and drag AI Apprentice to Applications.",
+      "Open it. macOS asks once whether to open an app downloaded from the internet: click Open.",
       "Sign in.",
       "Grant Screen Recording, Microphone and Accessibility, then restart the app once.",
+      "Still blocked? System Settings &gt; Privacy &amp; Security &gt; Open Anyway.",
     ];
     let at = -1;
     for (const s of order) {
@@ -56,6 +54,11 @@ describe("download page logic", () => {
       expect(i, s).toBeGreaterThan(at);
       at = i;
     }
+    expect(html).not.toContain("xattr");
+    expect(html).not.toContain("<code");
+    expect(html).not.toContain("not notarized");
+    expect(html.match(/Open Anyway/g)).toHaveLength(1);
+    expect(html).toContain('data-notarized="">Signed and notarized by Apple</span>');
     expect(html).toContain("Which build: Apple menu &gt; About This Mac: Chip = Apple M… -&gt; Apple Silicon; Processor = Intel -&gt; Intel");
     expect(html.match(/<li>/g)).toHaveLength(INSTALL_STEPS.length);
     expect(html).not.toContain("Download for Windows");

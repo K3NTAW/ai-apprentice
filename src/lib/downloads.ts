@@ -7,16 +7,19 @@ export const DESKTOP_RELEASE = {
   macX64: { href: "https://github.com/K3NTAW/ai-apprentice-desktop/releases/download/v0.1.0/AI.Apprentice-0.1.0.dmg", size: "153 MB" },
 } as const;
 
-/** First launch of the ad-hoc signed, non-notarized build, in order. `code` is a line to copy into Terminal. */
-export const INSTALL_STEPS: readonly { text: string; code?: string }[] = [
-  { text: "Open the .dmg and drag AI Apprentice to Applications." },
-  {
-    text: "First launch: macOS says it cannot verify the app. Click Done, open System Settings > Privacy & Security and click Open Anyway. Or right-click the app and choose Open.",
-  },
-  { text: "If macOS says the app is damaged, run this once in Terminal:", code: 'xattr -cr "/Applications/AI Apprentice.app"' },
-  { text: "Sign in." },
-  { text: "Grant Screen Recording, Microphone and Accessibility, then restart the app once." },
+/** Install and first launch of the signed, notarized build, in order. */
+export const INSTALL_STEPS: readonly string[] = [
+  "Open the .dmg and drag AI Apprentice to Applications.",
+  "Open it. macOS asks once whether to open an app downloaded from the internet: click Open.",
+  "Sign in.",
+  "Grant Screen Recording, Microphone and Accessibility, then restart the app once.",
 ];
+
+/** One muted line under the steps for a Mac that still blocks the app. */
+export const INSTALL_FALLBACK = "Still blocked? System Settings > Privacy & Security > Open Anyway.";
+
+/** Shown next to the macOS version line. */
+export const NOTARIZED_NOTE = "Signed and notarized by Apple";
 
 /** Which macOS build to pick. */
 export const WHICH_BUILD = "Apple menu > About This Mac: Chip = Apple M… -> Apple Silicon; Processor = Intel -> Intel";

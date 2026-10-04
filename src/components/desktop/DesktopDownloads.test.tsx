@@ -39,17 +39,15 @@ describe("Get the desktop app", () => {
     expect(html).not.toContain("Download for Windows");
   });
 
-  it("shows the Gatekeeper install steps in order with the copyable xattr line, and the which-build hint", () => {
+  it("shows the simplified install steps in order, the one-line fallback, the notarized note and the which-build hint", () => {
     const html = renderToStaticMarkup(<DesktopDownloads />);
     const steps = html.slice(html.indexOf("data-install-steps"));
     const order = [
-      "drag AI Apprentice to Applications",
-      "macOS says it cannot verify the app. Click Done, open System Settings &gt; Privacy &amp; Security and click Open Anyway. Or right-click the app and choose Open.",
-      "If macOS says the app is damaged, run this once in Terminal:",
-      'select-all',
-      "xattr -cr &quot;/Applications/AI Apprentice.app&quot;</code>",
+      "Open the .dmg and drag AI Apprentice to Applications.",
+      "Open it. macOS asks once whether to open an app downloaded from the internet: click Open.",
       "Sign in.",
       "Grant Screen Recording, Microphone and Accessibility, then restart the app once.",
+      "Still blocked? System Settings &gt; Privacy &amp; Security &gt; Open Anyway.",
     ];
     let at = -1;
     for (const s of order) {
@@ -57,6 +55,11 @@ describe("Get the desktop app", () => {
       expect(i, s).toBeGreaterThan(at);
       at = i;
     }
+    expect(html).not.toContain("xattr");
+    expect(html).not.toContain("<code");
+    expect(html).not.toContain("not notarized");
+    expect(html.match(/Open Anyway/g)).toHaveLength(1);
+    expect(html).toContain('data-notarized="">Signed and notarized by Apple</span>');
     expect(html).toContain("Which build: Apple menu &gt; About This Mac: Chip = Apple M… -&gt; Apple Silicon; Processor = Intel -&gt; Intel");
   });
 

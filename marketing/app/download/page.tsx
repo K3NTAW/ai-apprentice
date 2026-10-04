@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import DownloadList from "@/components/landing/DownloadList";
 import SitePage from "@/components/landing/SitePage";
-import { DESKTOP_RELEASE, INSTALL_STEPS, WHICH_BUILD } from "@/lib/downloads";
+import { DESKTOP_RELEASE, INSTALL_FALLBACK, INSTALL_STEPS, NOTARIZED_NOTE, WHICH_BUILD } from "@/lib/downloads";
 import { appUrl, downloads } from "@/lib/site";
 
 export const metadata: Metadata = { title: "Download · AI Apprentice" };
@@ -25,7 +25,10 @@ export default function DownloadPage() {
             </>
           ) : (
             "."
-          )}
+          )}{" "}
+          <span className="text-[13px]" style={{ color: "var(--mu)" }} data-notarized="">
+            {NOTARIZED_NOTE}
+          </span>
         </p>
         <p className="text-[15px]" style={{ color: "var(--mu)" }} data-which-build="">
           Which build: {WHICH_BUILD}
@@ -34,21 +37,14 @@ export default function DownloadPage() {
       <DownloadList items={downloads()} version={DESKTOP_RELEASE.version} />
       <div className="ui-card flex max-w-[640px] flex-col gap-3 p-7" data-install-steps="">
         <h2 className="ui-t2">Install</h2>
-        <p className="text-[15px]" style={{ color: "var(--mu)" }}>
-          The build is not notarized by Apple yet, so macOS asks once before the first launch.
-        </p>
         <ol className="flex list-decimal flex-col gap-2 pl-5 text-[15px]">
           {INSTALL_STEPS.map((s) => (
-            <li key={s.text}>
-              {s.text}
-              {s.code && (
-                <code className="mt-1 block select-all rounded px-2 py-1 font-mono text-[13px]" style={{ background: "var(--s2)" }}>
-                  {s.code}
-                </code>
-              )}
-            </li>
+            <li key={s}>{s}</li>
           ))}
         </ol>
+        <p className="text-[13px]" style={{ color: "var(--mu)" }} data-install-fallback="">
+          {INSTALL_FALLBACK}
+        </p>
       </div>
     </SitePage>
   );
