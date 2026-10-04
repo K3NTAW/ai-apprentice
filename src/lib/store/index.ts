@@ -6,6 +6,7 @@ import type { SessionStore, StoreContext } from "./types";
 
 export {
   AgentNotFoundError,
+  EmptyProcessPatchError,
   frameName,
   InvalidOffRecordRangeError,
   InvalidWorkMapError,
@@ -13,12 +14,14 @@ export {
   isValidAgentId,
   isValidFrameName,
   isValidSessionId,
+  ProcessDeletedError,
   ProcessesUnavailableError,
   ProcessExistsError,
   ProcessNotFoundError,
   ProcessVersionConflictError,
   PROCESS_CHANGE_KINDS,
   PROCESS_TITLE_MAX,
+  SessionLinkedError,
   SessionNotFoundError,
 } from "./types";
 export type { SessionDigest } from "@/lib/types";

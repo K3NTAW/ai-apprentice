@@ -24,6 +24,14 @@
 -- nothing, so two concurrent backfills create each process once (the loser gets 23505 'process_exists'). A
 -- backfilled process keeps its session's started_at as created_at, so the order is unchanged.
 --
+-- A session links to at most one process: create_process and update_process link p_source_session only when its
+-- process_id is null or already the process (else PT409 'session_linked'). An update_process call with nothing to
+-- change raises 22023 'nothing to update' (HTTP 400).
+--
+-- Deleted processes stay deleted: processes_tombstones_trg records the source session of every deleted process in
+-- public.processes_tombstones, and create_process with p_backfill raises 23505 'process_deleted' for a recorded
+-- session, so the next backfill skips it. Members read tombstones; only the trigger writes them.
+--
 -- Until this migration is applied the API answers 503 'processes not available yet', never 500.
 
 -- ---------------------------------------------------------------------------
@@ -69,6 +77,15 @@ create table public.process_versions (
     references public.processes (workspace_id, id) on delete cascade
 );
 
+-- Source sessions of deleted processes. Written only by processes_tombstones_trg (security definer).
+create table public.processes_tombstones (
+  source_session_id text primary key references public.sessions on delete cascade,
+  workspace_id uuid not null references public.workspaces on delete cascade,
+  deleted_at timestamptz not null default now()
+);
+
+create index processes_tombstones_workspace_idx on public.processes_tombstones (workspace_id);
+
 alter table public.sessions add column process_id uuid;
 
 alter table public.sessions
@@ -84,9 +101,11 @@ create index sessions_workspace_process_idx on public.sessions (workspace_id, pr
 
 revoke all on table public.processes from public, anon;
 revoke all on table public.process_versions from public, anon;
+revoke all on table public.processes_tombstones from public, anon;
 grant select, delete on table public.processes to authenticated;
 grant update (title, archived_at) on table public.processes to authenticated;
 grant select on table public.process_versions to authenticated;
+grant select on table public.processes_tombstones to authenticated;
 
 -- ---------------------------------------------------------------------------
 -- Trigger functions and triggers
@@ -179,6 +198,30 @@ create trigger process_versions_guard_update_trg
   before update on public.process_versions
   for each row execute function public.process_versions_guard_update();
 
+-- Records the source session of a deleted process (delete by an owner, or the cascade from its agent). Skipped when
+-- the session or the workspace goes in the same statement (workspace delete), so the tombstone never dangles.
+create function public.processes_tombstone()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if old.source_session_id is not null
+     and exists (select 1 from public.sessions s where s.id = old.source_session_id)
+     and exists (select 1 from public.workspaces w where w.id = old.workspace_id) then
+    insert into public.processes_tombstones (source_session_id, workspace_id)
+    values (old.source_session_id, old.workspace_id)
+    on conflict (source_session_id) do nothing;
+  end if;
+  return old;
+end
+$$;
+
+create trigger processes_tombstones_trg
+  after delete on public.processes
+  for each row execute function public.processes_tombstone();
+
 -- ---------------------------------------------------------------------------
 -- workmap_valid: the database-level shape check of a Work Map (mirrors the required part of WorkMapSchema in
 -- src/lib/types.ts). Top level: task and expert strings, confirmed_by_expert boolean, steps and open_questions
@@ -234,7 +277,8 @@ $$;
 -- grant on process_versions) and link the source session. It checks the caller's role itself: owner or expert;
 -- p_backfill (created_at = the source session's started_at) is owner only.
 -- On conflict (source_session_id) do nothing: a second process for the same source session is never created;
--- the caller gets 23505 'process_exists' and nothing is written.
+-- the caller gets 23505 'process_exists' and nothing is written. A backfill for a session in processes_tombstones
+-- raises 23505 'process_deleted'. A source session linked to another process raises PT409 'session_linked'.
 -- ---------------------------------------------------------------------------
 
 create function public.create_process(
@@ -280,6 +324,11 @@ begin
       raise exception 'session not found' using errcode = 'P0002';
     end if;
   end if;
+  if coalesce(p_backfill, false) and exists (
+    select 1 from public.processes_tombstones t where t.source_session_id = p_source_session
+  ) then
+    raise exception 'process_deleted' using errcode = '23505';
+  end if;
   insert into public.processes (workspace_id, agent_id, title, workmap, version, confirmed, created_by, source_session_id, created_at, updated_at)
   values (
     p_workspace_id, p_agent_id, p_title, p_workmap, 1,
@@ -296,7 +345,12 @@ begin
   insert into public.process_versions (workspace_id, process_id, version, workmap, source_session_id, change_kind, changed_by)
   values (nxt.workspace_id, nxt.id, 1, nxt.workmap, p_source_session, 'trained', auth.uid());
   if p_source_session is not null then
-    update public.sessions set process_id = nxt.id where id = p_source_session and workspace_id = nxt.workspace_id;
+    -- Never take a session from another process; the raise rolls back the insert.
+    update public.sessions set process_id = nxt.id
+     where id = p_source_session and workspace_id = nxt.workspace_id and process_id is null;
+    if not found then
+      raise exception 'session_linked' using errcode = 'PT409';
+    end if;
   end if;
   return nxt;
 end
@@ -308,7 +362,8 @@ $$;
 -- version row (no insert grant on process_versions). It checks the caller's role itself.
 -- A non-null p_workmap must be at p_expected_version (else PT409) and adds a version row; p_title renames;
 -- p_archived archives (true) or restores (false), owner only. Title or archive alone add no version row and skip
--- the version check. p_source_session links that session to the process.
+-- the version check. p_source_session links that session to the process, only when it is not linked or already
+-- linked to this process (else PT409 'session_linked'). Nothing to change raises 22023 'nothing to update'.
 -- ---------------------------------------------------------------------------
 
 create function public.update_process(
@@ -354,6 +409,12 @@ begin
   ) then
     raise exception 'session not found' using errcode = 'P0002';
   end if;
+  if p_source_session is not null and exists (
+    select 1 from public.sessions s
+     where s.id = p_source_session and s.process_id is not null and s.process_id is distinct from p_id
+  ) then
+    raise exception 'session_linked' using errcode = 'PT409';
+  end if;
   update public.processes
      set workmap = coalesce(p_workmap, workmap),
          version = case when p_workmap is null then version else version + 1 end,
@@ -373,7 +434,13 @@ begin
     values (nxt.workspace_id, nxt.id, nxt.version, nxt.workmap, p_source_session, coalesce(p_change_kind, 'edited'), auth.uid());
   end if;
   if p_source_session is not null then
-    update public.sessions set process_id = nxt.id where id = p_source_session and workspace_id = nxt.workspace_id;
+    -- Re-checked in the update: a concurrent link to another process rolls this call back.
+    update public.sessions set process_id = nxt.id
+     where id = p_source_session and workspace_id = nxt.workspace_id
+       and (process_id is null or process_id = nxt.id);
+    if not found then
+      raise exception 'session_linked' using errcode = 'PT409';
+    end if;
   end if;
   return nxt;
 end
@@ -386,6 +453,7 @@ $$;
 revoke all on function public.processes_guard_update() from public, anon, authenticated;
 revoke all on function public.processes_touch_updated_at() from public, anon, authenticated;
 revoke all on function public.process_versions_guard_update() from public, anon, authenticated;
+revoke all on function public.processes_tombstone() from public, anon, authenticated;
 revoke all on function public.workmap_valid(jsonb) from public, anon;
 grant execute on function public.workmap_valid(jsonb) to authenticated;
 revoke all on function public.create_process(uuid, uuid, text, jsonb, text, boolean) from public, anon;
@@ -398,11 +466,12 @@ grant execute on function public.update_process(uuid, int, jsonb, text, text, te
 -- Every policy is to authenticated. Every update policy has with check equal to using.
 -- Members read; owners and experts update title (archive is owner only, see processes_guard_update); only owners
 -- delete processes. No insert policy on either table (inserts go through create_process and update_process);
--- nobody inserts, updates or deletes versions directly.
+-- nobody inserts, updates or deletes versions directly. Members read tombstones; nobody writes them directly.
 -- ---------------------------------------------------------------------------
 
 alter table public.processes enable row level security;
 alter table public.process_versions enable row level security;
+alter table public.processes_tombstones enable row level security;
 
 create policy processes_select on public.processes
   for select to authenticated
@@ -418,5 +487,9 @@ create policy processes_delete on public.processes
   using (public.workspace_role(workspace_id) = 'owner');
 
 create policy process_versions_select on public.process_versions
+  for select to authenticated
+  using (public.is_workspace_member(workspace_id));
+
+create policy processes_tombstones_select on public.processes_tombstones
   for select to authenticated
   using (public.is_workspace_member(workspace_id));

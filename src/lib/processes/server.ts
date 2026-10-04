@@ -1,11 +1,14 @@
 // Processes helpers that read the store (server only). See ./merge for the legacy Work Map rule.
 // backfillProcesses turns legacy confirmed sessions into processes once. A run links each session
 // (sessions.process_id), so a later run finds nothing left; two concurrent runs both see the session, but the store
-// creates at most one process per source session (ProcessExistsError for the loser, which is skipped).
+// creates at most one process per source session (ProcessExistsError for the loser, which is skipped). A session
+// whose process was deleted is skipped too (ProcessDeletedError, processes_tombstones): deleted processes stay deleted.
 import {
   PROCESS_TITLE_MAX,
+  ProcessDeletedError,
   ProcessesUnavailableError,
   ProcessExistsError,
+  SessionLinkedError,
   type ListProcessesOptions,
   type Process,
   type SessionStore,
@@ -42,7 +45,8 @@ export async function backfillProcesses(store: SessionStore, opts: { agent_id?: 
         await store.createProcess({ agent_id: s.agent_id, title: processTitle(s.workmap.task), workmap: s.workmap, source_session_id: s.id, backfill: true }),
       );
     } catch (err) {
-      if (!(err instanceof ProcessExistsError)) throw err;
+      // Another run (or an edit) took the session meanwhile, or its process was deleted: skip it.
+      if (!(err instanceof ProcessExistsError) && !(err instanceof ProcessDeletedError) && !(err instanceof SessionLinkedError)) throw err;
     }
   }
   return created;

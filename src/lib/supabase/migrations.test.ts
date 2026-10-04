@@ -1081,6 +1081,43 @@ describe("processes migration", () => {
     expect(fnBody("processes_guard_update")).toContain("new.source_session_id is distinct from old.source_session_id");
   });
 
+  it("fix round 3: on-conflict index, workmap_valid in both writers, no session stealing, empty patch, tombstones", () => {
+    // The on conflict target of create_process exists as a partial unique index.
+    expect(stmts).toContain(
+      "create unique index processes_source_session_key on public.processes (source_session_id) where source_session_id is not null",
+    );
+    expect(fnBody("create_process")).toContain("on conflict (source_session_id) where source_session_id is not null do nothing");
+    for (const f of ["create_process", "update_process"]) expect(fnBody(f)).toContain("public.workmap_valid(p_workmap)");
+    // A session is linked only when unlinked (create) or unlinked or already this process (update).
+    expect(fnBody("create_process")).toMatch(/where id = p_source_session and workspace_id = nxt\.workspace_id and process_id is null; if not found then raise exception 'session_linked' using errcode = 'pt409'/);
+    const upd = fnBody("update_process");
+    expect(upd).toContain("s.process_id is not null and s.process_id is distinct from p_id");
+    expect(upd).toMatch(/and \(process_id is null or process_id = nxt\.id\); if not found then raise exception 'session_linked' using errcode = 'pt409'/);
+    expect(upd).toContain("raise exception 'nothing to update' using errcode = '22023'");
+    // Deleted processes stay deleted: an after delete trigger writes processes_tombstones, backfill checks it.
+    expect(table("processes_tombstones")).toContain("source_session_id text primary key references public.sessions on delete cascade");
+    expect(table("processes_tombstones")).toContain("workspace_id uuid not null references public.workspaces on delete cascade");
+    const trg = parseTriggers(sql).find((t) => t.table === "public.processes" && t.timing === "after" && t.events.includes("delete"));
+    expect(trg).toBeDefined();
+    expect(stmts).toContain(
+      "create trigger processes_tombstones_trg after delete on public.processes for each row execute function public.processes_tombstone()",
+    );
+    const fn = parseFunctions(sql).find((f) => f.name === "processes_tombstone")!;
+    expect(fn.header).toContain("security definer");
+    expect(norm(fn.body)).toContain("insert into public.processes_tombstones (source_session_id, workspace_id)");
+    expect(fnBody("create_process")).toMatch(/coalesce\(p_backfill, false\) and exists \( select 1 from public\.processes_tombstones t where t\.source_session_id = p_source_session \) then raise exception 'process_deleted'/);
+    // Read by members, written by nobody directly.
+    expect(stmts).toContain("alter table public.processes_tombstones enable row level security");
+    expect(compact(policy("processes_tombstones_select")!.using!)).toBe("public.is_workspace_member(workspace_id)");
+    expect(parsePolicies(sql).filter((p) => p.table === "public.processes_tombstones").map((p) => p.command)).toEqual(["select"]);
+    expect(stmts.filter((x) => /^grant .* on table public\.processes_tombstones /.test(x))).toEqual([
+      "grant select on table public.processes_tombstones to authenticated",
+    ]);
+    const down = deepStatements(rollback).map(norm);
+    expect(down).toContain("drop table if exists public.processes_tombstones");
+    expect(down).toContain("drop function if exists public.processes_tombstone()");
+  });
+
   it("archive and restore are owner only", () => {
     const guard = fnBody("processes_guard_update");
     expect(guard).toContain("new.archived_at is distinct from old.archived_at");

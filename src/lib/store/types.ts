@@ -191,6 +191,33 @@ export class ProcessExistsError extends Error {
   }
 }
 
+/** A process patch with nothing to change (update_process raises 22023 'nothing to update'). The API answers 400. */
+export class EmptyProcessPatchError extends Error {
+  readonly code = "nothing_to_update";
+  constructor() {
+    super("nothing to update");
+    this.name = "EmptyProcessPatchError";
+  }
+}
+
+/** The session is linked to another process already; a process never takes over another's session. The API answers 409. */
+export class SessionLinkedError extends Error {
+  readonly code = "session_linked";
+  constructor(sessionId: string) {
+    super(`session ${sessionId} is linked to another process`);
+    this.name = "SessionLinkedError";
+  }
+}
+
+/** A backfill for a session whose process was deleted (processes_tombstones): deleted processes stay deleted. */
+export class ProcessDeletedError extends Error {
+  readonly code = "process_deleted";
+  constructor(sessionId: string) {
+    super(`the process for session ${sessionId} was deleted`);
+    this.name = "ProcessDeletedError";
+  }
+}
+
 /** The database rejected a Work Map (update_process / create_process, workmap_valid). The API answers 400. */
 export class InvalidWorkMapError extends Error {
   readonly code = "invalid_workmap";

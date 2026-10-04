@@ -5,11 +5,14 @@ import { redactText } from "@/lib/redact";
 import type { Avatar, QAPair, ScreenEvent, TranscriptEntry, WorkMap } from "@/lib/types";
 import {
   AgentNotFoundError,
+  EmptyProcessPatchError,
   frameName,
   InvalidOffRecordRangeError,
   InvalidSessionIdError,
+  ProcessExistsError,
   ProcessNotFoundError,
   ProcessVersionConflictError,
+  SessionLinkedError,
   SessionNotFoundError,
   type SessionStore,
 } from "./types";
@@ -343,6 +346,51 @@ export function runStoreContract(name: string, makeStore: () => SessionStore | P
         SessionNotFoundError,
       );
       expect(await store.listProcesses({ agent_id: a.id })).toEqual([]);
+    });
+
+    it("rejects an empty patch and writes nothing", async () => {
+      const a = await store.createAgent({ name: "Empty Agent", role: "AP", avatar });
+      const p = await store.createProcess({ agent_id: a.id, title: "T", workmap });
+      await expect(store.updateProcess(p.id, {})).rejects.toBeInstanceOf(EmptyProcessPatchError);
+      await expect(store.updateProcess(p.id, { expected_version: 1, change_kind: "edited" })).rejects.toBeInstanceOf(EmptyProcessPatchError);
+      expect(await store.getProcess(p.id)).toEqual(p);
+    });
+
+    it("never takes a session from another process", async () => {
+      const a = await store.createAgent({ name: "Link Agent", role: "AP", avatar });
+      const s = await store.createSession({ kind: "capture", expert: "Sabine", agent_id: a.id });
+      const s2 = await store.createSession({ kind: "capture", expert: "Sabine", agent_id: a.id });
+      const mine = await store.createProcess({ agent_id: a.id, title: "Mine", workmap, source_session_id: s.id });
+      const theirs = await store.createProcess({ agent_id: a.id, title: "Theirs", workmap });
+      await store.updateProcess(mine.id, { title: "Mine 2", source_session_id: s2.id });
+      // Re-linking to the same process is fine; to another process it is refused and writes nothing.
+      expect(await store.updateProcess(mine.id, { title: "Mine 3", source_session_id: s.id })).toMatchObject({ title: "Mine 3" });
+      await expect(store.updateProcess(theirs.id, { title: "Stolen", source_session_id: s.id })).rejects.toBeInstanceOf(SessionLinkedError);
+      await expect(
+        store.updateProcess(theirs.id, { workmap: { ...workmap, task: "stolen" }, source_session_id: s2.id }),
+      ).rejects.toBeInstanceOf(SessionLinkedError);
+      expect(await store.getProcess(theirs.id)).toMatchObject({ title: "Theirs", version: 1 });
+      await expect(store.createProcess({ agent_id: a.id, title: "New", workmap, source_session_id: s2.id })).rejects.toBeInstanceOf(
+        SessionLinkedError,
+      );
+      await expect(store.createProcess({ agent_id: a.id, title: "New", workmap, source_session_id: s.id })).rejects.toBeInstanceOf(
+        ProcessExistsError,
+      );
+      expect((await store.listProcesses({ agent_id: a.id })).map((x) => x.id).sort()).toEqual([mine.id, theirs.id].sort());
+      expect((await store.getSession(s.id))?.process_id).toBe(mine.id);
+      expect((await store.getSession(s2.id))?.process_id).toBe(mine.id);
+    });
+
+    it("does not recreate a deleted process on the next backfill", async () => {
+      const a = await store.createAgent({ name: "Tombstone Agent", role: "AP", avatar });
+      const legacy = await store.createSession({ kind: "capture", expert: "Sabine", agent_id: a.id });
+      await store.saveWorkMap(legacy.id, { ...workmap, confirmed_by_expert: true });
+      const [p] = await backfillProcesses(store, { agent_id: a.id });
+      expect(p).toMatchObject({ agent_id: a.id });
+      expect(await store.deleteProcess(p.id)).toBe(true);
+      expect((await store.getSession(legacy.id))?.process_id).toBeUndefined();
+      expect(await backfillProcesses(store, { agent_id: a.id })).toEqual([]);
+      expect(await store.listProcesses({ agent_id: a.id, include_archived: true })).toEqual([]);
     });
 
     it("reports missing sessions and invalid ids", async () => {

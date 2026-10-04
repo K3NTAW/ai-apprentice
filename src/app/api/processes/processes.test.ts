@@ -198,6 +198,26 @@ describe("/api/processes", () => {
     expect(state.fake.tables.processes).toHaveLength(1);
   });
 
+  it("answers 400 for an empty patch, 409 for a session of another process, and backfill skips a deleted process", async () => {
+    const agentId = await agent();
+    const store = createSupabaseStore(state.fake.client as never, { workspaceId: WS_A, userId: USER });
+    const s = await store.createSession({ kind: "capture", expert: "Sabine", agent_id: agentId });
+    await store.saveWorkMap(s.id, workmap);
+    const backfilled = (await (await backfillPost(req("POST"))).json()) as { processes: { id: string }[] };
+    const p = backfilled.processes[0];
+    for (const body of [{}, { expected_version: 1 }, { change_kind: "edited" }])
+      expect((await processPatch(req("PATCH", body), params(p.id))).status).toBe(400);
+    const other = (await (await createPost(req("POST", { agent_id: agentId, title: "Other", workmap }))).json()) as { id: string };
+    const stolen = await processPatch(req("PATCH", { title: "Stolen", source_session_id: s.id }), params(other.id));
+    expect(stolen.status).toBe(409);
+    expect(((await stolen.json()) as { error: string }).error).toBe("session_linked");
+    expect(state.fake.tables.sessions.find((r) => r.id === s.id)?.process_id).toBe(p.id);
+    expect((await processDelete(req("DELETE"), params(p.id))).status).toBe(204);
+    expect(state.fake.tables.processes_tombstones).toMatchObject([{ source_session_id: s.id, workspace_id: WS_A }]);
+    expect(((await (await backfillPost(req("POST"))).json()) as { created: number }).created).toBe(0);
+    expect(state.fake.tables.processes.map((r) => r.id)).toEqual([other.id]);
+  });
+
   it("answers 400 for a bad body and 404 for a missing agent, process or another workspace's process", async () => {
     const agentId = await agent();
     expect((await createPost(req("POST", { agent_id: agentId, title: "", workmap }))).status).toBe(400);

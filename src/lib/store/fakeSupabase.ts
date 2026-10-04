@@ -14,7 +14,10 @@
 // (on conflict do nothing, then 23505 'process_exists'), created_at from the session on backfill, version 1 and
 // the session link. rpc('update_process'): workmap_valid, the version check (PT409) only for a Work Map change,
 // title and archive, its process_versions row only for a Work Map change and the session link, all or nothing,
-// like the security definer functions. Roles are not modelled.
+// like the security definer functions. Both refuse a source session linked to another process (PT409
+// 'session_linked'). processes_tombstones_trg: deleting a process with a source session records it in
+// processes_tombstones, and create_process with p_backfill raises 23505 'process_deleted' for it. Roles are not
+// modelled.
 // Not modelled: workspace roles (owner/expert/learner), column projection on count queries.
 
 type Row = Record<string, unknown>;
@@ -34,6 +37,7 @@ const PKS: Record<string, string[]> = {
   agent_deletion_requests: ["id"],
   processes: ["id"],
   process_versions: ["id"],
+  processes_tombstones: ["source_session_id"],
 };
 const SERIAL = new Set(["session_events", "session_transcript"]);
 // Nullable columns come back as null, like Postgres, when an insert leaves them out.
@@ -168,8 +172,11 @@ export class FakeSupabase {
       if (!this.tables.agents.some((a) => a.id === args.p_agent_id && a.workspace_id === ws)) return fail("agent not found", "P0002");
       const session = args.p_source_session == null ? null : this.tables.sessions.find((r) => r.id === args.p_source_session && r.workspace_id === ws);
       if (args.p_source_session != null && !session) return fail("session not found", "P0002");
+      if (session && args.p_backfill === true && this.tables.processes_tombstones.some((t) => t.source_session_id === session.id))
+        return fail("process_deleted", "23505");
       // processes_source_session_key: on conflict do nothing.
       if (session && this.tables.processes.some((r) => r.source_session_id === session.id)) return fail("process_exists", "23505");
+      if (session?.process_id != null) return fail("session_linked", "PT409");
       const workmap = structuredClone(args.p_workmap) as Row;
       const p: Row = {
         id: crypto.randomUUID(),
@@ -199,6 +206,7 @@ export class FakeSupabase {
     if (workmap !== null && !workmapValid(workmap)) return fail("invalid workmap", "22023");
     const session = args.p_source_session == null ? null : this.tables.sessions.find((r) => r.id === args.p_source_session && r.workspace_id === p.workspace_id);
     if (args.p_source_session != null && !session) return fail("session not found", "P0002");
+    if (session && session.process_id != null && session.process_id !== p.id) return fail("session_linked", "PT409");
     if (workmap !== null && p.version !== args.p_expected_version) return fail("process_version_conflict", "PT409");
     if (args.p_title != null && (typeof args.p_title !== "string" || args.p_title.length < 1 || args.p_title.length > 120))
       return fail('new row for relation "processes" violates check constraint', "23514");
@@ -260,6 +268,9 @@ export class FakeSupabase {
   /** processes_agent_fkey and process_versions_process_fkey on delete cascade, sessions_process_fkey set null. */
   cascadeProcesses(rows: Row[]): void {
     const gone = new Set(rows.map((r) => r.id));
+    for (const r of rows)
+      if (r.source_session_id != null && !this.tables.processes_tombstones.some((t) => t.source_session_id === r.source_session_id))
+        this.tables.processes_tombstones.push({ source_session_id: r.source_session_id, workspace_id: r.workspace_id, deleted_at: pgTs(new Date().toISOString()) });
     this.tables.processes = this.tables.processes.filter((p) => !gone.has(p.id));
     this.tables.process_versions = this.tables.process_versions.filter((v) => !gone.has(v.process_id));
     for (const r of this.tables.sessions) if (gone.has(r.process_id)) r.process_id = null;

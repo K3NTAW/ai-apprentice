@@ -4,15 +4,18 @@ import { type RequestContext, requireContext } from "@/lib/auth/context";
 import { revalidateScopes, type Scope } from "@/lib/cache/readMostly";
 import { serverTiming } from "@/lib/perf";
 import {
+  EmptyProcessPatchError,
   getStore,
   InvalidOffRecordRangeError,
   InvalidSessionIdError,
   InvalidWorkMapError,
   isValidSessionId,
+  ProcessDeletedError,
   ProcessesUnavailableError,
   ProcessExistsError,
   ProcessNotFoundError,
   ProcessVersionConflictError,
+  SessionLinkedError,
   SessionNotFoundError,
   type SessionStore,
 } from "@/lib/store";
@@ -50,7 +53,10 @@ export async function handle(fn: () => Promise<Response>): Promise<Response> {
     if (err instanceof ProcessNotFoundError) return notFound(err.message);
     if (err instanceof ProcessVersionConflictError) return Response.json({ error: err.code, message: err.message }, { status: 409 });
     if (err instanceof ProcessExistsError) return Response.json({ error: err.code, message: err.message }, { status: 409 });
+    if (err instanceof ProcessDeletedError) return Response.json({ error: err.code, message: err.message }, { status: 409 });
+    if (err instanceof SessionLinkedError) return Response.json({ error: err.code, message: err.message }, { status: 409 });
     if (err instanceof InvalidWorkMapError) return badRequest(err.code);
+    if (err instanceof EmptyProcessPatchError) return badRequest(err.code);
     // Migration 20261004030000_processes not applied: a stable 503, never a 500. The UI falls back to sessions.
     if (err instanceof ProcessesUnavailableError) return Response.json({ error: err.code, message: err.message }, { status: 503 });
     // getStore errors: never fall back to the file store.

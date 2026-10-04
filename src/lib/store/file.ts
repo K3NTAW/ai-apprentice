@@ -27,15 +27,18 @@ import {
   inRange,
   isOffRecord,
   isValidAgentId,
+  EmptyProcessPatchError,
   isValidProcessId,
   isValidSessionId,
   processNewestFirst,
   processPatchValues,
+  ProcessDeletedError,
   ProcessExistsError,
   ProcessNotFoundError,
   ProcessVersionConflictError,
   recognizersFromSettings,
   redactOpts,
+  SessionLinkedError,
   SessionNotFoundError,
   type AgentInput,
   type AgentPatch,
@@ -434,8 +437,9 @@ async function readFrame(id: string, name: string): Promise<Buffer | null> {
 // Processes: data/processes.json holds { processes, versions } and is written atomically through one write queue,
 // so a process and its version rows always land together. Local mode: workspace 'local', created_by and
 // changed_by null. Like on delete cascade: deleting the agent deletes its processes; deleting a process deletes its
-// versions and clears sessions.process_id.
-type ProcessData = { processes: Process[]; versions: ProcessVersion[] };
+// versions and clears sessions.process_id. tombstones (like processes_tombstones) holds the source sessions of
+// deleted processes, so a backfill never recreates them.
+type ProcessData = { processes: Process[]; versions: ProcessVersion[]; tombstones: string[] };
 const processesFile = () => path.join(dataDir(), "processes.json");
 // Not a valid session id, so it never shares a queue with a session.
 const PROCESSES_QUEUE = "\0processes";
@@ -445,11 +449,11 @@ async function readProcessData(): Promise<ProcessData> {
   try {
     raw = await readFile(processesFile(), "utf8");
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return { processes: [], versions: [] };
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return { processes: [], versions: [], tombstones: [] };
     throw err;
   }
   const d = JSON.parse(raw) as Partial<ProcessData>;
-  return { processes: d.processes ?? [], versions: d.versions ?? [] };
+  return { processes: d.processes ?? [], versions: d.versions ?? [], tombstones: d.tombstones ?? [] };
 }
 
 /** fn mutates d in place; a throw leaves the file untouched. */
@@ -481,8 +485,16 @@ async function requireSession(id: string | undefined): Promise<void> {
   if (!(await readSession(id))) throw new SessionNotFoundError(id);
 }
 
+/** A session links to at most one process: only when it is unlinked or linked to processId already. */
+async function requireLinkable(sessionId: string | undefined, processId?: string): Promise<void> {
+  if (sessionId === undefined) return;
+  const s = await readSession(sessionId);
+  if (s?.process_id && s.process_id !== processId) throw new SessionLinkedError(sessionId);
+}
+
 async function setSessionProcess(sessionId: string, processId: string): Promise<void> {
   await mutate(sessionId, (s) => {
+    if (s.process_id && s.process_id !== processId) throw new SessionLinkedError(sessionId);
     s.process_id = processId;
   });
 }
@@ -498,11 +510,18 @@ async function getProcess(id: string): Promise<Process | null> {
   return (await readProcessData()).processes.find((p) => p.id === id) ?? null;
 }
 
+const sourceTaken = (d: ProcessData, sid: string) =>
+  d.versions.some((v) => v.version === 1 && v.source_session_id === sid && d.processes.some((x) => x.id === v.process_id));
+
 // One process per source session (like processes_source_session_key): the check runs inside the write queue, so
 // two concurrent backfills create each process once. backfill keeps the session's started_at as created_at.
 async function createProcess(input: ProcessInput): Promise<Process> {
   if (!(await getAgent(input.agent_id))) throw new AgentNotFoundError(input.agent_id);
   await requireSession(input.source_session_id);
+  const sid = input.source_session_id;
+  // Like create_process: process_exists (the session is a process's source) before session_linked.
+  if (sid && sourceTaken(await readProcessData(), sid)) throw new ProcessExistsError(sid);
+  await requireLinkable(sid);
   const workmap = WorkMapSchema.parse(input.workmap);
   const now = new Date().toISOString();
   const src = input.backfill && input.source_session_id ? await readSession(input.source_session_id) : null;
@@ -520,9 +539,8 @@ async function createProcess(input: ProcessInput): Promise<Process> {
     updated_at: now,
   };
   await mutateProcesses((d) => {
-    const sid = input.source_session_id;
-    if (sid && d.versions.some((v) => v.version === 1 && v.source_session_id === sid && d.processes.some((x) => x.id === v.process_id)))
-      throw new ProcessExistsError(sid);
+    if (sid && sourceTaken(d, sid)) throw new ProcessExistsError(sid);
+    if (sid && input.backfill && d.tombstones.includes(sid)) throw new ProcessDeletedError(sid);
     d.processes.push(p);
     d.versions.push(versionRow(p, "trained", input.source_session_id));
   });
@@ -532,7 +550,11 @@ async function createProcess(input: ProcessInput): Promise<Process> {
 
 async function updateProcess(id: string, patch: ProcessPatch): Promise<Process> {
   if (!isValidProcessId(id)) throw new ProcessNotFoundError(id);
+  // Like update_process: 22023 'nothing to update'.
+  if (patch.workmap === undefined && patch.title === undefined && patch.archived === undefined && patch.source_session_id === undefined)
+    throw new EmptyProcessPatchError();
   await requireSession(patch.source_session_id);
+  await requireLinkable(patch.source_session_id, id);
   const workmap = patch.workmap !== undefined ? WorkMapSchema.parse(patch.workmap) : undefined;
   const next = await mutateProcesses((d) => {
     const i = d.processes.findIndex((p) => p.id === id);
@@ -553,6 +575,9 @@ async function updateProcess(id: string, patch: ProcessPatch): Promise<Process> 
 async function deleteProcessesWhere(match: (p: Process) => boolean): Promise<string[]> {
   const gone = await mutateProcesses((d) => {
     const ids = d.processes.filter(match).map((p) => p.id);
+    for (const v of d.versions)
+      if (v.version === 1 && v.source_session_id && ids.includes(v.process_id) && !d.tombstones.includes(v.source_session_id))
+        d.tombstones.push(v.source_session_id);
     d.processes = d.processes.filter((p) => !ids.includes(p.id));
     d.versions = d.versions.filter((v) => !ids.includes(v.process_id));
     return ids;

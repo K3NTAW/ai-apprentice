@@ -1,4 +1,4 @@
-# Manual checks: processes slice (a) (T-0212, fix rounds T-0219, T-0225)
+# Manual checks: processes slice (a) (T-0212, fix rounds T-0219, T-0225, T-0233)
 
 Data model, API and the read side: agent cards, header, filter tabs, the agent page tabs, Learn and Teach read the
 agent's processes merged with legacy confirmed sessions (agentWorkMaps). Slices b-d wire the debrief, merge and editing.
@@ -34,12 +34,18 @@ After `supabase db push`:
     `insert`, `update` and `delete` on process_versions and `insert` on processes are denied for everyone.
     `select public.update_process(id, 1, ...)` with a stale version raises PT409; with
     `'{"task":"t","steps":"x"}'::jsonb` as p_workmap it raises 22023 'invalid workmap' (same for create_process).
+    `select public.update_process(id, 1, null, null, null)` raises 22023 'nothing to update'.
 11. With a row whose workmap fails WorkMapSchema (inserted as service role), `GET /api/processes` still answers 200
     without it and the server log names the row.
 12. On /agents, a card counts the agent's confirmed processes plus its unlinked legacy confirmed sessions; an agent
     whose only ready Work Map is a process shows 'Ready to teach' and is in the Ready filter. The agent page header,
     Processes and Guardrails tabs agree. Learn lists the same Work Maps; Start opens Teach on the process's newest
     linked capture session, and Teach shows the process's current Work Map (titled by the process).
+13. `PATCH /api/processes/<id> {}` (or only `expected_version`) answers 400. `PATCH {title, source_session_id}` with a
+    session already linked to another process answers 409 `session_linked` and changes nothing; the same session on
+    its own process is fine. `POST /api/processes` with such a session answers 409 too.
+14. As owner, delete a backfilled process (204): `select * from public.processes_tombstones` lists its source session.
+    `POST /api/processes/backfill` again answers `{created: 0}`, the process stays deleted.
 
 Rollback: supabase/rollbacks/20261004030000_processes.down.sql (lossy: drops processes, versions and sessions.process_id),
 then `supabase migration repair --status reverted 20261004030000`.

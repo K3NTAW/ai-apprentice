@@ -37,9 +37,11 @@ import {
   inRange,
   isOffRecord,
   isValidAgentId,
+  EmptyProcessPatchError,
   InvalidWorkMapError,
   isValidProcessId,
   processNewestFirst,
+  ProcessDeletedError,
   ProcessesUnavailableError,
   ProcessExistsError,
   ProcessNotFoundError,
@@ -47,6 +49,7 @@ import {
   RECENT_SESSIONS_DEFAULT,
   recognizersFromSettings,
   redactOpts,
+  SessionLinkedError,
   SessionNotFoundError,
   type OffRecordRange,
   type Process,
@@ -155,6 +158,14 @@ export function isProcessesMissing(error: unknown): boolean {
   // public.update_process missing (42883 undefined function, PostgREST PGRST202).
   if (e.code === "42883" || e.code === "PGRST202") return mentions;
   return false;
+}
+
+/**
+ * create_process and update_process raise PT409 'session_linked' when the source session is linked to another
+ * process. Checked before isVersionConflict (same SQLSTATE).
+ */
+function isSessionLinked(error: unknown): boolean {
+  return errorMentions(error, "session_linked");
 }
 
 /** update_process raises PT409 (PostgREST answers 409) when the process is no longer at the expected version. */
@@ -779,6 +790,8 @@ export function createSupabaseStore(
         p_backfill: input.backfill === true,
       });
       if (isProcessAgentFkViolation(res.error)) throw new AgentNotFoundError(input.agent_id);
+      if (res.error && input.source_session_id && isSessionLinked(res.error)) throw new SessionLinkedError(input.source_session_id);
+      if (res.error && input.source_session_id && errorMentions(res.error, "process_deleted")) throw new ProcessDeletedError(input.source_session_id);
       if (res.error && errorCode(res.error) === "23505" && input.source_session_id) throw new ProcessExistsError(input.source_session_id);
       if (res.error && errorCode(res.error) === "22023" && errorMentions(res.error, "workmap")) throw new InvalidWorkMapError();
       if (isNoDataFound(res.error)) {
@@ -805,8 +818,10 @@ export function createSupabaseStore(
         p_title: patch.title ?? null,
         p_archived: patch.archived ?? null,
       });
+      if (res.error && patch.source_session_id && isSessionLinked(res.error)) throw new SessionLinkedError(patch.source_session_id);
       if (isVersionConflict(res.error)) throw new ProcessVersionConflictError(id, expected);
       if (res.error && errorCode(res.error) === "22023" && errorMentions(res.error, "workmap")) throw new InvalidWorkMapError();
+      if (res.error && errorCode(res.error) === "22023" && errorMentions(res.error, "nothing to update")) throw new EmptyProcessPatchError();
       if (isNoDataFound(res.error)) {
         if (patch.source_session_id && errorMentions(res.error, "session")) throw new SessionNotFoundError(patch.source_session_id);
         throw new ProcessNotFoundError(id);
