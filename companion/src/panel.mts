@@ -1,8 +1,8 @@
 // Floating panel: pure view model. main.mts feeds it live state; the renderer only sets textContent.
 import { checkAppUrl } from "./appUrl.mjs";
 import type { Allowlist } from "./origin.mjs";
-import { pairingViewModel, type PairingView, type PairingViewInput } from "./pairingWindow.mjs";
-import type { SessionStateMessage } from "./protocol.mjs";
+import { missingPermissions, type PermissionKey } from "./pairingWindow.mjs";
+import type { Permissions, SessionStateMessage } from "./protocol.mjs";
 import { displayAccelerator, SHORTCUT_ACTIONS, SHORTCUT_LABELS, type Bindings, type Platform, type ShortcutAction } from "./shortcuts.mjs";
 
 /** Panel buttons; each sends the same action as its shortcut. */
@@ -13,7 +13,12 @@ export function isPanelAction(v: unknown): v is PanelAction {
   return typeof v === "string" && (PANEL_ACTIONS as readonly string[]).includes(v);
 }
 
-export type PanelInput = PairingViewInput & {
+export type PanelInput = {
+  /** A page is connected (the main window's bridge, or the paired WebSocket client with COMPANION_WS=1). */
+  paired: boolean;
+  permissions: Pick<Permissions, PermissionKey>;
+  /** WebSocket server error (COMPANION_WS=1 only). */
+  serverError?: string | null;
   platform: Platform;
   paused: boolean;
   session: SessionStateMessage | null;
@@ -27,10 +32,19 @@ export type PanelInput = PairingViewInput & {
   buddyForcedOff: boolean;
 };
 
+/** The panel's status line: the app runs the control room itself, so there is no pairing step. */
+export const STATUS_TEXT = "Running in AI Apprentice";
+
+export type PanelStatus = {
+  text: string;
+  /** Permission state, e.g. 'permissions granted' or 'missing: accessibility, screen recording (window titles)'. */
+  permissionText: string;
+  ok: boolean;
+  missing: { key: PermissionKey; label: string; button: string }[];
+};
+
 export type PanelView = {
-  pairing: PairingView;
-  /** Not paired yet: the panel shows the pairing code view first. */
-  firstRun: boolean;
+  status: PanelStatus;
   showPermissions: boolean;
   paused: boolean;
   session: {
@@ -54,13 +68,18 @@ export type PanelView = {
 const MODE_LABELS = { capture: "Capture", teach: "Teach" } as const;
 
 export function panelViewModel(input: PanelInput): PanelView {
-  const pairing = pairingViewModel(input);
   const darwin = input.platform === "darwin";
   const s = input.paired ? input.session : null;
+  // Only macOS has permission prompts the panel can open; elsewhere nothing is missing.
+  const missing = darwin ? missingPermissions(input.permissions) : [];
+  const permissionText = input.serverError
+    ? `error: ${input.serverError}`
+    : missing.length > 0
+      ? `missing: ${missing.map((m) => m.label.toLowerCase()).join(", ")}`
+      : "permissions granted";
   return {
-    pairing: darwin ? pairing : { ...pairing, missing: [] },
-    firstRun: !input.paired,
-    showPermissions: darwin && pairing.missing.length > 0,
+    status: { text: STATUS_TEXT, permissionText, ok: missing.length === 0 && !input.serverError, missing },
+    showPermissions: missing.length > 0,
     paused: input.paused,
     session: {
       modeLabel: s?.mode ? MODE_LABELS[s.mode] : "No session",
@@ -130,4 +149,21 @@ export function materialOptions(material: PanelMaterial): { vibrancy?: "under-wi
   if (material === "vibrancy") return { vibrancy: "under-window", visualEffectState: "active", backgroundColor: "#00000000" };
   if (material === "mica" || material === "acrylic") return { backgroundMaterial: material, backgroundColor: "#00000000" };
   return { backgroundColor: SOLID_BACKGROUND };
+}
+
+/** FloatPanel.dc.html size. */
+export const PANEL_SIZE = { width: 520, height: 680 } as const;
+
+type Area = { x: number; y: number; width: number; height: number };
+
+/** The panel at the canvas size, shrunk to fit the work area and centred inside it (whole DIP). */
+export function panelBounds(workArea: Area, size: { width: number; height: number } = PANEL_SIZE): Area {
+  const width = Math.max(1, Math.min(size.width, Math.floor(workArea.width)));
+  const height = Math.max(1, Math.min(size.height, Math.floor(workArea.height)));
+  return {
+    x: Math.round(workArea.x + (workArea.width - width) / 2),
+    y: Math.round(workArea.y + (workArea.height - height) / 2),
+    width,
+    height,
+  };
 }

@@ -106,3 +106,29 @@ export class HaloStore {
     return [...this.entries.values()].map((e) => e.halo);
   }
 }
+
+export type OverlayViewInput<V extends { target: { rect: Rect } | null; halos: Halo[] }, A> = {
+  view: V;
+  avatar: A;
+  /** Rects are normalised to the primary display, so halos and pointing targets draw only there. */
+  isPrimary: boolean;
+  display: DisplayInfo;
+  /** session.state off_record, the same source the dock uses. */
+  offRecord: boolean;
+};
+
+/**
+ * What one overlay window draws. Off the record nothing on screen points at the user's work: no target
+ * (so no flight and no dotted path) and no halos; the flag is passed on so overlay.js clears a running path.
+ */
+export function overlayViewModel<V extends { target: { rect: Rect } | null; halos: Halo[] }, A>(input: OverlayViewInput<V, A>) {
+  const { view, display, offRecord } = input;
+  const draw = input.isPrimary && !offRecord;
+  return {
+    ...view,
+    avatar: input.avatar,
+    offRecord,
+    target: draw && view.target ? { ...view.target, rect: mapRect(view.target.rect, display) } : null,
+    halos: draw ? view.halos.map((h) => ({ ...h, rect: mapRect(h.rect, display) })) : [],
+  };
+}

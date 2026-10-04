@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { appAllowlist, resolveAppUrl, validateAppUrl, wsEnabled } from "./appConfig.mjs";
+import { panelBounds, PANEL_SIZE } from "./panel.mjs";
 import { isWindowAction, MAIN_WINDOW, planWindowAction, restoreWindowBounds, serializeWindowBounds, type WindowSnapshot } from "./windowActions.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -54,6 +55,39 @@ describe("window state", () => {
   });
 });
 
+describe("panel window bounds", () => {
+  it("keeps the canvas size 520x680 when it fits, centred in the work area", () => {
+    expect(PANEL_SIZE).toEqual({ width: 520, height: 680 });
+    expect(panelBounds({ x: 0, y: 25, width: 1512, height: 920 })).toEqual({ x: 496, y: 145, width: 520, height: 680 });
+  });
+
+  it("is clamped and positioned inside a 1280x720 work area", () => {
+    for (const area of [
+      { x: 0, y: 0, width: 1280, height: 720 },
+      { x: 0, y: 25, width: 1280, height: 672 },
+      { x: -1280, y: 40, width: 1280, height: 720 },
+    ]) {
+      const b = panelBounds(area);
+      expect(b.width).toBe(520);
+      expect(b.height).toBe(Math.min(680, area.height));
+      expect(b.x).toBeGreaterThanOrEqual(area.x);
+      expect(b.y).toBeGreaterThanOrEqual(area.y);
+      expect(b.x + b.width).toBeLessThanOrEqual(area.x + area.width);
+      expect(b.y + b.height).toBeLessThanOrEqual(area.y + area.height);
+    }
+    expect(panelBounds({ x: 0, y: 25, width: 1280, height: 672 })).toEqual({ x: 380, y: 25, width: 520, height: 672 });
+    expect(panelBounds({ x: 0, y: 0, width: 400, height: 300 })).toEqual({ x: 0, y: 0, width: 400, height: 300 });
+  });
+
+  it("main.mts sizes the panel from panelBounds on the current display's work area", () => {
+    const src = fs.readFileSync(path.join(here, "main.mts"), "utf8");
+    const start = src.indexOf("function showPanel(");
+    const body = src.slice(start, src.indexOf("\n}\n", start));
+    expect(body).toMatch(/panelBounds\(screen\.getDisplayNearestPoint\(screen\.getCursorScreenPoint\(\)\)\.workArea\)/);
+    expect(body).not.toMatch(/width: 520/);
+  });
+});
+
 describe("app config and the WebSocket switch", () => {
   it("the WebSocket server does not start unless COMPANION_WS=1", () => {
     expect(wsEnabled({})).toBe(false);
@@ -64,7 +98,7 @@ describe("app config and the WebSocket switch", () => {
   it("main.mts starts the server and pairing only behind COMPANION_WS=1", () => {
     const src = fs.readFileSync(path.join(here, "main.mts"), "utf8");
     expect(src).toMatch(/const wsOn = wsEnabled\(process\.env\);/);
-    expect(src).toMatch(/const pairing = wsOn\s*\?/);
+    expect(src).toMatch(/const pairing = wsOn\s*\? createWsPairing\(/);
     expect(src).toMatch(/async function startWsServer\(\): Promise<void> \{\n\s+if \(!pairing\) return;/);
     expect(src.match(/startServer\(/g)).toHaveLength(1);
   });

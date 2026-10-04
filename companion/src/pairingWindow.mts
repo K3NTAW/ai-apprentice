@@ -39,12 +39,17 @@ export type PairingView = {
   missing: { key: PermissionKey; label: string; button: string }[];
 };
 
+/** Permissions not granted yet, in a fixed order, with their settings button labels. */
+export function missingPermissions(permissions: Pick<Permissions, PermissionKey>): { key: PermissionKey; label: string; button: string }[] {
+  return ORDER.filter((k) => !permissions[k]).map((key) => ({ key, ...PERMISSION_LABELS[key] }));
+}
+
 export function pairingViewModel(input: PairingViewInput): PairingView {
   const stateText = input.serverError ? `Error: ${input.serverError}` : input.paired ? "Paired with web app" : "Not paired";
   return {
     code: splitCode(input.code),
     paired: input.paired,
     stateText,
-    missing: ORDER.filter((k) => !input.permissions[k]).map((key) => ({ key, ...PERMISSION_LABELS[key] })),
+    missing: missingPermissions(input.permissions),
   };
 }

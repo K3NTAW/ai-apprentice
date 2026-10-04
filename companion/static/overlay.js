@@ -14,7 +14,7 @@ const OFFSET = 18;
 const FLY_MS = 400;
 const MODES = ["idle", "listening", "thinking", "speaking", "paused"];
 
-let view = { buddy: false, mode: "idle", say: null, target: null, halos: [], avatar: null };
+let view = { buddy: false, mode: "idle", say: null, target: null, halos: [], avatar: null, offRecord: false };
 let half = 9;
 let pathShown = false;
 let cursor = null;
@@ -139,7 +139,12 @@ function frame(now) {
 
 window.companionOverlay.onView((next) => {
   view = next && typeof next === "object" ? next : view;
-  drawHalos(view.halos);
+  // Off the record: no halos and no dotted path, even if a stale view still carries them.
+  if (view.offRecord === true) {
+    flight = null;
+    clearPath();
+  }
+  drawHalos(view.offRecord === true ? [] : view.halos);
   const mode = MODES.includes(view.mode) ? view.mode : "idle";
   // The avatar (a validated data URL) only ever goes to the img src; null keeps the v2 orb.
   const hasAvatar = window.companionAvatar.setAvatarSrc(avatarEl, view.avatar);

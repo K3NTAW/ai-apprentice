@@ -39,11 +39,11 @@ import {
   surfaces,
   type DockAction,
 } from "./dock.mjs";
-import { mapRect, type DisplayInfo } from "./overlay.mjs";
+import { overlayViewModel, type DisplayInfo } from "./overlay.mjs";
 import type { Allowlist } from "./origin.mjs";
-import { Pairing } from "./pairing.mjs";
-import { isPanelAction, materialOptions, panelMaterial, panelViewModel, surfaceMaterial } from "./panel.mjs";
-import { formatPairingLine, isPermissionKey } from "./pairingWindow.mjs";
+import { createWsPairing } from "./pairing.mjs";
+import { isPanelAction, materialOptions, panelBounds, panelMaterial, panelViewModel, surfaceMaterial } from "./panel.mjs";
+import { isPermissionKey } from "./pairingWindow.mjs";
 import { canStartHook, PermissionMonitor, readPermissions } from "./permissions.mjs";
 import { allowDisplayMedia, checkPermission, DISPLAY_MEDIA_OPTIONS, grantPermission, isUrlAllowed, pickPrimarySource } from "./permissionsGrant.mjs";
 import { appMessage, chordMessage, parsePort, shortcutMessage, statusMessage, type Permissions, type ServerMessage, type SessionStateMessage } from "./protocol.mjs";
@@ -138,12 +138,7 @@ let keyTable: Record<string, number> = {};
 const aggregator = new ActivityAggregator(Date.now());
 const appTracker = new AppChangeTracker();
 // Pairing exists only with COMPANION_WS=1; nothing here deletes or rewrites pairing state on disk.
-const pairing = wsOn
-  ? new Pairing(undefined, (code) => {
-      console.log(formatPairingLine(code));
-      rebuildMenu();
-    })
-  : null;
+const pairing = wsOn ? createWsPairing(() => rebuildMenu()) : null;
 
 /** Companion -> web: the connected page (bridge) and, with COMPANION_WS=1, the paired WebSocket client. */
 const emit: (msg: ServerMessage) => void = createForwarder({
@@ -392,14 +387,8 @@ function pushView(): void {
   const display = primaryDisplay();
   for (const [id, win] of overlays) {
     if (win.isDestroyed()) continue;
-    const isPrimary = id === primary.id;
-    // Rects are normalised to the primary display, so halos and pointing targets draw only there.
-    win.webContents.send("buddy-view", {
-      ...view,
-      avatar,
-      target: isPrimary && view.target ? { ...view.target, rect: mapRect(view.target.rect, display) } : null,
-      halos: isPrimary ? view.halos.map((h) => ({ ...h, rect: mapRect(h.rect, display) })) : [],
-    });
+    // Same session.state / pause source as the dock: off the record clears the flight path and the halos.
+    win.webContents.send("buddy-view", overlayViewModel({ view, avatar, isPrimary: id === primary.id, display, offRecord: session?.off_record === true }));
   }
   updateCursorLoop();
   syncDock();
@@ -539,7 +528,6 @@ function registerShortcuts(): void {
 function panelView() {
   const s = settings.get();
   return panelViewModel({
-    code: pairing?.current() ?? "",
     paired,
     permissions: permissions(),
     serverError,
@@ -583,10 +571,11 @@ function showPanel(): void {
   // Shows in the Dock while open, so it is reachable when the tray item is hidden by the notch.
   void app.dock?.show();
   let material = panelMaterial(process.platform, process.getSystemVersion());
-  // FloatPanel.dc.html: 520 px wide. A material the OS refuses falls back to the solid canvas colour.
+  // FloatPanel.dc.html: 520x680, clamped to and placed inside the current display's work area.
+  // A material the OS refuses falls back to the solid canvas colour.
+  const bounds = panelBounds(screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea);
   const panelOptions = (m: typeof material): Electron.BrowserWindowConstructorOptions => ({
-    width: 520,
-    height: 680,
+    ...bounds,
     frame: false,
     resizable: false,
     maximizable: false,
@@ -660,9 +649,6 @@ ipcMain.on("panel-open-control-room", (e) => {
 ipcMain.on("panel-open-settings", (e, key: unknown) => {
   if (!fromPanel(e) || process.platform !== "darwin" || !isPermissionKey(key)) return;
   void shell.openExternal(SETTINGS[key]);
-});
-ipcMain.on("panel-new-code", (e) => {
-  if (fromPanel(e)) pairing?.rotate();
 });
 ipcMain.on("panel-set-binding", (e, action: unknown, accelerator: unknown) => {
   if (!fromPanel(e) || !isShortcutAction(action)) return;
@@ -1081,7 +1067,6 @@ async function boot(): Promise<void> {
   createMainWindow();
 
   if (pairing) {
-    console.log(formatPairingLine(pairing.current()));
     showPanel();
     await startWsServer();
   }

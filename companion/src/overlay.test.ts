@@ -1,5 +1,10 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { clampText, HALO_TTL_MS, HaloStore, mapRect, MAX_HALOS, MAX_TEXT, validateHalo, validateRect } from "./overlay.mjs";
+import { clampText, HALO_TTL_MS, HaloStore, mapRect, MAX_HALOS, MAX_TEXT, overlayViewModel, validateHalo, validateRect } from "./overlay.mjs";
+
+const here = path.dirname(fileURLToPath(import.meta.url));
 
 describe("halo rect validation", () => {
   it("accepts rects inside 0..1", () => {
@@ -87,5 +92,51 @@ describe("halo store", () => {
     s.upsert({ id: "h4", rect }, HALO_TTL_MS * 2);
     expect(s.expire(HALO_TTL_MS * 2 + 1)).toBe(true);
     expect(s.list().map((h) => h.id)).toEqual(["h4"]);
+  });
+});
+
+describe("overlay view model: off the record", () => {
+  const display = { bounds: { x: 0, y: 0, width: 1000, height: 1000 }, scaleFactor: 1 };
+  const rect = { x: 0.1, y: 0.2, w: 0.3, h: 0.1 };
+  const view = {
+    buddy: true,
+    mode: "speaking" as const,
+    say: "here",
+    target: { id: "t", rect, style: "stop" as const },
+    halos: [{ id: "t", rect, text: "this field" }],
+  };
+
+  it("on the record: target and halos are mapped on the primary display only", () => {
+    const v = overlayViewModel({ view, avatar: null, isPrimary: true, display, offRecord: false });
+    expect(v.offRecord).toBe(false);
+    expect(v.target).toEqual({ id: "t", style: "stop", rect: { x: 100, y: 200, w: 300, h: 100 } });
+    expect(v.halos).toEqual([{ id: "t", text: "this field", rect: { x: 100, y: 200, w: 300, h: 100 } }]);
+    const other = overlayViewModel({ view, avatar: null, isPrimary: false, display, offRecord: false });
+    expect(other.target).toBeNull();
+    expect(other.halos).toEqual([]);
+  });
+
+  it("offRecord clears the dotted path and the halo", async () => {
+    const v = overlayViewModel({ view, avatar: null, isPrimary: true, display, offRecord: true });
+    expect(v.offRecord).toBe(true);
+    expect(v.target).toBeNull();
+    expect(v.halos).toEqual([]);
+
+    // The renderer's path gate (static/flightPath.js) refuses the path while off the record.
+    await import("../static/flightPath.js");
+    const geo = (globalThis as unknown as { companionPath: { showPath(o: object): boolean } }).companionPath;
+    const flying = { flying: true, visible: true, reducedMotion: false, paused: false };
+    expect(geo.showPath({ ...flying, offRecord: false })).toBe(true);
+    expect(geo.showPath({ ...flying, offRecord: true })).toBe(false);
+
+    // overlay.js feeds view.offRecord to the gate, clears a running path and draws no halos while off the record.
+    const js = fs.readFileSync(path.join(here, "..", "static", "overlay.js"), "utf8");
+    expect(js).toContain('offRecord: view.offRecord === true');
+    expect(js).toMatch(/if \(view\.offRecord === true\) \{\s*flight = null;\s*clearPath\(\);/);
+    expect(js).toContain("drawHalos(view.offRecord === true ? [] : view.halos)");
+
+    // main.mts feeds it from session.state, the same source the dock uses.
+    const main = fs.readFileSync(path.join(here, "main.mts"), "utf8");
+    expect(main).toMatch(/overlayViewModel\(\{[^}]*offRecord: session\?\.off_record === true/);
   });
 });

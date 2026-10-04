@@ -1,10 +1,14 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { checkAppUrl } from "./appUrl.mjs";
 import { buildAllowlist } from "./origin.mjs";
-import { isPanelAction, panelMaterial, panelViewModel, type PanelInput } from "./panel.mjs";
+import { isPanelAction, panelMaterial, panelViewModel, STATUS_TEXT, type PanelInput } from "./panel.mjs";
 import { parseClientMessage, SESSION_LIMITS, type SessionStateMessage } from "./protocol.mjs";
 import { defaultBindings } from "./shortcuts.mjs";
 
+const here = path.dirname(fileURLToPath(import.meta.url));
 const allowlist = buildAllowlist({ appOrigin: "https://app.example.com", isPackaged: false, env: undefined });
 const session: SessionStateMessage = {
   type: "session.state",
@@ -21,7 +25,6 @@ const session: SessionStateMessage = {
 
 function input(over: Partial<PanelInput> = {}): PanelInput {
   return {
-    code: "123456",
     paired: true,
     permissions: { input: true, screen: false, accessibility: true },
     serverError: null,
@@ -41,7 +44,6 @@ function input(over: Partial<PanelInput> = {}): PanelInput {
 describe("panel view model", () => {
   it("shows the session from session.state", () => {
     const v = panelViewModel(input());
-    expect(v.firstRun).toBe(false);
     expect(v.session).toEqual({
       modeLabel: "Teach",
       title: "Invoice approval",
@@ -57,10 +59,40 @@ describe("panel view model", () => {
     expect(v.shortcuts.find((s) => s.action === "talk")).toMatchObject({ display: "Option+Space", error: null });
   });
 
-  it("first run shows the pairing code; no session data while unpaired", () => {
+  it("shows 'Running in AI Apprentice' with the permission state", () => {
+    expect(STATUS_TEXT).toBe("Running in AI Apprentice");
+    const missing = panelViewModel(input());
+    expect(missing.status).toMatchObject({ text: "Running in AI Apprentice", permissionText: "missing: screen recording (window titles)", ok: false });
+    expect(missing.status.missing.map((m) => m.key)).toEqual(["screen"]);
+    const granted = panelViewModel(input({ permissions: { input: true, screen: true, accessibility: true } }));
+    expect(granted.status).toEqual({ text: "Running in AI Apprentice", permissionText: "permissions granted", ok: true, missing: [] });
+    expect(granted.showPermissions).toBe(false);
+    expect(panelViewModel(input({ serverError: "port 47321 is in use" })).status.permissionText).toBe("error: port 47321 is in use");
+  });
+
+  it("no pairing UI by default; Pairing imports are gone from main.mts", () => {
     const v = panelViewModel(input({ paired: false }));
-    expect(v.firstRun).toBe(true);
-    expect(v.pairing.code).toBe("123 456");
+    expect(v).not.toHaveProperty("pairing");
+    expect(v).not.toHaveProperty("firstRun");
+    expect(v.status.text).toBe("Running in AI Apprentice");
+    const html = fs.readFileSync(path.join(here, "..", "static", "panel.html"), "utf8");
+    const js = fs.readFileSync(path.join(here, "..", "static", "panel.js"), "utf8");
+    for (const src of [html, js]) {
+      expect(src).not.toMatch(/pairing|new-code|newCode/i);
+    }
+    expect(html).toContain('id="state"');
+    expect(html).toContain('id="perm"');
+    expect(js).toContain("status.text");
+    expect(js).toContain("status.permissionText");
+    expect(fs.readFileSync(path.join(here, "panelPreload.cts"), "utf8")).not.toContain("panel-new-code");
+    const main = fs.readFileSync(path.join(here, "main.mts"), "utf8");
+    expect(main).not.toMatch(/import \{[^}]*\bPairing\b[^}]*\}/);
+    expect(main).not.toContain("formatPairingLine");
+    expect(main).not.toContain("panel-new-code");
+  });
+
+  it("no session data while unpaired", () => {
+    const v = panelViewModel(input({ paired: false }));
     expect(v.session.modeLabel).toBe("No session");
     expect(v.actionsEnabled).toBe(false);
     expect(v.canOpenControlRoom).toBe(false);
@@ -70,7 +102,8 @@ describe("panel view model", () => {
     expect(panelViewModel(input()).showPermissions).toBe(true);
     const win = panelViewModel(input({ platform: "win32", bindings: defaultBindings("win32"), talkMode: "toggle", registrationErrors: { talk: "in use" } }));
     expect(win.showPermissions).toBe(false);
-    expect(win.pairing.missing).toEqual([]);
+    expect(win.status.missing).toEqual([]);
+    expect(win.status.permissionText).toBe("permissions granted");
     expect(win.shortcuts.find((s) => s.action === "talk")).toMatchObject({ display: "Alt+Space", error: "in use" });
     expect(win.talkHint).toMatch(/press once/);
     expect(isPanelAction("end_task")).toBe(true);

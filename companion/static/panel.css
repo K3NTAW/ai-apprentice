@@ -15,11 +15,10 @@ html[data-material="vibrancy"] .sheet, html[data-material="mica"] .sheet, html[d
 .orb { width: 18px; height: 18px; border-radius: 50%; background: var(--bl); box-shadow: 0 0 12px rgba(15,127,255,.6); }
 .who { display: flex; flex-direction: column; min-width: 0; flex: 1; }
 .brand { font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
-.state.paired { color: var(--gr); }
+.state.ok { color: var(--gr); }
 .btn.sq { width: 32px; height: 32px; padding: 0; }
 .card { border-radius: 18px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
 .session { display: flex; flex-direction: column; gap: 16px; }
-.code { font-size: 34px; font-weight: 600; letter-spacing: .08em; }
 .between { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
 .tags { display: inline-flex; gap: 6px; }
 .tag { display: inline-flex; align-items: center; height: 22px; padding: 0 9px; border-radius: 999px; font-size: 12px; font-weight: 500; background: var(--s3); color: var(--mu); }

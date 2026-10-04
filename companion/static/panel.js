@@ -8,7 +8,6 @@ const show = (el, on) => el.classList.toggle("hidden", !on);
 
 document.documentElement.dataset.material = new URLSearchParams(location.search).get("material") || "solid";
 $("hide").addEventListener("click", () => api.hide());
-$("new-code").addEventListener("click", () => api.newCode());
 $("control-room").addEventListener("click", () => api.openControlRoom());
 $("reset").addEventListener("click", () => api.resetBindings());
 $("buddy").addEventListener("change", (e) => api.setBuddy(e.target.checked));
@@ -51,12 +50,10 @@ window.addEventListener("keydown", (e) => {
 
 api.onState((v) => {
   if (!v || typeof v !== "object") return;
-  const pairing = v.pairing || {};
-  $("state").textContent = str(pairing.stateText);
-  $("state").className = pairing.paired ? "xs mu state paired" : "xs mu state";
-  $("code").textContent = str(pairing.code);
-  show($("pairing"), v.firstRun === true);
-  show($("session"), v.firstRun !== true);
+  const status = v.status || {};
+  $("state").textContent = str(status.text);
+  $("perm").textContent = str(status.permissionText);
+  $("perm").className = status.ok === true ? "xs mu state ok" : "xs mu state";
 
   const s = v.session || {};
   $("mode").textContent = str(s.modeLabel);
@@ -73,7 +70,7 @@ api.onState((v) => {
 
   show($("permissions"), v.showPermissions === true);
   $("missing").replaceChildren();
-  for (const m of Array.isArray(pairing.missing) ? pairing.missing : []) {
+  for (const m of Array.isArray(status.missing) ? status.missing : []) {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "btn bw";

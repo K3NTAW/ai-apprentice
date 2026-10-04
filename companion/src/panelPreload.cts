@@ -15,9 +15,6 @@ contextBridge.exposeInMainWorld("companionPanel", {
   openSettings(key: string) {
     ipcRenderer.send("panel-open-settings", String(key));
   },
-  newCode() {
-    ipcRenderer.send("panel-new-code");
-  },
   setBinding(action: string, accelerator: string) {
     ipcRenderer.send("panel-set-binding", String(action), String(accelerator));
   },

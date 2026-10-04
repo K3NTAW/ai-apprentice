@@ -1,6 +1,7 @@
 // Pairing codes: crypto.randomInt, length-safe constant-time compare. Failed attempts are
 // counted per Origin in session.mts, so failures never rotate the displayed code.
 import { createHash, randomInt, timingSafeEqual } from "node:crypto";
+import { formatPairingLine } from "./pairingWindow.mjs";
 
 export const CODE_LENGTH = 6;
 
@@ -38,4 +39,14 @@ export class Pairing {
   check(token: string): boolean {
     return /^\d{6}$/.test(token) && codesEqual(token, this.code);
   }
+}
+
+/** COMPANION_WS=1 only: the pairing code flow, printing the code line on launch and on every rotation. */
+export function createWsPairing(onRotate: () => void): Pairing {
+  const p = new Pairing(undefined, (code) => {
+    console.log(formatPairingLine(code));
+    onRotate();
+  });
+  console.log(formatPairingLine(p.current()));
+  return p;
 }
