@@ -7,8 +7,9 @@ import type { Role } from "@/lib/auth/context";
 import type { Agent } from "@/lib/types";
 import { guardrailKindLabel } from "@/lib/workmap/view";
 import AgentAvatar from "./AgentAvatar";
-import { Badge, Card, Chord, ScoreBar, buttonClass, Tabs, type BadgeKind } from "@/components/ui";
+import { Badge, Card, ScoreBar, buttonClass, Tabs, type BadgeKind } from "@/components/ui";
 import AgentSettings from "./AgentSettings";
+import ShortcutsTab from "./ShortcutsTab";
 import {
   AGENT_TABS,
   agentHref,
@@ -50,7 +51,7 @@ const Intro = ({ children, action }: { children: React.ReactNode; action?: React
   </div>
 );
 const GUARD_KIND: Record<GuardrailRow["kind"], BadgeKind> = { limit: "limit", exception: "exception", stop_and_ask: "stop_and_ask" };
-const quoteStyle = { fontFamily: "'Instrument Serif', Georgia, serif", fontStyle: "italic" as const, fontSize: 17, lineHeight: 1.3 };
+const quoteStyle = { fontFamily: "var(--font-serif)", fontStyle: "italic" as const, fontSize: 17, lineHeight: 1.3 };
 
 function Processes({ rows, agentId, role }: { rows: ProcessRow[]; agentId: string; role: Role | null }) {
   const train = canCapture(role) && (
@@ -102,54 +103,25 @@ function Processes({ rows, agentId, role }: { rows: ProcessRow[]; agentId: strin
   );
 }
 
-const SHORTCUT_COLS = "150px 100px 190px minmax(0, 1fr)";
-
-function Shortcuts({ rows, expert }: { rows: ShortcutRow[]; expert: string }) {
-  if (rows.length === 0)
-    return <Empty>No shortcuts recorded yet. The companion records the chords the expert uses while training.</Empty>;
-  return (
-    <div className="flex flex-col" style={{ gap: 14 }}>
-      <Intro>Shortcuts {expert} used while training, with why they use them. Learners see these as hints.</Intro>
-      <Card style={{ overflowX: "auto" }}>
-        <div role="table" aria-label="Shortcuts" style={{ minWidth: 760 }}>
-          <div role="row" className="grid text-xs" style={{ gridTemplateColumns: SHORTCUT_COLS, gap: 16, padding: "12px 20px", borderBottom: "1px solid var(--ln)", fontWeight: 500, color: "var(--fa)" }}>
-            <span role="columnheader">Chord</span>
-            <span role="columnheader">App</span>
-            <span role="columnheader">What it does</span>
-            <span role="columnheader">Why, in {expert}&apos;s words</span>
-          </div>
-          {rows.map((s) => (
-            <div key={`${s.chord}|${s.app}`} role="row" className="grid items-center" style={{ gridTemplateColumns: SHORTCUT_COLS, gap: 16, padding: "14px 20px", borderBottom: "1px solid var(--ln)" }}>
-              <span role="cell">
-                {/* keycaps for the eye, "Cmd+Shift+T" for screen readers and page search */}
-                <span className="sr-only">{s.chord.split(/[+\s]+/).filter(Boolean).join("+")}</span>
-                <span aria-hidden="true">
-                  <Chord keys={s.chord.split(/[+\s]+/).filter(Boolean)} />
-                </span>
-              </span>
-              <span role="cell" style={{ color: "var(--mu)" }}>
-                {s.app}
-              </span>
-              <span role="cell">{s.what}</span>
-              <span role="cell">{s.why && <q style={{ ...quoteStyle, quotes: "none" }}>{s.why}</q>}</span>
-            </div>
-          ))}
-        </div>
-      </Card>
-    </div>
-  );
-}
-
 function Guardrails({ rows }: { rows: GuardrailRow[] }) {
   if (rows.length === 0) return <Empty>No guardrails yet. They come from the agent&apos;s confirmed Work Maps.</Empty>;
   const n = (k: GuardrailRow["kind"]) => rows.filter((g) => g.kind === k).length;
   return (
     <div className="flex flex-col" style={{ gap: 14 }}>
-      <div className="flex flex-wrap" style={{ gap: 8 }}>
-        <Badge kind="accent">All {rows.length}</Badge>
-        <Badge kind="limit">Limit {n("limit")}</Badge>
-        <Badge kind="exception">Exception {n("exception")}</Badge>
-        <Badge kind="stop_and_ask">Stop and ask {n("stop_and_ask")}</Badge>
+      <div className="flex flex-wrap items-center justify-between" style={{ gap: 12 }}>
+        <div className="flex flex-wrap" style={{ gap: 8 }}>
+          <Badge kind="accent">All {rows.length}</Badge>
+          <Badge kind="limit">Limit {n("limit")}</Badge>
+          <Badge kind="exception">Exception {n("exception")}</Badge>
+          <Badge kind="stop_and_ask">Stop and ask {n("stop_and_ask")}</Badge>
+        </div>
+        {/* existing per-session export (GET /api/export), for the agent's first confirmed Work Map */}
+        <a className={buttonClass("secondary", "sm")} href={`/api/export?session_id=${encodeURIComponent(rows[0].sessionId)}`} download>
+          <svg className="ui-ic" viewBox="0 0 24 24" style={{ width: 16, height: 16 }} aria-hidden="true">
+            <path d="M12 4v11M7 10l5 5 5-5M5 20h14" />
+          </svg>
+          Export guardrails
+        </a>
       </div>
       <div className="flex flex-col" style={{ gap: 10 }}>
         {rows.map((g, i) => (
@@ -159,14 +131,25 @@ function Guardrails({ rows }: { rows: GuardrailRow[] }) {
             </Badge>
             <div className="flex min-w-0 flex-col" style={{ gap: 8 }}>
               <span className="ui-t3">{g.rule}</span>
-              {g.quote && <q style={{ ...quoteStyle, color: "var(--mu)" }}>{g.quote}</q>}
+              {g.quote && (
+                <span data-testid="guardrail-quote" style={{ ...quoteStyle, color: "var(--mu)" }}>
+                  &ldquo;{g.quote}&rdquo;
+                </span>
+              )}
               <span className="text-xs" style={{ color: "var(--fa)" }}>
                 {g.task} · step {g.step}
               </span>
             </div>
-            <Link className={buttonClass("secondary", "sm")} href={g.href}>
-              Screen moment <span className="ui-mono">{g.at}</span>
-            </Link>
+            <div className="flex flex-col items-end" style={{ gap: 8 }}>
+              <Link className={buttonClass("secondary", "sm")} href={g.href}>
+                <svg className="ui-ic" data-testid="play-icon" viewBox="0 0 24 24" style={{ width: 14, height: 14 }} aria-hidden="true">
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+                Screen moment <span className="ui-mono">{g.at}</span>
+              </Link>
+              {/* every row comes from a Work Map the expert confirmed */}
+              <Badge kind="confirmed">Confirmed</Badge>
+            </div>
           </Card>
         ))}
       </div>
@@ -299,7 +282,14 @@ export default function AgentDetail(props: AgentDetailProps) {
       </nav>
       <section>
         {tab === "processes" && <Processes rows={props.processes} agentId={agent.id} role={role} />}
-        {tab === "shortcuts" && <Shortcuts rows={props.shortcuts} expert={agent.expert_name ?? "the expert"} />}
+        {tab === "shortcuts" &&
+          (props.shortcuts.length === 0 ? (
+            <Empty>No shortcuts recorded yet. The companion records the chords the expert uses while training.</Empty>
+          ) : (
+            <div className="flex flex-col" style={{ gap: 14 }}>
+              <ShortcutsTab rows={props.shortcuts} expert={agent.expert_name ?? "the expert"} />
+            </div>
+          ))}
         {tab === "guardrails" && <Guardrails rows={props.guardrails} />}
         {tab === "learners" && <Learners rows={props.learners} />}
         {tab === "settings" && <AgentSettings agent={agent} role={role} />}

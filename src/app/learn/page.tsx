@@ -1,7 +1,8 @@
 // Learn: a new employee picks an agent with a confirmed process, then a process; Teach starts with ?agent&session.
 import { redirect } from "next/navigation";
 import LearnView from "@/components/agents/LearnView";
-import { learnAgents, learnProcesses, parseId } from "@/components/agents/model";
+import { learnAgents, learnProcesses, learnTraining, parseId } from "@/components/agents/model";
+import { memberName } from "@/components/agents/NewAgentFlow";
 import PageMessage from "@/components/agents/PageMessage";
 import AppShell from "@/components/shell/AppShell";
 import { getRequestContext } from "@/lib/auth/context";
@@ -28,6 +29,8 @@ async function body(agentId: string | null) {
         selected={selected}
         processes={selected ? learnProcesses(selected.id, input.sessions) : []}
         unknownAgent={agentId !== null && selected === null}
+        training={learnTraining(input.agents, input.sessions)}
+        firstName={result.ctx.email ? memberName(result.ctx.email).split(" ")[0] : null}
       />
     );
   } catch (err) {

@@ -39,6 +39,11 @@
   /* Halo (Components.dc.html .halo, aa-halo) */
   --halo: #FF7A45;
 
+  /* Landing hero agent Pip (Main.dc.html avatar body and accent). Mirrored in src/components/ui/avatarTokens.ts
+     because the avatar SVG is an <img> data URL and cannot resolve CSS variables. */
+  --avatar-pip-body: #ECEAE5;
+  --avatar-pip-accent: #3A4EFD;
+
   /* Radii (Components.dc.html) */
   --r-tick: 2px;
   --r-key: 7px;

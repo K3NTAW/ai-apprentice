@@ -14,6 +14,9 @@ const instrumentSerif = localFont({
   variable: "--font-instrument-serif",
 });
 
+// ?theme=light|dark forces the theme (headless design compare shots); a static script, no user input is echoed.
+const THEME_PARAM = `(function(){var t=new URLSearchParams(location.search).get("theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)})()`;
+
 const FONT_CLASS = `${GeistSans.variable} ${GeistMono.variable} ${instrumentSerif.variable}`;
 
 export const metadata: Metadata = {
@@ -27,7 +30,10 @@ export default async function RootLayout({
   await connection();
   const misconfigured = appMode() === "misconfigured";
   return (
-    <html lang="en" className={FONT_CLASS}>
+    <html lang="en" className={FONT_CLASS} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_PARAM }} />
+      </head>
       <body className="antialiased">
         {misconfigured && (
           <div role="alert" className="border-b border-amber-300 bg-amber-50 px-8 py-2 text-sm text-amber-900">

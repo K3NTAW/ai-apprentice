@@ -537,6 +537,7 @@ function TeachInner({ sessionId, localMode, agentParam = null, transport }: Teac
       textMode={textMode}
       host={host}
       companion={{ status: companionStatus, permissions: companionPerms, onPair: (code) => companionRef.current?.pair(code) ?? false }}
+      agentName={agentLoad.status === "ok" ? agentLoad.agent.name : null}
       currentStep={currentStep}
       transcript={transcript}
       intervention={intervention}

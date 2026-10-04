@@ -4,6 +4,7 @@
 import Link from "next/link";
 import { Badge, buttonClass } from "@/components/ui";
 import AgentAvatar from "@/components/agents/AgentAvatar";
+import { AVATAR_TOKENS } from "@/components/ui/avatarTokens";
 import BrandMark from "./BrandMark";
 
 export const STEPS = [
@@ -48,7 +49,7 @@ const faint = { color: "var(--fa)" } as const;
 const wrap = "mx-auto max-w-[1240px] px-5 sm:px-8";
 const row = "grid grid-cols-[56px_minmax(0,1fr)_92px_128px] gap-3 px-[18px]";
 
-const PIP = { shape: "blob", face: "curious", color: "#ECEAE5", accent: "#3A4EFD" };
+const PIP = { shape: "blob", face: "curious", color: AVATAR_TOKENS["--avatar-pip-body"], accent: AVATAR_TOKENS["--avatar-pip-accent"] };
 
 function CostCenter({ value }: { value: string }) {
   if (value.includes("→")) {

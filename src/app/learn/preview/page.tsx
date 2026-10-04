@@ -1,8 +1,9 @@
 import { notFound } from "next/navigation";
 import LearnView from "@/components/agents/LearnView";
-import { learnAgents, learnProcesses } from "@/components/agents/model";
+import { learnAgents, learnProcesses, learnTraining } from "@/components/agents/model";
 import AppShell from "@/components/shell/AppShell";
-import { previewAgents, previewSessions } from "@/lib/fixtures/agents";
+import { previewAgents } from "@/lib/fixtures/agents";
+import { previewSessionsFull as previewSessions } from "@/lib/fixtures/preview";
 import { appMode } from "@/lib/supabase/env";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +15,7 @@ export default function LearnPreviewPage() {
   const selected = agents.find((a) => a.id === "pip") ?? null;
   return (
     <AppShell>
-      <LearnView agents={agents} selected={selected} processes={selected ? learnProcesses(selected.id, previewSessions) : []} unknownAgent={false} />
+      <LearnView agents={agents} selected={selected} processes={selected ? learnProcesses(selected.id, previewSessions) : []} unknownAgent={false} training={learnTraining(previewAgents, previewSessions)} firstName="Lena" />
     </AppShell>
   );
 }

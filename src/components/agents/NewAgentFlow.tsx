@@ -18,35 +18,71 @@ const muted = { color: "var(--mu)" } as const;
 function Stepper({ active }: { active: 1 | 2 | 3 }) {
   return (
     <ol className="flex flex-wrap items-center gap-3" aria-label="Steps">
-      {STEP_LABELS.map((label, i) => (
-        <li key={label} className="contents">
-          {i > 0 && <span aria-hidden="true" className="h-px w-12" style={{ background: "var(--ln2)" }} />}
-          <span
-            className="flex items-center gap-2 text-sm"
-            aria-current={i + 1 === active ? "step" : undefined}
-            style={{ color: i + 1 <= active ? "var(--tx)" : "var(--mu)" }}
-          >
+      {STEP_LABELS.map((label, i) => {
+        const n = i + 1;
+        const state = n === active ? "on" : n < active ? "done" : "todo";
+        return (
+          <li key={label} className="contents">
+            {i > 0 && <span aria-hidden="true" className="h-px w-12" style={{ background: "var(--ln2)" }} />}
             <span
-              className="ui-mono inline-flex size-6 items-center justify-center rounded-full border text-xs"
-              style={i + 1 === active ? { background: "var(--tx)", color: "var(--bg)", borderColor: "var(--tx)" } : { borderColor: "var(--ln2)" }}
+              className="flex items-center gap-2.5 text-sm"
+              data-state={state}
+              aria-current={state === "on" ? "step" : undefined}
+              style={{ color: state === "todo" ? "var(--mu)" : "var(--tx)" }}
             >
-              {i + 1}
+              <span
+                className="ui-mono inline-flex size-7 items-center justify-center rounded-full border text-[13px]"
+                style={
+                  state === "on"
+                    ? { background: "var(--pb)", color: "var(--pf)", borderColor: "var(--pb)" }
+                    : state === "done"
+                      ? { background: "var(--grs)", color: "var(--gr)", borderColor: "transparent" }
+                      : { borderColor: "var(--ln2)" }
+                }
+              >
+                {n}
+              </span>
+              {label}
             </span>
-            {label}
-          </span>
-        </li>
-      ))}
+          </li>
+        );
+      })}
     </ol>
   );
 }
 
-export default function NewAgentFlow({ initialAgentId = null }: { initialAgentId?: string | null } = {}) {
-  const [name, setName] = useState("");
+export type ExpertOption = { label: string; name: string };
+
+/** Initials for the expert chip: 'Sabine Keller' -> SK, 'marco.bianchi@example.com' -> MB. */
+export function expertInitials(value: string): string {
+  const base = value.split("·")[0].split("@")[0].trim();
+  const parts = base.split(/[\s._-]+/).filter(Boolean);
+  return parts.slice(0, 2).map((p) => p[0]!.toUpperCase()).join("") || "?";
+}
+
+/** Display name from a member label: 'sabine.keller@example.com' -> 'Sabine Keller'. */
+export function memberName(label: string): string {
+  const local = label.split("@")[0];
+  return local.split(/[._-]+/).filter(Boolean).map((p) => p[0]!.toUpperCase() + p.slice(1)).join(" ") || label;
+}
+
+export default function NewAgentFlow({
+  initialAgentId = null,
+  initialName = "",
+  initialFirstTask = "",
+  experts = [],
+}: { initialAgentId?: string | null; initialName?: string; initialFirstTask?: string; experts?: ExpertOption[] } = {}) {
+  const [name, setName] = useState(initialName);
   const [role, setRole] = useState("");
   const [expert, setExpert] = useState("");
+  // The first task stays client-side: it becomes the ?task title of the Capture link.
+  const [firstTask, setFirstTask] = useState(initialFirstTask);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [agentId, setAgentId] = useState<string | null>(initialAgentId);
+
+  // A picked member shows as 'Name · email'; only the name is stored.
+  const expertName = (v: string) => v.split("·")[0].trim().slice(0, AGENT_EXPERT_NAME_MAX);
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
@@ -59,7 +95,7 @@ export default function NewAgentFlow({ initialAgentId = null }: { initialAgentId
         body: JSON.stringify({
           name: name.trim(),
           role: role.trim(),
-          ...(expert.trim() ? { expert_name: expert.trim() } : {}),
+          ...(expertName(expert) ? { expert_name: expertName(expert) } : {}),
           avatar: DEFAULT_AVATAR,
         }),
       });
@@ -96,7 +132,7 @@ export default function NewAgentFlow({ initialAgentId = null }: { initialAgentId
             <span className="text-sm" style={muted}>Capture starts directly from the app. Nothing to pair.</span>
           </div>
           <div className="flex flex-wrap justify-end gap-3">
-            <Link className={buttonClass("primary")} href={captureHref(agentId)}>
+            <Link className={buttonClass("primary")} href={captureHref(agentId, firstTask)}>
               Start training
             </Link>
           </div>
@@ -125,8 +161,36 @@ export default function NewAgentFlow({ initialAgentId = null }: { initialAgentId
           </div>
           <div>
             <label className="ui-lbl" htmlFor="na-expert">Expert it learns from</label>
-            <input id="na-expert" className="ui-inp" value={expert} maxLength={AGENT_EXPERT_NAME_MAX} placeholder="Sabine" onChange={(e) => setExpert(e.target.value)} />
+            <div className="relative">
+              <span
+                aria-hidden="true"
+                data-testid="expert-chip"
+                className="absolute top-2 left-2.5 inline-flex size-7 items-center justify-center rounded-full text-[11px] font-semibold"
+                style={{ background: "var(--s3)", color: "var(--tx)" }}
+              >
+                {expertInitials(expert || "?")}
+              </span>
+              <input
+                id="na-expert"
+                className="ui-inp"
+                style={{ paddingLeft: 48 }}
+                list="na-experts"
+                value={expert}
+                maxLength={AGENT_EXPERT_NAME_MAX + 80}
+                placeholder="Pick a workspace member or type a name"
+                onChange={(e) => setExpert(e.target.value)}
+              />
+              <datalist id="na-experts">
+                {experts.map((o) => (
+                  <option key={o.label} value={`${o.name} · ${o.label}`} />
+                ))}
+              </datalist>
+            </div>
             <p className="mt-1.5 text-xs" style={{ color: "var(--fa)" }}>Only the expert can train this agent. They confirm every step before anyone learns from it.</p>
+          </div>
+          <div>
+            <label className="ui-lbl" htmlFor="na-first">First task to learn</label>
+            <textarea id="na-first" className="ui-inp" rows={3} value={firstTask} maxLength={200} placeholder="Coding incoming supplier invoices" onChange={(e) => setFirstTask(e.target.value)} />
           </div>
           <div className="flex flex-wrap justify-between gap-3 pt-1">
             <Link className={buttonClass("ghost")} href="/agents">Cancel</Link>
@@ -146,7 +210,7 @@ export default function NewAgentFlow({ initialAgentId = null }: { initialAgentId
               <span className="ui-t2">{name.trim() || "Agent name"}</span>
               <span style={muted}>{role.trim() || "Role it will fill"}</span>
               <span className="text-sm" style={muted}>
-                learns from <span style={{ color: "var(--tx)" }}>{expert.trim() || "the expert"}</span>
+                learns from <span style={{ color: "var(--tx)" }}>{expertName(expert) || "the expert"}</span>
               </span>
             </div>
             <Badge kind="pending" className="ml-1 self-start">Not trained yet</Badge>

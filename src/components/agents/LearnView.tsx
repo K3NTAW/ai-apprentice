@@ -4,13 +4,16 @@ import Link from "next/link";
 import type { CSSProperties, ReactNode } from "react";
 import { buttonClass, Card } from "@/components/ui";
 import AgentAvatar from "./AgentAvatar";
-import { learnHref, type GalleryCard, type ProcessRow } from "./model";
+import { learnHref, type GalleryCard, type LearnProcess } from "./model";
 
 export type LearnViewProps = {
   agents: GalleryCard[];
   selected: GalleryCard | null;
-  processes: (ProcessRow & { teachHref: string })[];
+  processes: LearnProcess[];
   unknownAgent: boolean;
+  /** Agents without a confirmed process: shown dimmed, not startable. */
+  training?: GalleryCard[];
+  firstName?: string | null;
 };
 
 const opt = (on: boolean): CSSProperties => ({
@@ -48,11 +51,12 @@ function Column({ n, title, children, style }: { n: number; title: string; child
   );
 }
 
-export default function LearnView({ agents, selected, processes, unknownAgent }: LearnViewProps) {
+export default function LearnView({ agents, selected, processes, unknownAgent, training = [], firstName = null }: LearnViewProps) {
   const first = processes[0] ?? null;
   return (
     <main className="flex min-w-0 flex-col" style={{ padding: "36px 40px 56px", gap: 26 }}>
       <div className="flex flex-col" style={{ gap: 6, maxWidth: 680 }}>
+        {firstName && <span className="ui-eb">Hi {firstName}</span>}
         <h1 className="ui-t1">Learn</h1>
         <p style={{ color: "var(--mu)", fontSize: 15 }}>
           Pick an agent, then a process. It teaches you on your own screen through the companion, next to your cursor.
@@ -63,7 +67,7 @@ export default function LearnView({ agents, selected, processes, unknownAgent }:
           That agent is not available to learn from. Pick one below.
         </p>
       )}
-      {agents.length === 0 ? (
+      {agents.length === 0 && training.length === 0 ? (
         <Card style={{ padding: 22 }}>
           <p className="text-[13px]" style={{ color: "var(--mu)" }}>
             No agent has a confirmed process yet. Ask an expert to train one.
@@ -87,6 +91,17 @@ export default function LearnView({ agents, selected, processes, unknownAgent }:
                 </Link>
               );
             })}
+            {training.map((c) => (
+              <div key={c.id} aria-disabled="true" data-testid="still-training" style={{ ...opt(false), opacity: 0.5, cursor: "not-allowed" }}>
+                <AgentAvatar avatar={c.avatar} size={44} state="paused" />
+                <span className="flex min-w-0 flex-col">
+                  <span style={{ fontWeight: 600 }}>{c.name}</span>
+                  <span className="text-xs" style={{ color: "var(--mu)" }}>
+                    Still training · not ready yet
+                  </span>
+                </span>
+              </div>
+            ))}
           </Column>
           <Column n={2} title="Process">
             {!selected && <span className="text-[13px]" style={{ color: "var(--mu)" }}>Pick the agent that knows the job you are learning.</span>}
@@ -114,7 +129,30 @@ export default function LearnView({ agents, selected, processes, unknownAgent }:
                   <span className="ui-t2">{first.task}</span>
                 </div>
               </div>
+              {first.focus.length > 0 && (
+                <div className="flex flex-col" style={{ gap: 8, padding: 14, borderRadius: 12, background: "var(--s2)" }}>
+                  <span className="text-xs" style={{ color: "var(--fa)" }}>
+                    {selected.name} will focus on
+                  </span>
+                  {first.focus.map((f) => (
+                    <span key={f} className="text-[13px]">
+                      {f}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {first.practice.length > 0 && (
+                <div className="flex flex-col" style={{ gap: 8 }}>
+                  <span className="text-xs" style={{ color: "var(--fa)" }}>
+                    Practice with
+                  </span>
+                  <span className="text-[13px]">{first.practice.join(", ")}</span>
+                </div>
+              )}
               <Link className={buttonClass("primary", "lg")} style={{ width: "100%" }} href={first.teachHref}>
+                <svg className="ui-ic" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M8 5v14l11-7z" />
+                </svg>
                 Start
               </Link>
               <span className="text-center text-xs" style={{ color: "var(--fa)" }}>

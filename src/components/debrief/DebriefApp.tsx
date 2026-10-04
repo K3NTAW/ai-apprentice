@@ -11,6 +11,7 @@ import { createDebriefController, type DebriefController, type DebriefState } fr
 import { createHttpDebriefApi } from "@/lib/debrief/httpApi";
 import { SCORE_THRESHOLD, type Session } from "@/lib/types";
 import { useVoiceAgent, VoiceProvider, type UseVoiceAgentOptions } from "@/lib/voice/useVoiceAgent";
+import AgentAvatar from "@/components/agents/AgentAvatar";
 import ScoreBars from "./ScoreBars";
 import TeachBackPanel from "./TeachBackPanel";
 
@@ -21,26 +22,31 @@ const END_LABEL: Record<NonNullable<DebriefState["endReason"]>, string> = {
 
 const snapshot = (s: Readonly<DebriefState>): DebriefState => ({ ...s, history: [...s.history], asked: [...s.asked] });
 
-export default function DebriefApp({ sessionId }: { sessionId: string }) {
+/** Local preview routes only (design compare): a fixed session and debrief state, nothing is fetched. */
+export type DebriefPreview = { session: Session; view: DebriefState; liveAnswer?: { speaker: string; text: string } | null; avatar?: unknown };
+
+export default function DebriefApp({ sessionId, preview }: { sessionId: string; preview?: DebriefPreview }) {
   return (
     <VoiceProvider>
-      <DebriefInner sessionId={sessionId} />
+      <DebriefInner sessionId={sessionId} preview={preview} />
     </VoiceProvider>
   );
 }
 
-function DebriefInner({ sessionId }: { sessionId: string }) {
-  const [session, setSession] = useState<Session | null>(null);
+function DebriefInner({ sessionId, preview }: { sessionId: string; preview?: DebriefPreview }) {
+  const [session, setSession] = useState<Session | null>(preview?.session ?? null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
   const [textMode, setTextMode] = useState(false);
-  const [view, setView] = useState<DebriefState | null>(null);
+  const [view, setView] = useState<DebriefState | null>(preview?.view ?? null);
+  const liveAnswer = preview?.liveAnswer ?? null;
   const [answer, setAnswer] = useState("");
   const ctrlRef = useRef<DebriefController | null>(null);
   const voiceModeRef = useRef(false);
 
   useEffect(() => {
+    if (preview) return;
     let cancelled = false;
     (async () => {
       try {
@@ -55,7 +61,7 @@ function DebriefInner({ sessionId }: { sessionId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [sessionId]);
+  }, [sessionId, preview]);
 
   const clientTools = useMemo<NonNullable<UseVoiceAgentOptions["clientTools"]>>(
     () => ({
@@ -190,7 +196,9 @@ function DebriefInner({ sessionId }: { sessionId: string }) {
                   Asks until every step is above {threshold}%
                 </span>
               </div>
-              <div className="flex flex-col" style={{ gap: 10 }}>
+              <div className="flex flex-wrap items-start" style={{ gap: 22 }}>
+              {preview?.avatar !== undefined && <AgentAvatar avatar={preview.avatar} state="talking" size={112} />}
+              <div className="flex flex-col" style={{ flex: 1, minWidth: 280, gap: 10 }}>
                 <p className="ui-t2">&ldquo;{view.question.text}&rdquo;</p>
                 <span className="text-[13px]" style={{ color: "var(--mu)" }}>
                   Question {view.followUpsAsked + 1}
@@ -198,6 +206,20 @@ function DebriefInner({ sessionId }: { sessionId: string }) {
                   {view.question.step_n && titles[view.question.step_n] ? ` · ${titles[view.question.step_n]}` : ""} · about the {view.question.about}
                 </span>
               </div>
+              </div>
+              {liveAnswer && (
+                <div
+                  data-testid="live-answer"
+                  className="self-end"
+                  style={{ maxWidth: 560, background: "var(--s2)", border: "1px solid var(--ln2)", borderRadius: "18px 18px 6px 18px", padding: "12px 16px" }}
+                >
+                  <span className="block text-xs" style={{ color: "var(--mu)", marginBottom: 4 }}>
+                    {liveAnswer.speaker} · answering
+                  </span>
+                  {liveAnswer.text}
+                  <span style={{ color: "var(--mu)" }}>…</span>
+                </div>
+              )}
               {textMode && (
                 <form
                   className="flex flex-wrap"

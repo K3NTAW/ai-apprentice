@@ -45,6 +45,8 @@ export type TeachConsoleProps = {
   onEnd(): void;
   onReplay(): void;
   onAnswer(text: string): void;
+  /** Agent name for 'Pip is watching for'. */
+  agentName?: string | null;
   /** Why typed turns cannot be sent now (tutor disconnected); the composer is disabled while set. */
   sendError?: string | null;
 };
@@ -296,6 +298,18 @@ export default function TeachConsole(p: TeachConsoleProps) {
                   <div className="flex" style={{ gap: 4 }} aria-label={cur ? `Progress: step ${cur.n} of ${steps.length}` : "Progress"}>
                     {steps.map((s) => (
                       <span key={s.n} style={{ height: 6, borderRadius: 3, flex: 1, background: segColor(s, cur?.n ?? null) }} />
+                    ))}
+                  </div>
+                )}
+                {cur && cur.guardrails.length > 0 && (
+                  <div className="flex flex-wrap items-center" style={{ gap: 8 }} data-testid="watching">
+                    <span className="text-xs" style={{ color: "var(--fa)" }}>
+                      {p.agentName ?? "The tutor"} is watching for
+                    </span>
+                    {cur.guardrails.map((g, i) => (
+                      <Badge key={i} kind={g.kind}>
+                        {g.rule}
+                      </Badge>
                     ))}
                   </div>
                 )}

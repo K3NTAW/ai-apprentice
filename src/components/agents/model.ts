@@ -35,7 +35,9 @@ export function parseId(value: unknown): string | null {
 
 export const agentHref = (id: string, tab?: AgentTab) =>
   `/agents/${encodeURIComponent(id)}${tab && tab !== "processes" ? `?tab=${tab}` : ""}`;
-export const captureHref = (agentId: string) => `/capture?agent=${encodeURIComponent(agentId)}`;
+/** ?task is the optional first task title from the new agent flow. */
+export const captureHref = (agentId: string, task?: string) =>
+  `/capture?agent=${encodeURIComponent(agentId)}${task?.trim() ? `&task=${encodeURIComponent(task.trim())}` : ""}`;
 /** ?agent is the agent of the new teach session; ?session is the source Work Map capture session. */
 export const teachHref = (agentId: string, workmapSessionId: string) =>
   `/teach?agent=${encodeURIComponent(agentId)}&session=${encodeURIComponent(workmapSessionId)}`;
@@ -145,6 +147,7 @@ export type GuardrailRow = {
   step: string;
   at: string;
   href: string;
+  sessionId: string;
 };
 
 /** Every guardrail across the agent's confirmed Work Maps, with the expert quote and a link to the screen moment. */
@@ -159,6 +162,7 @@ export function agentGuardrails(agentId: string, sessions: readonly Session[]): 
         step: `${step.n}. ${step.title}`,
         at: formatT(step.screen_moment.t),
         href: `/map/${encodeURIComponent(s.id)}#step-${step.n}`,
+        sessionId: s.id,
       })),
     ),
   );
@@ -267,9 +271,23 @@ export function learnAgents(agents: readonly Agent[], sessions: readonly Session
   return galleryCards(agents, sessions).filter((c) => c.stats.processes > 0);
 }
 
-/** Learn: the agent's confirmed processes, each linking to Teach. */
-export function learnProcesses(agentId: string, sessions: readonly Session[]): (ProcessRow & { teachHref: string })[] {
-  return agentProcesses(agentId, sessions).map((p) => ({ ...p, teachHref: teachHref(agentId, p.sessionId) }));
+/** Learn: agents without a confirmed process yet, shown dimmed as 'Still training' (not startable). */
+export function learnTraining(agents: readonly Agent[], sessions: readonly Session[]): GalleryCard[] {
+  return galleryCards(agents, sessions).filter((c) => c.stats.processes === 0);
+}
+
+export type LearnProcess = ProcessRow & { teachHref: string; focus: string[]; practice: string[] };
+
+/** Learn: the agent's confirmed processes, each linking to Teach, with the judgment-call steps the agent focuses on
+ * and the screen entities to practise with. */
+export function learnProcesses(agentId: string, sessions: readonly Session[]): LearnProcess[] {
+  const maps = new Map(confirmedOf(agentId, sessions).map((s) => [s.id, s.workmap!]));
+  return agentProcesses(agentId, sessions).map((p) => {
+    const steps = maps.get(p.sessionId)?.steps ?? [];
+    const focus = steps.filter((st) => st.is_judgment_call).map((st) => `Step ${st.n} · ${st.title}`);
+    const practice = [...new Set(steps.map((st) => st.screen_moment.entity.trim()).filter(Boolean))];
+    return { ...p, teachHref: teachHref(agentId, p.sessionId), focus, practice };
+  });
 }
 
 /**
