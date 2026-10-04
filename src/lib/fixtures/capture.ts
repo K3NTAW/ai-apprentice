@@ -5,13 +5,14 @@ const EXCEL = "Microsoft Excel";
 const OUTLOOK = "Microsoft Outlook";
 const invoice = { kind: "cell", id: "invoice 4517 cost center" };
 
+/** Newest first, as the controller's feed() returns it. */
 export const captureFeed: ScreenEvent[] = [
-  { id: "c1", t: 161, source: "os", type: "app_switched", entity: { kind: "app", id: OUTLOOK }, app: OUTLOOK },
-  { id: "c2", t: 185, source: "os", type: "shortcut_used", entity: { kind: "app", id: EXCEL }, app: EXCEL, chord: "Cmd+Shift+L" },
-  { id: "c3", t: 298, source: "os", type: "shortcut_used", entity: { kind: "app", id: EXCEL }, app: EXCEL, chord: "Cmd+D" },
-  { id: "c4", t: 312, source: "vision", type: "field_changed", entity: invoice, app: EXCEL, field: "cost center", from: "4711", to: "0400" },
-  { id: "c5", t: 390, source: "os", type: "shortcut_used", entity: { kind: "app", id: OUTLOOK }, app: OUTLOOK, chord: "Cmd+J" },
   { id: "c6", t: 422, source: "vision", type: "record_opened", entity: { kind: "supplier", id: "20418" }, app: "Google Chrome" },
+  { id: "c5", t: 390, source: "os", type: "shortcut_used", entity: { kind: "app", id: OUTLOOK }, app: OUTLOOK, chord: "Cmd+J" },
+  { id: "c4", t: 312, source: "vision", type: "field_changed", entity: invoice, app: EXCEL, field: "cost center", from: "4711", to: "0400" },
+  { id: "c3", t: 298, source: "os", type: "shortcut_used", entity: { kind: "app", id: EXCEL }, app: EXCEL, chord: "Cmd+D" },
+  { id: "c2", t: 185, source: "os", type: "shortcut_used", entity: { kind: "app", id: EXCEL }, app: EXCEL, chord: "Cmd+Shift+L" },
+  { id: "c1", t: 161, source: "os", type: "app_switched", entity: { kind: "app", id: OUTLOOK }, app: OUTLOOK },
 ];
 
 export const captureFixture = {

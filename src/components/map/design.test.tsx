@@ -136,6 +136,7 @@ describe("capture console (Capture.dc.html, without the pairing card)", () => {
         onStart={noop}
         onEnd={noop}
         onTogglePause={noop}
+        onToggleOffRecord={noop}
         onToggleShare={noop}
       />,
     );

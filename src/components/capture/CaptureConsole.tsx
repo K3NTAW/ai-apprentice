@@ -20,6 +20,8 @@ export type CaptureConsoleProps = {
   running: boolean;
   starting: boolean;
   offRecord: boolean;
+  /** Pause: the apprentice asks no live questions; capture, events and transcript continue. */
+  questionsPaused?: boolean;
   sharing: boolean;
   /** Set when the shared surface is not the whole monitor. */
   shareWarning: string | null;
@@ -52,7 +54,10 @@ export type CaptureConsoleProps = {
   onExpertChange(name: string): void;
   onStart(): void;
   onEnd(): void;
+  /** Pause / Resume questions (holds the ask gate). */
   onTogglePause(): void;
+  /** Off the record / Back on the record (stops all capture). */
+  onToggleOffRecord(): void;
   onToggleShare(): void;
 };
 
@@ -161,6 +166,11 @@ export default function CaptureConsole(p: CaptureConsoleProps) {
                   )}
                 </span>
               ))}
+            {p.running && !p.offRecord && p.questionsPaused && (
+              <span className="ui-bdg ui-k-pend" data-testid="questions-paused">
+                Questions paused
+              </span>
+            )}
           </div>
           {p.running ? (
             <span data-testid="capture-subtitle" style={{ color: "var(--mu)" }}>
@@ -179,13 +189,13 @@ export default function CaptureConsole(p: CaptureConsoleProps) {
             <Icon d="M8 5v14l11-7z" />
             {p.starting ? "Starting..." : "Start"}
           </button>
-          <button type="button" disabled={!p.running} onClick={p.onTogglePause} className={buttonClass("secondary")}>
-            <Icon d={p.offRecord ? "M8 5v14l11-7z" : "M9 5v14M15 5v14"} />
-            {p.offRecord ? "Resume" : "Pause"}
-          </button>
           <button type="button" disabled={!p.running || p.offRecord} onClick={p.onTogglePause} className={buttonClass("secondary")}>
+            <Icon d={p.questionsPaused ? "M8 5v14l11-7z" : "M9 5v14M15 5v14"} />
+            {p.questionsPaused ? "Resume questions" : "Pause"}
+          </button>
+          <button type="button" disabled={!p.running} onClick={p.onToggleOffRecord} className={buttonClass("secondary")}>
             <Icon d="M3 3l18 18M10.6 6.1A10 10 0 0 1 12 6c5 0 9 6 9 6a17 17 0 0 1-3 3.5M6.6 6.6C4.2 8.2 3 12 3 12s4 6 9 6c1.6 0 3-.4 4.3-1" />
-            Off the record
+            {p.offRecord ? "Back on the record" : "Off the record"}
           </button>
           <button type="button" disabled={!p.running} onClick={p.onEnd} className={buttonClass(p.running ? "primary" : "secondary")}>
             <Icon d="M8 6h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z" />
@@ -257,7 +267,7 @@ export default function CaptureConsole(p: CaptureConsoleProps) {
               </p>
             )}
             <ol className="m-0 list-none p-0" data-testid="live-events">
-              {[...p.feed].reverse().map((e) => {
+              {p.feed.map((e) => {
                 const app = e.app ?? e.source;
                 return (
                   <li key={e.id}>
@@ -287,10 +297,11 @@ export default function CaptureConsole(p: CaptureConsoleProps) {
                 asked · <span style={{ color: "var(--co)" }}>{p.guardrailAsked} about guardrails</span>
               </span>
             </div>
-            <div className="grid" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }} data-testid="question-tiles">
+            <div className="grid" style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 }} data-testid="question-tiles">
               {tile(stepsSeen, "Steps seen")}
               {tile(shortcuts, "Shortcuts")}
               {tile(p.guardrails ?? p.guardrailAsked, "Guardrails")}
+              {tile(p.savedForDebrief, "Saved for debrief")}
             </div>
             {p.nextQuestionIn != null && (
               <div className="flex items-center text-[13px]" style={{ gap: 8, color: "var(--mu)" }}>
@@ -306,11 +317,6 @@ export default function CaptureConsole(p: CaptureConsoleProps) {
                   , at the next pause
                 </span>
               </div>
-            )}
-            {p.savedForDebrief > 0 && (
-              <span className="text-[13px]" style={{ color: "var(--mu)" }}>
-                {p.savedForDebrief} saved for the debrief
-              </span>
             )}
           </Card>
 

@@ -36,6 +36,7 @@ export default function CapturePreview() {
       onStart={noop}
       onEnd={noop}
       onTogglePause={noop}
+      onToggleOffRecord={noop}
       onToggleShare={noop}
     />
   );

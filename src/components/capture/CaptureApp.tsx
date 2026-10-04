@@ -36,6 +36,7 @@ import { createAgentCaptureSession } from "./agentSession";
 import CaptureConsole from "./CaptureConsole";
 import { dailyLimitNotice, voiceStartNotice } from "./dailyLimit";
 import SidePanel, { type PresenceStatus } from "./SidePanel";
+import { captureShortcuts, holdableGate, sessionClock } from "./sessionControls";
 
 type Loop = {
   ctrl: CaptureController;
@@ -124,11 +125,16 @@ function CaptureInner({ agentParam, transport }: { agentParam: string | null; tr
   const [companionPerms, setCompanionPerms] = useState<CompanionPermissions | null>(null);
   const [shareWarning, setShareWarning] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
+  const clockRef = useRef(sessionClock(setElapsed));
+  // Pause: the apprentice holds its live questions; capture continues (Off the record stops capture).
+  const [questionsPaused, setQuestionsPaused] = useState(false);
+  const holdRef = useRef(false);
 
   // The capturing pill's mm:ss, ticking once a second while the session runs.
   useEffect(() => {
     if (!running) return;
-    const id = setInterval(() => setElapsed(loopRef.current?.getT() ?? 0), 1000);
+    const clock = clockRef.current;
+    const id = setInterval(() => clock.tick(), 1000);
     return () => clearInterval(id);
   }, [running]);
 
@@ -217,7 +223,7 @@ function CaptureInner({ agentParam, transport }: { agentParam: string | null; tr
     const getT = () => (Date.now() - t0) / 1000;
     const bus = createEventBus({ now: getT });
     const activity = createActivityTracker({ now: Date.now });
-    const gate = createAskGate({ now: Date.now });
+    const gate = holdableGate(createAskGate({ now: Date.now }), () => holdRef.current);
     const voice: CaptureVoice = {
       promptTurn: (text, meta) => {
         if (voiceModeRef.current) agentRef.current.promptTurn(text);
@@ -257,6 +263,9 @@ function CaptureInner({ agentParam, transport }: { agentParam: string | null; tr
       agent: sessionAgent,
     });
     loopRef.current = { ctrl, bus, activity, getT, sessionId, startedAt: t0 };
+    holdRef.current = false;
+    setQuestionsPaused(false);
+    clockRef.current.start(getT);
     ctrl.start();
     setRunning(true);
 
@@ -287,9 +296,15 @@ function CaptureInner({ agentParam, transport }: { agentParam: string | null; tr
     setStarting(false);
   }
 
-  function togglePause() {
+  function toggleOffRecord() {
     const ctrl = loopRef.current?.ctrl;
     if (ctrl) ctrl.setOffRecord(!ctrl.isOffRecord());
+  }
+
+  function toggleQuestions() {
+    if (!loopRef.current) return;
+    holdRef.current = !holdRef.current;
+    setQuestionsPaused(holdRef.current);
   }
 
   async function toggleShare(stepAside = true) {
@@ -340,6 +355,9 @@ function CaptureInner({ agentParam, transport }: { agentParam: string | null; tr
     // A share still pending (Start in progress) is cancelled and never steps aside.
     loopRef.current = null;
     loop.ctrl.stop();
+    clockRef.current.stop();
+    holdRef.current = false;
+    setQuestionsPaused(false);
     shareRef.current.stop();
     setSharing(false);
     setShareWarning(null);
@@ -347,16 +365,19 @@ function CaptureInner({ agentParam, transport }: { agentParam: string | null; tr
     router.push(`/debrief/${loop.sessionId}`);
   }
 
-  // Companion shortcuts call the same controls as the buttons; Capture's pause is off the record.
+  // Companion shortcuts call the same controls as the buttons: pause_toggle holds questions, off_record_toggle stops capture.
   useEffect(() => {
     shortcutRef.current = (a) =>
-      routeShortcut(a, {
-        talk: (held) => loopRef.current?.ctrl.setTalking(held),
-        toggleOffRecord: togglePause,
-        togglePause,
-        endTask,
-        startedAt: () => loopRef.current?.startedAt ?? null,
-      });
+      routeShortcut(
+        a,
+        captureShortcuts({
+          talk: (held) => loopRef.current?.ctrl.setTalking(held),
+          toggleQuestions,
+          toggleOffRecord,
+          endTask,
+          startedAt: () => loopRef.current?.startedAt ?? null,
+        }),
+      );
   });
 
   const status: PresenceStatus = !running
@@ -378,6 +399,7 @@ function CaptureInner({ agentParam, transport }: { agentParam: string | null; tr
         running={running}
         starting={starting}
         offRecord={view.offRecord}
+        questionsPaused={questionsPaused}
         sharing={sharing}
         shareWarning={shareWarning}
         expert={expert}
@@ -398,7 +420,8 @@ function CaptureInner({ agentParam, transport }: { agentParam: string | null; tr
         onExpertChange={setExpert}
         onStart={() => void start()}
         onEnd={endTask}
-        onTogglePause={togglePause}
+        onTogglePause={toggleQuestions}
+        onToggleOffRecord={toggleOffRecord}
         onToggleShare={() => void toggleShare()}
       >
         <SidePanel
@@ -420,7 +443,7 @@ function CaptureInner({ agentParam, transport }: { agentParam: string | null; tr
           onExpertChange={setExpert}
           onStart={() => void start()}
           onEnd={endTask}
-          onTogglePause={togglePause}
+          onTogglePause={toggleOffRecord}
           onToggleShare={() => void toggleShare()}
           onAnswer={(text) => loopRef.current?.ctrl.onTranscript("expert", text)}
           hideControls

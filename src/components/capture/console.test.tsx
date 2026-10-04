@@ -7,6 +7,9 @@ import CaptureConsole, { type CaptureConsoleProps } from "./CaptureConsole";
 import CompanionCard, { COMPANION_README, missingPermissions } from "./CompanionCard";
 import { desktopDownloads, GetDesktopApp } from "./DesktopPanel";
 import { captureFixture as f } from "@/lib/fixtures/capture";
+import { createAskGate, type AskGateInput, type PendingItem } from "@/lib/voice/askGate";
+import { routeShortcut } from "@/lib/companion/shortcuts";
+import { captureShortcuts, holdableGate, sessionClock } from "./sessionControls";
 
 const noop = () => {};
 const ev: ScreenEvent = {
@@ -36,6 +39,7 @@ function props(over: Partial<CaptureConsoleProps> = {}): CaptureConsoleProps {
     onStart: noop,
     onEnd: noop,
     onTogglePause: noop,
+    onToggleOffRecord: noop,
     onToggleShare: noop,
     ...over,
   };
@@ -120,6 +124,92 @@ describe("capture console", () => {
   it("shows the not-monitor warning", () => {
     const html = renderToStaticMarkup(<CaptureConsole {...props({ shareWarning: "Halo placement will be off." })} />);
     expect(html).toContain("Halo placement will be off.");
+  });
+});
+
+describe("capture console fix round (T-0152)", () => {
+  const rowsOf = (html: string) => html.split('class="ui-ev"').slice(1);
+
+  it("live events: newest first, in the controller's feed order", () => {
+    const at = (id: string, t: number, app: string): ScreenEvent => ({ ...ev, id, t, entity: { kind: "app", id: app }, app });
+    // the controller's feed() is already newest first
+    const feed = [at("e3", 30, "Google Chrome"), at("e2", 20, "Microsoft Excel"), at("e1", 10, "Microsoft Outlook")];
+    const rows = rowsOf(renderToStaticMarkup(<CaptureConsole {...props({ feed })} />));
+    expect(rows).toHaveLength(3);
+    expect(rows[0]).toContain("switched to Google Chrome");
+    expect(rows[1]).toContain("switched to Microsoft Excel");
+    expect(rows[2]).toContain("switched to Microsoft Outlook");
+  });
+
+  it("Pause holds questions while capture continues: 'Resume questions', still capturing, events still listed", () => {
+    const html = renderToStaticMarkup(<CaptureConsole {...props({ questionsPaused: true, elapsed: 5 })} />);
+    expect(html).toContain(">Resume questions<");
+    expect(html).toContain(">Off the record<");
+    expect(html).toContain('data-testid="capturing"');
+    expect(html).toContain('data-testid="questions-paused"');
+    expect(rowsOf(html)).toHaveLength(1);
+
+    let held = true;
+    const base = createAskGate({ now: () => 100_000 });
+    const gate = holdableGate(base, () => held);
+    const item = {
+      event: ev,
+      eventClass: { answer: "possible_guardrail" },
+      screenExplains: { answer: "no" },
+      timing: { answer: "ask_now" },
+    } as unknown as PendingItem;
+    const input: AskGateInput = { ...item, activity: { typing: false, speaking: false, silence_ms: 5000 }, agentSpeaking: false };
+    expect(gate.consider(input)).toEqual({ action: "wait", why: "paused" });
+    gate.enqueue(item);
+    expect(gate.nextReady({ typing: false, speaking: false, silence_ms: 5000 })).toBeNull();
+    expect(gate.stats().pending).toBe(1);
+    held = false;
+    expect(gate.consider(input).action).toBe(base.consider(input).action);
+    expect(gate.consider(input).why).not.toBe("paused");
+  });
+
+  it("Off the record stops capture: 'Back on the record', no capturing pill, Pause disabled", () => {
+    const html = renderToStaticMarkup(<CaptureConsole {...props({ offRecord: true, elapsed: 5 })} />);
+    expect(html).toContain(">Back on the record<");
+    expect(html).not.toContain(">Off the record</button>");
+    expect(html).not.toContain('data-testid="capturing"');
+    expect(html).toContain("Off the record · nothing captured");
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>.*?Pause<\/button>/);
+  });
+
+  it("companion shortcuts: pause_toggle holds questions, off_record_toggle stops capture", () => {
+    const calls: string[] = [];
+    const controls = captureShortcuts({
+      talk: () => calls.push("talk"),
+      toggleQuestions: () => calls.push("questions"),
+      toggleOffRecord: () => calls.push("off record"),
+      endTask: () => calls.push("end"),
+      startedAt: () => 0,
+    });
+    routeShortcut("pause_toggle", controls, { now: () => 1 });
+    routeShortcut("off_record_toggle", controls, { now: () => 1 });
+    expect(calls).toEqual(["questions", "off record"]);
+  });
+
+  it("the timer reads the clock on start and resets between sessions", () => {
+    const shown: number[] = [];
+    const clock = sessionClock((s) => shown.push(s));
+    clock.start(() => 754);
+    clock.tick();
+    expect(shown).toEqual([754, 754]);
+    clock.stop();
+    expect(shown.at(-1)).toBe(0);
+    clock.tick();
+    expect(shown.at(-1)).toBe(0);
+    clock.start(() => 0);
+    expect(shown.at(-1)).toBe(0);
+    expect(renderToStaticMarkup(<CaptureConsole {...props({ elapsed: 0 })} />)).toMatch(/Capturing · <span class="ui-mono">00:00<\/span>/);
+  });
+
+  it("the Saved for debrief tile renders the count", () => {
+    const html = renderToStaticMarkup(<CaptureConsole {...props({ savedForDebrief: 4 })} />);
+    expect(html).toMatch(/>4<\/div><div[^>]*>Saved for debrief</);
+    expect(renderToStaticMarkup(<CaptureConsole {...props()} />)).toMatch(/>0<\/div><div[^>]*>Saved for debrief</);
   });
 });
 
