@@ -11,7 +11,7 @@ import { groupRecent, RECENT_LIMIT } from "./recent";
 const fakeStore = vi.hoisted(() => ({
   recentSessions: vi.fn(),
   listSessions: vi.fn(),
-  listAgents: vi.fn(async () => []),
+  listAgents: vi.fn(async (): Promise<{ id: string; name: string }[]> => []),
 }));
 vi.mock("@/lib/auth/context", () => ({ getRequestContext: vi.fn() }));
 vi.mock("@/lib/store", () => ({ getStore: () => fakeStore as unknown as SessionStore }));

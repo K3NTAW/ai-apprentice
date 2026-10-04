@@ -13,7 +13,7 @@ const res: SearchResponse = {
 };
 
 function setup() {
-  const fetchJson = vi.fn(async () => res);
+  const fetchJson = vi.fn<(url: string, signal: AbortSignal) => Promise<typeof res>>(async () => res);
   const navigate = vi.fn();
   const p = createPalette({ fetchJson, navigate, onChange: () => {} });
   return { p, fetchJson, navigate };
