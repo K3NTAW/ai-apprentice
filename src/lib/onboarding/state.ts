@@ -1,5 +1,7 @@
 // Onboarding state (T-0211), framework free. Four steps; each is done or skipped. onboarding_completed_at is set once
-// every step is done or skipped. 'Finish setup' stays in the user menu while any step is skipped or open.
+// every step is done or skipped. 'Finish setup' stays in the user menu while onboarding is not complete or a required
+// step (workspace, first agent) was skipped. Desktop permissions cannot be granted in a browser (the desktop app
+// re-checks them live) and the training walkthrough is information only: skipping either does not keep it open.
 // Storage: Supabase user_metadata (onboarding_completed_at, onboarding_steps, onboarding_agent_id) written server side
 // with auth.updateUser by POST /api/auth/onboarding; local mode: <DATA_DIR>/onboarding.json (lib/onboarding/file).
 // Grandfathering: users created before ONBOARDING_SINCE, or with no created_at, count as completed.
@@ -64,8 +66,13 @@ export function toMetadata(s: OnboardingState): Record<string, unknown> {
 
 export const isComplete = (s: OnboardingState) => Boolean(s.completedAt);
 
-/** The user menu shows 'Finish setup' while onboarding is not complete or any step was skipped. */
-export const finishSetupVisible = (s: OnboardingState) => !isComplete(s) || Object.values(s.steps).includes("skipped");
+/** Steps whose skip keeps 'Finish setup' in the user menu. */
+export const REQUIRED_STEPS: readonly OnboardingStep[] = ["workspace", "agent"];
+
+const anySkipped = (s: OnboardingState, steps: readonly OnboardingStep[] = ONBOARDING_STEPS) => steps.some((k) => s.steps[k] === "skipped");
+
+/** The user menu shows 'Finish setup' while onboarding is not complete or a required step was skipped. */
+export const finishSetupVisible = (s: OnboardingState) => !isComplete(s) || anySkipped(s, REQUIRED_STEPS);
 
 /** A done step stays done; completedAt is set once every step is marked and never cleared. */
 export function markStep(s: OnboardingState, step: OnboardingStep, mark: StepMark, now: string, agentId?: string | null): OnboardingState {
@@ -74,9 +81,10 @@ export function markStep(s: OnboardingState, step: OnboardingStep, mark: StepMar
   return { completedAt: s.completedAt ?? (all ? now : null), steps, agentId: agentId ?? s.agentId };
 }
 
-/** Where to resume: the first step never marked, else the first skipped one, else the walkthrough. */
+/** Where to resume: the first step never marked, else the first skipped required one, else any skipped, else the walkthrough. */
 export function resumeStep(s: OnboardingState): OnboardingStep {
-  return ONBOARDING_STEPS.find((k) => !s.steps[k]) ?? ONBOARDING_STEPS.find((k) => s.steps[k] === "skipped") ?? "training";
+  const skipped = (k: OnboardingStep) => s.steps[k] === "skipped";
+  return ONBOARDING_STEPS.find((k) => !s.steps[k]) ?? REQUIRED_STEPS.find(skipped) ?? ONBOARDING_STEPS.find(skipped) ?? "training";
 }
 
 export const onboardingHref = (next?: string | null) =>
@@ -98,10 +106,11 @@ export const finishSetupHref = `${ONBOARDING_PATH}?${RESUME_PARAM}=1`;
 
 /**
  * /onboarding for a user whose stored (server side) state is complete (T-0255): where to send them instead, or null
- * to show the flow. Only an explicit resume ('Finish setup', or a ?step= link) with a step still skipped shows it again.
+ * to show the flow. Only an explicit resume ('Finish setup', or a ?step= link) with a step still skipped (required or
+ * not) shows it again.
  */
 export function finishedRedirect(s: OnboardingState, next: string, explicit: boolean): string | null {
   if (!isComplete(s)) return null;
-  if (explicit && finishSetupVisible(s)) return null;
+  if (explicit && anySkipped(s)) return null;
   return leaveOnboarding(next);
 }
