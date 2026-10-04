@@ -954,3 +954,115 @@ describe("workspace_create migration", () => {
     expect(check9Rollback(sql, rollback)).toEqual([]);
   });
 });
+
+const PROCESSES = "20261004030000_processes.sql";
+
+describe("processes migration", () => {
+  const sql = readFileSync(path.join(MIGRATIONS, PROCESSES), "utf8");
+  const rollback = readFileSync(path.join(ROLLBACKS, PROCESSES.replace(/\.sql$/, ".down.sql")), "utf8");
+  const stmts = normStatements(sql);
+  const policy = (name: string) => parsePolicies(sql).find((p) => p.name === name);
+  const fnBody = (name: string) => norm(parseFunctions(sql).find((f) => f.name === name)?.body ?? "");
+  const table = (name: string) => stmts.find((s) => s.startsWith(`create table public.${name} `)) ?? "";
+
+  it("creates public.processes with the contract columns, linked to an agent of the same workspace", () => {
+    const t = table("processes");
+    for (const col of [
+      "id uuid primary key default gen_random_uuid()",
+      "workspace_id uuid not null references public.workspaces on delete cascade",
+      "agent_id uuid not null",
+      "title text not null check (char_length(title) between 1 and 120)",
+      "workmap jsonb not null",
+      "version int not null default 1",
+      "confirmed boolean not null default false",
+      "archived_at timestamptz",
+      "created_by uuid references auth.users on delete set null",
+      "created_at timestamptz not null default now()",
+      "updated_at timestamptz not null default now()",
+      "constraint processes_workspace_id_id_key unique (workspace_id, id)",
+      "foreign key (workspace_id, agent_id) references public.agents (workspace_id, id) on delete cascade",
+    ])
+      expect(t).toContain(col);
+  });
+
+  it("creates public.process_versions with change_kind, source session and one row per version", () => {
+    const t = table("process_versions");
+    for (const col of [
+      "version int not null",
+      "workmap jsonb not null",
+      "source_session_id text references public.sessions on delete set null",
+      "change_kind text not null check (change_kind in ('trained', 'extended', 'replaced', 'edited'))",
+      "changed_by uuid references auth.users on delete set null",
+      "constraint process_versions_process_version_key unique (process_id, version)",
+      "foreign key (workspace_id, process_id) references public.processes (workspace_id, id) on delete cascade",
+    ])
+      expect(t).toContain(col);
+  });
+
+  it("adds sessions.process_id, set null when the process is deleted", () => {
+    expect(stmts).toContain("alter table public.sessions add column process_id uuid");
+    expect(stmts).toContain(
+      "alter table public.sessions add constraint sessions_process_fkey foreign key (workspace_id, process_id) references public.processes (workspace_id, id) on delete set null (process_id)",
+    );
+  });
+
+  it("revokes from public and anon, grants authenticated, process_versions without update", () => {
+    expect(stmts).toContain("revoke all on table public.processes from public, anon");
+    expect(stmts).toContain("revoke all on table public.process_versions from public, anon");
+    expect(stmts).toContain("grant select, insert, update, delete on table public.processes to authenticated");
+    expect(stmts).toContain("grant select, insert, delete on table public.process_versions to authenticated");
+  });
+
+  it("RLS to authenticated: members read, owner or expert write, owner-only delete", () => {
+    for (const t of ["processes", "process_versions"])
+      expect(stmts).toContain(`alter table public.${t} enable row level security`);
+    for (const p of parsePolicies(sql)) expect(p.roles).toEqual(["authenticated"]);
+    expect(compact(policy("processes_select")!.using!)).toBe("public.is_workspace_member(workspace_id)");
+    expect(compact(policy("process_versions_select")!.using!)).toBe("public.is_workspace_member(workspace_id)");
+    expect(compact(policy("processes_insert")!.withCheck!)).toBe(
+      "created_by = auth.uid()and public.workspace_role(workspace_id)in('owner','expert')",
+    );
+    expect(compact(policy("process_versions_insert")!.withCheck!)).toBe(
+      "changed_by = auth.uid()and public.workspace_role(workspace_id)in('owner','expert')",
+    );
+    expect(compact(policy("processes_update")!.using!)).toBe("public.workspace_role(workspace_id)in('owner','expert')");
+    expect(compact(policy("processes_delete")!.using!)).toBe("public.workspace_role(workspace_id)= 'owner'");
+    expect(compact(policy("process_versions_delete")!.using!)).toBe("public.workspace_role(workspace_id)= 'owner'");
+    expect(parsePolicies(sql).filter((p) => p.table === "public.process_versions").map((p) => p.command)).toEqual([
+      "select",
+      "insert",
+      "delete",
+    ]);
+  });
+
+  it("immutability triggers guard the ids, and process_versions is append-only", () => {
+    const ts = parseTriggers(sql);
+    expect(ts.filter((t) => t.table === "public.processes" && t.timing === "before" && t.events.includes("update"))).toHaveLength(2);
+    expect(ts.some((t) => t.table === "public.process_versions" && t.timing === "before" && t.events.includes("update"))).toBe(true);
+    const guard = fnBody("processes_guard_update");
+    for (const col of ["id", "workspace_id", "agent_id", "created_by", "created_at"])
+      expect(guard).toContain(`new.${col} is distinct from old.${col}`);
+    expect(fnBody("processes_touch_updated_at")).toContain("new.updated_at := now()");
+    const versions = fnBody("process_versions_guard_update");
+    for (const col of ["id", "workspace_id", "process_id", "version", "workmap", "change_kind", "created_at"])
+      expect(versions).toContain(`new.${col} is distinct from old.${col}`);
+    expect(versions).toContain("new.changed_by is null and auth.uid() is null");
+    expect(versions).toContain("new.source_session_id is not null");
+  });
+
+  it("rollback uses if exists everywhere and drops the column before the tables and the tables before the functions", () => {
+    expect(check9Rollback(sql, rollback)).toEqual([]);
+    const down = deepStatements(rollback).map(norm);
+    for (const s of down.filter((x) => /\bdrop\b/.test(x))) expect(s).toMatch(/\bif exists\b/);
+    const at = (re: RegExp) => down.findIndex((s) => re.test(s));
+    const order = [
+      at(/drop constraint if exists sessions_process_fkey/),
+      at(/drop column if exists process_id/),
+      at(/^drop table if exists public\.process_versions$/),
+      at(/^drop table if exists public\.processes$/),
+      at(/^drop function if exists public\.processes_guard_update/),
+    ];
+    expect(order.every((x, i, a) => x >= 0 && (i === 0 || a[i - 1] < x))).toBe(true);
+    expect(norm(commentText(rollback))).toContain("lossy");
+  });
+});
