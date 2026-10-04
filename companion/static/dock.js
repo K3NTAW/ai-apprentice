@@ -59,6 +59,8 @@ api.onState((v) => {
   $("say-text").textContent = str(v.say);
   show($("say"), str(v.say) !== "" && !off);
   show($("offrec"), off);
+  // Large resume button: works without the voice agent (the mic is muted off the record).
+  show($("back-on"), off);
   $("asked").textContent = num(v.asked);
   $("guardrails").textContent = num(v.guardrails);
   $("tab-asked").textContent = num(v.asked);

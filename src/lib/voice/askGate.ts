@@ -6,6 +6,9 @@ import type { AskKind } from "./prompts";
 // Cadence "active" (default, T-0240): ask at a real pause (speech silence >= 1.2 s, no typing for >= 2 s, screen
 // stable >= 1 s) right after a meaningful action, at most one question per minGapMs (agent setting, default 60 s)
 // and at most maxPer10Min (default 8) per 10 minutes; skip what the expert already explained in narration.
+// Active also guarantees a guardrail question: with questions asked and none of them a guardrail one, the next is one;
+// and a question blocked only by the minimum gap waits (the controller saves it after MAX_WAIT_MS) instead of going
+// straight to the debrief (T-0252).
 // Cadence "classic" is the old D7 'ask less, later' gate (1.5 s silence, 20 s gap, 5 per 10 min), kept for rollback.
 
 /**
@@ -145,11 +148,13 @@ export function createAskGate({ cadence = "active", maxPer10Min, minGapMs, guard
     // Minimum gap first, then the 10-minute cap as the hard limit.
     const t = now();
     const last = asked[asked.length - 1];
-    if (last && t - last.t < gap) return { action: "save_for_debrief", why: "min_gap" };
+    if (last && t - last.t < gap) return active ? { action: "wait", why: "min_gap" } : { action: "save_for_debrief", why: "min_gap" };
     if (recent(t).length >= cap) return { action: "save_for_debrief", why: "budget" };
     if (input.timing.answer === "save_for_debrief") return { action: "save_for_debrief", why: "timing" };
 
     if (cls === "possible_guardrail") return { action: "ask_now", ask: "guardrail", why: "possible_guardrail" };
+    if (active && asked.length > 0 && !asked.some((a) => a.kind === "guardrail"))
+      return { action: "ask_now", ask: "guardrail", why: "guardrail_guarantee" };
     if (sinceGuardrail >= GUARDRAIL_EVERY) return { action: "ask_now", ask: "guardrail", why: "guardrail_guarantee" };
     return { action: "ask_now", ask: "reason", why: "judgment_call" };
   }

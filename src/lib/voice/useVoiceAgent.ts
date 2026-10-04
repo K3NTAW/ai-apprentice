@@ -24,15 +24,20 @@ export type UseVoiceAgentOptions = {
   onTranscript: (e: { speaker: VoiceSpeaker; text: string }) => void;
   onModeChange?: (mode: Mode) => void;
   onError?: (message: string) => void;
+  /** The user's voice-activity score (0..1) from the SDK's onVadScore; feeds the activity tracker's speaking flag. */
+  onVadScore?: (score: number) => void;
 };
 
 export type StartOptions = {
   dynamicVariables?: Record<string, string | number | boolean>;
-  /** From voiceOverrides(settings, allowed) in src/lib/agents/settings.ts. */
-  overrides?: { tts: { speed: number; stability?: number } };
+  /** From voiceOverrides(settings, allowed) in src/lib/agents/settings.ts; agent: the custom off-record phrase in the prompt. */
+  overrides?: {
+    tts: { speed: number; stability?: number };
+    agent?: { prompt: { prompt: string }; firstMessage?: string };
+  };
 };
 
-export function useVoiceAgent({ role, clientTools, onTranscript, onModeChange, onError }: UseVoiceAgentOptions) {
+export function useVoiceAgent({ role, clientTools, onTranscript, onModeChange, onError, onVadScore }: UseVoiceAgentOptions) {
   const mutedRef = useRef(false);
   const [muted, setMutedState] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
@@ -52,6 +57,10 @@ export function useVoiceAgent({ role, clientTools, onTranscript, onModeChange, o
     },
     onModeChange: ({ mode }) => onModeChange?.(mode),
     onError: (message) => onError?.(message),
+    // @elevenlabs/react 1.16 / client 1.26: onVadScore({ vadScore }) for every VAD frame of the user's mic.
+    onVadScore: ({ vadScore }) => {
+      if (!mutedRef.current) onVadScore?.(vadScore);
+    },
   });
 
   const start = useCallback(

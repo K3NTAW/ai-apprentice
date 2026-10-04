@@ -53,7 +53,7 @@ describe("POST /api/vision", () => {
     const s = await createSession({ kind: "capture" });
     await setOffRecord(s.id, { from: 10, to: 20 });
     const event = { t: 25, type: "screen_changed", summary: "invoice list" };
-    describeFrame.mockResolvedValue([event]);
+    describeFrame.mockResolvedValue({ events: [event] });
 
     const skipped = await post({ session_id: s.id, t: 15, frame: "data:image/jpeg;base64,/9j/" });
     expect(skipped.status).toBe(200);
@@ -80,6 +80,16 @@ describe("POST /api/vision", () => {
   it.each(["a/b", "..", "../etc", "x..y"])("rejects session_id %s with 400", async (session_id) => {
     const res = await post({ session_id, t: 1, frame: "AAAA" });
     expect(res.status).toBe(400);
+  });
+});
+
+describe("POST /api/vision upstream errors", () => {
+  it("answers 502 (never 429) when the vision model fails upstream", async () => {
+    const s = await createSession({ kind: "capture" });
+    describeFrame.mockResolvedValue({ events: [], error: "upstream_429" });
+    const res = await post({ session_id: s.id, t: 3, frame: "/9j/" });
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({ error: "vision_upstream", detail: "upstream_429" });
   });
 });
 

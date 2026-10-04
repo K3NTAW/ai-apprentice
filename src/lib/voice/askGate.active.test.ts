@@ -77,7 +77,7 @@ describe("active ask gate", () => {
     expect(g.consider(input()).action).toBe("ask_now");
     g.markAsked("reason");
     c.advance(90_000);
-    expect(g.consider(input())).toMatchObject({ action: "save_for_debrief", why: "min_gap" });
+    expect(g.consider(input())).toMatchObject({ action: "wait", why: "min_gap" });
     c.advance(30_000);
     expect(g.consider(input()).action).toBe("ask_now");
   });

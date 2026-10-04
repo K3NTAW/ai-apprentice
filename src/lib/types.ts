@@ -50,6 +50,8 @@ const ScreenEventBase = z.object({
   field: z.string().optional(),
   from: z.string().optional(),
   to: z.string().optional(),
+  // Vision, record_opened: the record's total with its currency as shown, e.g. "EUR 7,200.00" (Teach eventAmount reads it).
+  amount: z.string().max(64).optional(),
   frame_ref: z.string().optional(),
   // shortcut_used only: the chord, and the ids of the vision events it caused (linked in the browser).
   chord: ChordSchema.optional(),

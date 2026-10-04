@@ -182,6 +182,26 @@ export async function runRetention(port: RetentionPort, now: number, limit = RET
   return { agents: agents.length, deleted, more: left <= 0 };
 }
 
+// ---------------------------------------------------------------------------
+// Idle captures: a capture session nobody ended (tab closed, crash) stops showing 'live' after IDLE_CAPTURE_MS
+// without new events, transcript or frames. Runs with the retention cron. Idempotent.
+// ---------------------------------------------------------------------------
+
+export const IDLE_CAPTURE_MS = 2 * 60 * 60 * 1000;
+export type OpenCapture = { id: string; started_at: string; last_t: number | null };
+export type IdleCapturePort = {
+  /** Capture sessions without ended_at that started before cutoffMs, with their latest event, transcript or frame t. */
+  openCaptures(cutoffMs: number): Promise<OpenCapture[]>;
+  endSessions(ids: string[], endedAt: string): Promise<void>;
+};
+
+export async function endIdleCaptures(port: IdleCapturePort, now: number, idleMs = IDLE_CAPTURE_MS): Promise<{ ended: number }> {
+  const cutoff = now - idleMs;
+  const idle = (await port.openCaptures(cutoff)).filter((s) => frameTimeMs(s.started_at, s.last_t) < cutoff).map((s) => s.id);
+  if (idle.length) await port.endSessions(idle, new Date(now).toISOString());
+  return { ended: idle.length };
+}
+
 /** Frame time for retention: session start plus the frame's session time; a frame without t counts at the start. */
 export const frameTimeMs = (startedAt: string, t: number | null) => Date.parse(startedAt) + (t ?? 0) * 1000;
 
@@ -241,6 +261,27 @@ async function rewriteFrames(sessionId: string, drop: Set<string>): Promise<void
   s.frames = (s.frames ?? []).filter((f) => !drop.has(f.name));
   if (s.frames.length === 0) delete s.frames;
   await writeFile(file, JSON.stringify(s, null, 2));
+}
+
+const maxT = (rows: { t?: number }[] | undefined) =>
+  (rows ?? []).reduce<number | null>((m, r) => (typeof r.t === "number" && (m === null || r.t > m) ? r.t : m), null);
+
+export function fileIdleCapturePort(): IdleCapturePort {
+  return {
+    async openCaptures(cutoffMs) {
+      const out: OpenCapture[] = [];
+      for (const s of await fileSessions()) {
+        if (s.kind !== "capture" || s.ended_at || Date.parse(s.started_at) >= cutoffMs) continue;
+        const full = s as FileSession & { events?: { t?: number }[]; transcript?: { t?: number }[] };
+        const ts = [maxT(full.events), maxT(full.transcript), maxT(s.frames)].filter((t): t is number => t !== null);
+        out.push({ id: s.id, started_at: s.started_at, last_t: ts.length ? Math.max(...ts) : null });
+      }
+      return out;
+    },
+    async endSessions(ids) {
+      for (const id of ids) await fileStore.endSession(id);
+    },
+  };
 }
 
 export function fileDataPort(): DataPort & RetentionPort {
@@ -476,6 +517,41 @@ export function supabaseRetentionPort(db: SupabaseClient): RetentionPort {
     },
     removeObjects: data.removeObjects,
     deleteFrameRows: data.deleteFrameRows,
+  };
+}
+
+/** Service role, every workspace. Only the cron route calls it. */
+export function supabaseIdleCapturePort(db: SupabaseClient): IdleCapturePort {
+  const latest = async (table: "session_events" | "session_transcript" | "session_frames", id: string) => {
+    const rows = must(
+      `select ${table}`,
+      await db.from(table).select("t").eq("session_id", id).order("t", { ascending: false }).limit(1),
+    ) as { t: number | null }[];
+    return rows[0]?.t ?? null;
+  };
+  return {
+    async openCaptures(cutoffMs) {
+      const sessions = must(
+        "select open captures",
+        await db
+          .from("sessions")
+          .select("id,started_at")
+          .eq("kind", "capture")
+          .is("ended_at", null)
+          .lt("started_at", new Date(cutoffMs).toISOString()),
+      ) as { id: string; started_at: string }[];
+      const out: OpenCapture[] = [];
+      for (const s of sessions) {
+        const ts = (await Promise.all([latest("session_events", s.id), latest("session_transcript", s.id), latest("session_frames", s.id)])).filter(
+          (t): t is number => t !== null,
+        );
+        out.push({ id: s.id, started_at: s.started_at, last_t: ts.length ? Math.max(...ts) : null });
+      }
+      return out;
+    },
+    async endSessions(ids, endedAt) {
+      must("end idle captures", await db.from("sessions").update({ ended_at: endedAt }).in("id", ids).is("ended_at", null));
+    },
   };
 }
 

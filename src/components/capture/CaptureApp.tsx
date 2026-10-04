@@ -22,7 +22,7 @@ import {
   type CaptureController,
   type CaptureVoice,
 } from "@/lib/capture/controller";
-import { createCaptureSession, createHttpCaptureApi, loadAgent } from "@/lib/capture/httpApi";
+import { createCaptureSession, createHttpCaptureApi, endThenNavigate, loadAgent } from "@/lib/capture/httpApi";
 import { buildSessionAgent } from "@/lib/companion/agentState";
 import { SHORTCUT_LEARNING } from "@/lib/companion/chord";
 import type { CompanionPermissions, CompanionStatus, ShortcutAction } from "@/lib/companion/client";
@@ -37,8 +37,15 @@ import { createAgentCaptureSession } from "./agentSession";
 import CaptureConsole from "./CaptureConsole";
 import { dailyLimitNotice, voiceStartNotice } from "./dailyLimit";
 import SidePanel, { type PresenceStatus } from "./SidePanel";
-import { askCadence, captureShortcuts, holdableGate, loadAgentSettings, sessionClock } from "./sessionControls";
-import { minGapMs } from "@/lib/agents/settings";
+import {
+  askCadence,
+  captureSettings,
+  captureShortcuts,
+  holdableGate,
+  loadAgentSettings,
+  sessionClock,
+  ttsOverrideAllowed,
+} from "./sessionControls";
 
 type Loop = {
   ctrl: CaptureController;
@@ -55,6 +62,7 @@ type View = {
   debrief: number;
   deciding: number;
   offRecord: boolean;
+  visionFailures: number;
   feed: ScreenEvent[];
   lastQuestion: string | null;
   openQuestion: string | null;
@@ -67,6 +75,7 @@ const EMPTY: View = {
   debrief: 0,
   deciding: 0,
   offRecord: false,
+  visionFailures: 0,
   feed: [],
   lastQuestion: null,
   openQuestion: null,
@@ -81,6 +90,7 @@ function viewOf(c: CaptureController): View {
     debrief: s.debrief,
     deciding: s.deciding,
     offRecord: s.offRecord,
+    visionFailures: s.visionFailures,
     feed: c.feed(),
     lastQuestion: c.lastQuestion(),
     openQuestion: c.openQuestion(),
@@ -154,7 +164,9 @@ function CaptureInner({ agentParam, transport, intent }: { agentParam: string | 
     (e) => loopRef.current?.ctrl.onTranscript(e.speaker, e.text),
     [],
   );
-  const agent = useVoiceAgent({ role: "interviewer", clientTools, onTranscript, onModeChange: setAgentMode });
+  // Speech-aware timing: the SDK's VAD score drives the tracker's speaking flag (600 ms release).
+  const onVadScore = useCallback((score: number) => loopRef.current?.activity.noteVad(score), []);
+  const agent = useVoiceAgent({ role: "interviewer", clientTools, onTranscript, onModeChange: setAgentMode, onVadScore });
   const agentRef = useRef(agent);
   useEffect(() => {
     agentRef.current = agent;
@@ -226,10 +238,14 @@ function CaptureInner({ agentParam, transport, intent }: { agentParam: string | 
     const getT = () => (Date.now() - t0) / 1000;
     const bus = createEventBus({ now: getT });
     const activity = createActivityTracker({ now: Date.now });
-    // Agent setting 'At most one question every' is the gate's minimum gap (default 60 s); cap 8 per 10 min.
-    const settings = await loadAgentSettings(agentLoad.status === "ok" ? agentLoad.agent.id : agentId);
+    // Agent Settings, read once: minimum gap (default 60 s; cap 8 per 10 min) and guardrails first for the gate,
+    // the off-record phrase and shortcut learning for the controller, voice overrides at session start.
+    const wired = captureSettings(
+      await loadAgentSettings(agentLoad.status === "ok" ? agentLoad.agent.id : agentId),
+      ttsOverrideAllowed(process.env.NEXT_PUBLIC_TTS_OVERRIDES),
+    );
     const gate = holdableGate(
-      createAskGate({ now: Date.now, cadence: askCadence(process.env.NEXT_PUBLIC_ASK_CADENCE), minGapMs: minGapMs(settings) }),
+      createAskGate({ now: Date.now, cadence: askCadence(process.env.NEXT_PUBLIC_ASK_CADENCE), ...wired.gate }),
       () => holdRef.current,
     );
     const voice: CaptureVoice = {
@@ -269,6 +285,7 @@ function CaptureInner({ agentParam, transport, intent }: { agentParam: string | 
       companion: buddy,
       session: { expert: name, appUrl: window.location.href },
       agent: sessionAgent,
+      ...wired.controller,
     });
     loopRef.current = { ctrl, bus, activity, getT, sessionId, startedAt: t0 };
     holdRef.current = false;
@@ -282,7 +299,8 @@ function CaptureInner({ agentParam, transport, intent }: { agentParam: string | 
     await startVoiceThenShare({
       startVoice: async () => {
         try {
-          await agentRef.current.start({ dynamicVariables: { expert: name } });
+          await agentRef.current.start({ dynamicVariables: { expert: name }, overrides: wired.voice.overrides });
+          if (wired.voice.notice) console.info(`capture: ${wired.voice.notice}`);
           voiceModeRef.current = true;
           setTextMode(false);
           return true;
@@ -357,7 +375,7 @@ function CaptureInner({ agentParam, transport, intent }: { agentParam: string | 
     }
   }
 
-  function endTask() {
+  async function endTask() {
     const loop = loopRef.current;
     if (!loop) return;
     // A share still pending (Start in progress) is cancelled and never steps aside.
@@ -370,7 +388,8 @@ function CaptureInner({ agentParam, transport, intent }: { agentParam: string | 
     setSharing(false);
     setShareWarning(null);
     if (voiceModeRef.current) void agentRef.current.stop();
-    router.push(`/debrief/${loop.sessionId}${intentQuery(intent)}`);
+    // Mark the session ended before the debrief, so the sidebar stops showing it as live.
+    await endThenNavigate(loop.sessionId, () => router.push(`/debrief/${loop.sessionId}${intentQuery(intent)}`));
   }
 
   // Companion shortcuts call the same controls as the buttons: pause_toggle holds questions, off_record_toggle stops capture.
@@ -382,7 +401,7 @@ function CaptureInner({ agentParam, transport, intent }: { agentParam: string | 
           talk: (held) => loopRef.current?.ctrl.setTalking(held),
           toggleQuestions,
           toggleOffRecord,
-          endTask,
+          endTask: () => void endTask(),
           startedAt: () => loopRef.current?.startedAt ?? null,
         }),
       );
@@ -418,6 +437,7 @@ function CaptureInner({ agentParam, transport, intent }: { agentParam: string | 
         asked={view.asked}
         guardrailAsked={view.guardrailAsked}
         savedForDebrief={view.debrief}
+        visionFailures={view.visionFailures}
         feed={view.feed}
         host={host}
         companion={{
@@ -427,7 +447,7 @@ function CaptureInner({ agentParam, transport, intent }: { agentParam: string | 
         }}
         onExpertChange={setExpert}
         onStart={() => void start()}
-        onEnd={endTask}
+        onEnd={() => void endTask()}
         onTogglePause={toggleQuestions}
         onToggleOffRecord={toggleOffRecord}
         onToggleShare={() => void toggleShare()}
@@ -450,7 +470,7 @@ function CaptureInner({ agentParam, transport, intent }: { agentParam: string | 
           feed={view.feed}
           onExpertChange={setExpert}
           onStart={() => void start()}
-          onEnd={endTask}
+          onEnd={() => void endTask()}
           onTogglePause={toggleOffRecord}
           onToggleShare={() => void toggleShare()}
           onAnswer={(text) => loopRef.current?.ctrl.onTranscript("expert", text)}

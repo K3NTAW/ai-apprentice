@@ -30,6 +30,8 @@ export type CaptureConsoleProps = {
   asked: number;
   guardrailAsked: number;
   savedForDebrief: number;
+  /** Failed vision requests this session (upstream errors, not the daily cap); shown as a small counter. */
+  visionFailures?: number;
   feed: ScreenEvent[];
   companion: CompanionCardProps;
   /** Which companion transport runs: bridge (desktop app), websocket (opt-in), none (browser), detecting. Default bridge (design previews); the apps always pass it. */
@@ -208,6 +210,17 @@ export default function CaptureConsole(p: CaptureConsoleProps) {
           {p.shareWarning}
         </p>
       )}
+      {p.running && p.offRecord && (
+        <button
+          type="button"
+          data-testid="back-on-record"
+          onClick={p.onToggleOffRecord}
+          className={buttonClass("primary")}
+          style={{ width: "100%", height: 56, fontSize: 18, justifyContent: "center" }}
+        >
+          Back on the record
+        </button>
+      )}
       {p.children}
 
       <div className="flex flex-wrap items-start" style={{ gap: 20 }}>
@@ -252,8 +265,13 @@ export default function CaptureConsole(p: CaptureConsoleProps) {
           <Card className="overflow-hidden" style={{ padding: 0 }}>
             <div className="flex flex-wrap items-center justify-between" style={{ padding: "16px 20px", gap: 12 }}>
               <h2 className="ui-t3">Live events</h2>
-              <span className="text-xs" style={{ color: "var(--fa)" }}>
+              <span className="flex items-center text-xs" style={{ color: "var(--fa)", gap: 8 }}>
                 Newest first · personal data is redacted before it is stored
+                {(p.visionFailures ?? 0) > 0 && (
+                  <span className="ui-bdg ui-k-pend" data-testid="vision-failures" title="Screen reading requests that failed this session">
+                    Vision failed {p.visionFailures}×
+                  </span>
+                )}
               </span>
             </div>
             {p.running && p.offRecord && (

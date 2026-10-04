@@ -9,6 +9,7 @@
 // first (mic prompt, start error visible), then the share, then the step-aside only when voice runs.
 // Rollback: revert this task's commit; the page then shows the previous placeholder.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createActivityTracker } from "@/lib/perception/activity";
 import { startScreenCapture, type CaptureHandle, type CapturedFrame } from "@/lib/perception/capture";
 import type { CompanionPermissions, CompanionStatus, ShortcutAction } from "@/lib/companion/client";
 import { selectTransport, type CompanionTransport, type TransportHost } from "@/lib/companion/transport";
@@ -157,7 +158,10 @@ function TeachInner({ sessionId, localMode, agentParam = null, processId = null,
     },
     [push, onLearner],
   );
-  const agent = useVoiceAgent({ role: "tutor", clientTools, onTranscript, onModeChange: setAgentMode });
+  // The learner's speech (VAD, 600 ms release) holds prediction prompts like Capture's ask gate.
+  const speechRef = useRef(createActivityTracker({ now: Date.now }));
+  const onVadScore = useCallback((score: number) => speechRef.current.noteVad(score), []);
+  const agent = useVoiceAgent({ role: "tutor", clientTools, onTranscript, onModeChange: setAgentMode, onVadScore });
   const agentRef = useRef(agent);
   useEffect(() => {
     agentRef.current = agent;
@@ -264,13 +268,14 @@ function TeachInner({ sessionId, localMode, agentParam = null, processId = null,
     const next = loop.nextToAsk;
     if (!next || loop.awaiting || loop.paused || talkingRef.current || loop.engine.stats().active > 0) return;
     const c = companionActivity.current;
+    const speech = speechRef.current.snapshot();
     const act = effectiveActivity({
       typing: false,
-      speaking: false,
-      silence_ms: Date.now() - loop.lastFrameChange,
+      speaking: speech.speaking,
+      silence_ms: Math.min(Date.now() - loop.lastFrameChange, speech.speech_silence_ms),
       companion: c ? { typing: c.typing, idle_ms: c.idle_ms, fresh: Date.now() - c.at < COMPANION_STALE_MS } : undefined,
     });
-    if (act.typing || act.silence_ms < MIN_SILENCE_MS || (voiceModeRef.current && agentRef.current.isSpeaking)) return;
+    if (act.typing || act.speaking || act.silence_ms < MIN_SILENCE_MS || (voiceModeRef.current && agentRef.current.isSpeaking)) return;
     loop.nextToAsk = null;
     loop.awaiting = next;
     loop.predicted.add(next.n);

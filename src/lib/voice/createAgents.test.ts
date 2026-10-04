@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildAgentBodies } from "./createAgents";
+import { agentPatchBody, buildAgentBodies } from "./createAgents";
 import * as prompts from "./prompts";
 
 const { interviewer, tutor } = buildAgentBodies(prompts);
@@ -65,5 +65,35 @@ describe("buildAgentBodies", () => {
     }
     const custom = buildAgentBodies(prompts, { llm: "gemini-3.5-flash" });
     expect(custom.tutor.conversation_config.agent.prompt.llm).toBe("gemini-3.5-flash");
+  });
+});
+
+describe("skip_turn and --update (T-0252)", () => {
+  it("adds the skip_turn system tool to both agent bodies", () => {
+    for (const body of [interviewer, tutor]) {
+      expect(body.conversation_config.agent.prompt.built_in_tools.skip_turn).toMatchObject({
+        type: "system",
+        name: "skip_turn",
+        params: { system_tool_type: "skip_turn" },
+      });
+    }
+    expect(prompts.INTERVIEWER_PROMPT).toContain("skip_turn");
+    expect(prompts.TUTOR_PROMPT).toContain("skip_turn");
+  });
+
+  it("builds PATCH bodies from the create bodies, without the name", () => {
+    for (const body of [interviewer, tutor]) {
+      const patch = agentPatchBody(body);
+      expect(Object.keys(patch).sort()).toEqual(["conversation_config", "platform_settings"]);
+      expect(patch.conversation_config.agent.prompt.built_in_tools.skip_turn.name).toBe("skip_turn");
+      expect(patch.conversation_config.agent.prompt.prompt).toBe(body.conversation_config.agent.prompt.prompt);
+    }
+  });
+
+  it("create-agents --dry-run --update prints the PATCH bodies", async () => {
+    const { execFileSync } = await import("node:child_process");
+    const out = execFileSync(process.execPath, ["scripts/create-agents.mjs", "--dry-run", "--update"], { encoding: "utf8" });
+    expect(out).toContain('"skip_turn"');
+    expect(out).not.toContain('"name": "Apprentice Interviewer"');
   });
 });

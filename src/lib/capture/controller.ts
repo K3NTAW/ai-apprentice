@@ -186,6 +186,10 @@ export function createCaptureController(opts: CaptureControllerOptions) {
   const explanations: { t: number }[] = [];
   let lastExpert: { text: string; at: number } | null = null;
   let warnedInputs = false;
+  // One vision request in flight: frames arriving meanwhile are dropped except the latest, sent next.
+  let frameBusy = false;
+  let frameNext: FrameIn | null = null;
+  let visionFailures = 0;
 
   const clean = (raw: string, max: number) => (redactScreenEvent({ to: raw.replace(/\s+/g, " ").trim() }).to ?? "").slice(0, max);
 
@@ -571,8 +575,7 @@ export function createCaptureController(opts: CaptureControllerOptions) {
     const key = text.toLowerCase().replace(/\s+/g, " ");
     if (lastExpert && lastExpert.text === key && now() - lastExpert.at < DEDUPE_MS) return;
     lastExpert = { text: key, at: now() };
-    activity.noteSpeech(true);
-    activity.noteSpeech(false);
+    // No speech marks here: 'speaking' comes from the voice SDK's VAD signal (activity.noteVad), not from finals.
     postEntry(speaker, text);
     if (open) {
       lastAnswer = text;
@@ -631,13 +634,28 @@ export function createCaptureController(opts: CaptureControllerOptions) {
 
   async function onFrame(frame: FrameIn) {
     if (offRecord || !api.postFrame || limited.has("vision")) return;
+    if (frameBusy) {
+      frameNext = frame;
+      return;
+    }
+    frameBusy = true;
     try {
       const res = await api.postFrame(frame);
       if (!offRecord && res.events.length) bus.publishVision(res.events, frame.t, res.frame_ref);
     } catch (err) {
       if (isDailyLimitError(err)) hitLimit("vision");
-      else fail("postFrame")(err);
+      else {
+        // Visible, not silent: the console shows the count.
+        visionFailures++;
+        fail("postFrame")(err);
+        changed();
+      }
+    } finally {
+      frameBusy = false;
     }
+    const next = frameNext;
+    frameNext = null;
+    if (next) await onFrame(next);
   }
 
   function stats() {
@@ -649,6 +667,7 @@ export function createCaptureController(opts: CaptureControllerOptions) {
       debrief: debrief.length,
       deciding,
       offRecord,
+      visionFailures,
     };
   }
 

@@ -40,7 +40,7 @@ describe("message validation", () => {
     expect(statusMessage("0.1.0", { input: true, screen: false, accessibility: true })).toEqual({
       type: "status",
       version: "0.1.0",
-      protocol: 3,
+      protocol: 4,
       permissions: { input: true, screen: false, accessibility: true },
     });
     expect(statusMessage("0.1.0", { input: false, screen: false, accessibility: false }, true).paused).toBe(true);

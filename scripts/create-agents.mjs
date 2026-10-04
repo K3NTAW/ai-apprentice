@@ -1,6 +1,9 @@
 // Creates the two ElevenLabs agents (Apprentice Interviewer, Apprentice Tutor) through the API.
 // Replaces docs/VOICE_SETUP.md sections 2 to 4. Safe to rerun: agents that already exist by name are reused.
-// Usage: node scripts/create-agents.mjs [--dry-run]
+// Usage: node scripts/create-agents.mjs [--dry-run] [--update]
+//   --update: agents that already exist by name get PATCH /v1/convai/agents/{agent_id} with the current config
+//   (prompt, tools incl. the skip_turn system tool, TTS, overrides); missing agents are created as usual.
+//   With --dry-run --update the PATCH bodies are printed instead of the create bodies.
 // Env: ELEVENLABS_API_KEY (from SPIKE_ENV_FILE or ./.env.local), optional AGENT_LLM, AGENT_TTS_MODEL.
 // Node built-ins only (needs Node with TypeScript type stripping to import the .ts modules). Never prints the key.
 //
@@ -20,11 +23,12 @@ import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import * as prompts from '../src/lib/voice/prompts.ts';
-import { buildAgentBodies, INTERVIEWER_NAME, TUTOR_NAME } from '../src/lib/voice/createAgents.ts';
+import { agentPatchBody, buildAgentBodies, INTERVIEWER_NAME, TUTOR_NAME } from '../src/lib/voice/createAgents.ts';
 
 const API = 'https://api.elevenlabs.io/v1/convai/agents';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const dryRun = process.argv.includes('--dry-run');
+const update = process.argv.includes('--update');
 
 const bodies = buildAgentBodies(prompts, {
   llm: process.env.AGENT_LLM,
@@ -32,8 +36,9 @@ const bodies = buildAgentBodies(prompts, {
 });
 
 if (dryRun) {
-  console.log(JSON.stringify(bodies.interviewer, null, 2));
-  console.log(JSON.stringify(bodies.tutor, null, 2));
+  const show = update ? agentPatchBody : (b) => b;
+  console.log(JSON.stringify(show(bodies.interviewer), null, 2));
+  console.log(JSON.stringify(show(bodies.tutor), null, 2));
   process.exit(0);
 }
 
@@ -92,6 +97,15 @@ try {
   for (const p of plan) {
     const found = existing.filter((a) => a.name === p.name);
     if (found.length > 1) console.error(`warning: ${found.length} agents named '${p.name}', reusing the first`);
+    if (found.length && update) {
+      const id = found[0].agent_id;
+      await call(`update '${p.name}'`, `${API}/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        body: JSON.stringify(agentPatchBody(p.body)),
+      });
+      results.push({ role: p.role, name: p.name, id, action: 'updated' });
+      continue;
+    }
     if (found.length) {
       results.push({ role: p.role, name: p.name, id: found[0].agent_id, action: 'reused' });
       continue;

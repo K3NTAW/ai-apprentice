@@ -60,9 +60,13 @@ async function visionFor(api: Api, req: Request): Promise<Response> {
   const saved = await api.store.saveFrame(session_id, t, Buffer.from(jpegBase64, "base64"));
   if (!saved.stored) return Response.json({ events: [], skipped: saved.reason });
 
-  const events: VisionEvent[] = process.env.ANTHROPIC_API_KEY
-    ? await describeFrame({ jpegBase64, previousEvents: prev.data })
-    : [];
+  const result = process.env.ANTHROPIC_API_KEY ? await describeFrame({ jpegBase64, previousEvents: prev.data }) : { events: [] };
+  // Upstream model errors answer 502, never 429: a 429 means our daily cap and makes the client stop vision for the day.
+  if (result.error) {
+    console.warn("vision: upstream failed", result.error);
+    return Response.json({ error: "vision_upstream", detail: result.error }, { status: 502 });
+  }
+  const events: VisionEvent[] = result.events;
   // Redact app, window, from and to before the client stores them (off-record frames never get here).
   return Response.json({ events: events.map(redactScreenEvent), frame_ref: `frames/${saved.name}` });
 }

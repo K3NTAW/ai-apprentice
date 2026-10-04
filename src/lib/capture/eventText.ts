@@ -1,5 +1,6 @@
 // Screen events in natural words for the capture console's live events table and the dock feed (Capture.dc.html):
-// verb first, no app name (the row's app tag carries it), never a quoted raw string.
+// verb first, no app name (the row's app tag carries it), never a quoted raw string,
+// e.g. 'Changed cost center on invoice 4517: 4711 -> 0400' (T-0252: 'on', ASCII arrow, the opened record's amount).
 // A shortcut row says what the chord did, from the vision events linked to it (effect_ids), with the chord as keycaps;
 // without a known effect it reads '<App>: shortcut'. Pure.
 import type { ScreenEvent } from "@/lib/types";
@@ -13,26 +14,32 @@ export type EventText = {
 const pretty = (s: string) => s.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
 // item_sent field -> verb; any other field is shown in brackets after 'Sent'.
 const SENT_VERBS: Record<string, string> = { send: "Sent", sent: "Sent", forward: "Forwarded", reply: "Replied with", "reply all": "Replied to all with" };
-const object = (e: Pick<ScreenEvent, "entity">) => pretty(`${e.entity.kind} ${e.entity.id}`);
+/** 'invoice 4517'; an id that already names its kind ('Invoice 4517') is used as is. */
+function object(e: Pick<ScreenEvent, "entity">): string {
+  const kind = pretty(e.entity.kind);
+  const id = pretty(e.entity.id);
+  if (!kind || !id) return kind || id;
+  return id.toLowerCase().startsWith(`${kind.toLowerCase()} `) || id.toLowerCase() === kind.toLowerCase() ? id : `${kind} ${id}`;
+}
 
 function change(e: ScreenEvent, what: string): string {
-  if (e.from !== undefined && e.to !== undefined) return `Changed ${what}: ${e.from} → ${e.to}`;
+  if (e.from !== undefined && e.to !== undefined) return `Changed ${what}: ${e.from} -> ${e.to}`;
   if (e.to !== undefined) return `Set ${what} to ${e.to}`;
   if (e.from !== undefined) return `Cleared ${what} (was ${e.from})`;
   return `Changed ${what}`;
 }
 
-/** One vision, dom or os event in words, e.g. 'Opened ERP tab · supplier 20418'. Shortcuts without effects: '<App>: shortcut'. */
+/** One vision, dom or os event in words, e.g. 'Opened ERP tab · supplier 20418 (EUR 7,200.00)'. Shortcuts without effects: '<App>: shortcut'. */
 function phrase(e: ScreenEvent): string {
   const obj = object(e);
   const field = e.field ? pretty(e.field) : undefined;
   switch (e.type) {
     case "field_changed":
-      return change(e, field ? `${field} for ${obj}` : obj);
+      return change(e, field ? `${field} on ${obj}` : obj);
     case "status_changed":
-      return change(e, `status of ${obj}`);
+      return change(e, `status on ${obj}`);
     case "record_opened":
-      return `Opened ${e.window ? `${pretty(e.window)} · ` : ""}${obj}`;
+      return `Opened ${e.window ? `${pretty(e.window)} · ` : ""}${obj}${e.amount ? ` (${e.amount})` : ""}`;
     case "button_clicked":
       return `Clicked ${field ?? (e.to !== undefined ? pretty(e.to) : "a button")} on ${obj}`;
     case "app_switched":

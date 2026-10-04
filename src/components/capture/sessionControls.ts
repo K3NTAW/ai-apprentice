@@ -2,7 +2,17 @@
 // Pause holds the apprentice's live questions (capture, events and transcript continue);
 // Off the record stops all capture. The clock behind the capturing pill restarts at 0 for every session.
 import type { AskCadence, AskGate } from "@/lib/voice/askGate";
-import { DEFAULT_SETTINGS, resolveSettings, type AgentSettings } from "@/lib/agents/settings";
+import {
+  DEFAULT_SETTINGS,
+  OFF_RECORD_DEFAULT,
+  minGapMs,
+  offRecordPhrase,
+  resolveSettings,
+  voiceOverrides,
+  type AgentSettings,
+} from "@/lib/agents/settings";
+import { interviewerFirstMessage, interviewerPrompt } from "@/lib/voice/prompts";
+import type { StartOptions } from "@/lib/voice/useVoiceAgent";
 import type { ShortcutControls } from "@/lib/companion/shortcuts";
 
 /** The ask gate with a hold: while held nothing is asked; events wait in the queue and are considered on resume. */
@@ -60,4 +70,33 @@ export async function loadAgentSettings(agentId: string | null, fetchImpl: typeo
     console.warn("capture: agent settings unavailable, using defaults", err instanceof Error ? err.message : err);
     return DEFAULT_SETTINGS;
   }
+}
+
+/**
+ * TTS stability needs the agent's tts override permission (scripts/create-agents.mjs --update grants it).
+ * Until the agents are updated, NEXT_PUBLIC_TTS_OVERRIDES stays unset and only the speed is sent.
+ */
+export function ttsOverrideAllowed(env: string | undefined): boolean {
+  return env?.trim() === "1";
+}
+
+/**
+ * Agent Settings for one capture session, read once at start: the ask gate's minimum gap and guardrails-first,
+ * the controller's off-record phrase and shortcut learning, and the voice session overrides. A custom
+ * off-record phrase also goes into the interviewer prompt and first message (prompt overrides are allowed).
+ */
+export function captureSettings(settings: AgentSettings, ttsAllowed: boolean) {
+  const phrase = offRecordPhrase(settings);
+  const voice = voiceOverrides(settings, ttsAllowed);
+  const overrides: NonNullable<StartOptions["overrides"]> = {
+    ...voice.overrides,
+    ...(phrase !== OFF_RECORD_DEFAULT
+      ? { agent: { prompt: { prompt: interviewerPrompt(phrase) }, firstMessage: interviewerFirstMessage(phrase) } }
+      : {}),
+  };
+  return {
+    gate: { minGapMs: minGapMs(settings), guardrailsFirst: settings.guardrails_first },
+    controller: { offRecordPhrase: phrase, learnShortcuts: settings.learn_shortcuts },
+    voice: { overrides, notice: voice.notice },
+  };
 }

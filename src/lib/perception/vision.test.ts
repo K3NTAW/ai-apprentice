@@ -87,7 +87,16 @@ describe("describeFrame", () => {
       { type: "item_sent", ...outlook, entity: { kind: "email", id: "Offer Q3" }, field: "forward", to: "controller", rect: { x: 0.1, y: 0.1, w: 0.05, h: 0.03 } },
     ];
     const out = await describeFrame({ jpegBase64: "AAAA", fetchImpl: reply(textReply(events)) });
-    expect(out).toEqual([{ ...events[0], type: "record_opened" }, events[1]]);
+    expect(out).toEqual({ events: [{ ...events[0], type: "record_opened" }, events[1]] });
+  });
+
+  it("carries the record amount with its currency on record_opened", async () => {
+    const opened = { type: "record_opened", app: "SAP", entity: { kind: "invoice", id: "4517" }, amount: "EUR 7,200.00" };
+    const out = await describeFrame({ jpegBase64: "AAAA", fetchImpl: reply(textReply([opened])) });
+    expect(out.events[0].amount).toBe("EUR 7,200.00");
+    expect(VISION_SYSTEM_PROMPT).toMatch(/amount/);
+    const { eventAmount } = await import("@/lib/teach/intervention");
+    expect(eventAmount({ ...out.events[0], id: "v1", t: 1, source: "vision" })).toBe(7200);
   });
 
   it("drops a single event with a rect outside the frame or on our own surfaces, keeps the rest, and counts drops", async () => {
@@ -101,20 +110,21 @@ describe("describeFrame", () => {
       { type: "button_clicked", app: "AI Apprentice Companion", entity: { kind: "button", id: "Pair" } },
     ];
     const out = await describeFrame({ jpegBase64: "AAAA", fetchImpl: reply(textReply(events)) });
-    expect(out).toEqual([ok]);
+    expect(out).toEqual({ events: [ok] });
     expect(droppedVisionEvents() - before).toBe(4);
   });
 
-  it("returns [] for whole-response failures: refusal, HTTP error, invalid JSON, no events array, or a thrown fetch", async () => {
-    expect(await describeFrame({ jpegBase64: "A", fetchImpl: reply({ stop_reason: "refusal", content: [] }) })).toEqual([]);
-    expect(await describeFrame({ jpegBase64: "A", fetchImpl: reply({ error: "boom" }, 500) })).toEqual([]);
-    expect(await describeFrame({ jpegBase64: "A", fetchImpl: reply({ content: [{ type: "text", text: "not json" }] }) })).toEqual([]);
-    expect(await describeFrame({ jpegBase64: "A", fetchImpl: reply({ content: [{ type: "text", text: "{\"items\":[]}" }] }) })).toEqual([]);
-    expect(await describeFrame({ jpegBase64: "A", fetchImpl: reply(textReply([{ type: "bogus" }])) })).toEqual([]);
+  it("reports upstream failures as errors (HTTP error, invalid JSON, thrown fetch); a refusal or no events array is an empty answer", async () => {
+    expect(await describeFrame({ jpegBase64: "A", fetchImpl: reply({ stop_reason: "refusal", content: [] }) })).toEqual({ events: [] });
+    expect(await describeFrame({ jpegBase64: "A", fetchImpl: reply({ error: "boom" }, 500) })).toEqual({ events: [], error: "upstream_500" });
+    expect(await describeFrame({ jpegBase64: "A", fetchImpl: reply({ error: "busy" }, 429) })).toEqual({ events: [], error: "upstream_429" });
+    expect(await describeFrame({ jpegBase64: "A", fetchImpl: reply({ content: [{ type: "text", text: "not json" }] }) })).toEqual({ events: [], error: "upstream_bad_json" });
+    expect(await describeFrame({ jpegBase64: "A", fetchImpl: reply({ content: [{ type: "text", text: "{\"items\":[]}" }] }) })).toEqual({ events: [] });
+    expect(await describeFrame({ jpegBase64: "A", fetchImpl: reply(textReply([{ type: "bogus" }])) })).toEqual({ events: [] });
     const thrower = vi.fn(async () => {
       throw new Error("aborted");
     });
-    expect(await describeFrame({ jpegBase64: "A", fetchImpl: thrower })).toEqual([]);
+    expect((await describeFrame({ jpegBase64: "A", fetchImpl: thrower })).error).toMatch(/^upstream_/);
   });
 });
 

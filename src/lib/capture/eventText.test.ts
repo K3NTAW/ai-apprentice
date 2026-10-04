@@ -45,12 +45,12 @@ describe("eventText: natural phrasing per event type", () => {
       [{}, "Opened supplier 20418"],
     ],
     field_changed: [
-      [{ entity: inv, field: "cost_center", from: "4711", to: "0400" }, "Changed cost center for invoice 4517: 4711 → 0400"],
-      [{ entity: inv, field: "cost center", to: "0400" }, "Set cost center for invoice 4517 to 0400"],
-      [{ entity: inv, field: "cost center", from: "4711" }, "Cleared cost center for invoice 4517 (was 4711)"],
+      [{ entity: inv, field: "cost_center", from: "4711", to: "0400" }, "Changed cost center on invoice 4517: 4711 -> 0400"],
+      [{ entity: inv, field: "cost center", to: "0400" }, "Set cost center on invoice 4517 to 0400"],
+      [{ entity: inv, field: "cost center", from: "4711" }, "Cleared cost center on invoice 4517 (was 4711)"],
       [{ entity: inv }, "Changed invoice 4517"],
     ],
-    status_changed: [[{ entity: inv, from: "open", to: "approved" }, "Changed status of invoice 4517: open → approved"]],
+    status_changed: [[{ entity: inv, from: "open", to: "approved" }, "Changed status on invoice 4517: open -> approved"]],
     button_clicked: [
       [{ entity: inv, field: "Approve" }, "Clicked Approve on invoice 4517"],
       [{ entity: inv }, "Clicked a button on invoice 4517"],
@@ -84,4 +84,17 @@ describe("eventText: natural phrasing per event type", () => {
         expect(text).not.toMatch(/ in Google Chrome$/);
       }
     });
+});
+
+describe("event wording snapshots (T-0252 P1-6)", () => {
+  const base = { id: "w", t: 1, source: "vision" as const };
+  const say = (e: Partial<ScreenEvent>) => eventText({ ...base, type: "field_changed", entity: { kind: "invoice", id: "4517" }, ...e } as ScreenEvent).text;
+  it("reads naturally", () => {
+    expect(say({ field: "cost_center", from: "4711", to: "0400" })).toMatchInlineSnapshot(`"Changed cost center on invoice 4517: 4711 -> 0400"`);
+    expect(say({ type: "record_opened", amount: "EUR 7,200.00" })).toMatchInlineSnapshot(`"Opened invoice 4517 (EUR 7,200.00)"`);
+    expect(say({ type: "record_opened", entity: { kind: "invoice", id: "Invoice 4517" } })).toMatchInlineSnapshot(`"Opened Invoice 4517"`);
+    expect(say({ type: "status_changed", from: "open", to: "on_hold" })).toMatchInlineSnapshot(`"Changed status on invoice 4517: open -> on_hold"`);
+    expect(say({ field: "approval_status", to: "second approval" })).toMatchInlineSnapshot(`"Set approval status on invoice 4517 to second approval"`);
+    expect(say({ type: "button_clicked", field: "Save" })).toMatchInlineSnapshot(`"Clicked Save on invoice 4517"`);
+  });
 });

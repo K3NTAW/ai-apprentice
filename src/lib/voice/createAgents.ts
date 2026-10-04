@@ -32,6 +32,25 @@ export type ClientTool = {
   parameters: { type: "object"; required: string[]; properties: Record<string, LiteralProp> };
 };
 
+/**
+ * ElevenLabs system tool skip_turn (OpenAPI 2026-10-04: PromptAgentAPIModel.built_in_tools.skip_turn, a
+ * SystemToolConfig with params.system_tool_type "skip_turn"). The agent calls it to stay silent for a turn,
+ * so expert narration without a control tag is not answered. wait_timeout_secs -1: no check-in after the skip.
+ */
+export type SystemTool = {
+  type: "system";
+  name: "skip_turn";
+  description: string;
+  params: { system_tool_type: "skip_turn"; wait_timeout_secs: number };
+};
+
+export const SKIP_TURN_TOOL: SystemTool = {
+  type: "system",
+  name: "skip_turn",
+  description: "Stay silent this turn. Call it for every user turn that does not start with one of your control tags.",
+  params: { system_tool_type: "skip_turn", wait_timeout_secs: -1 },
+};
+
 export type AgentCreateBody = {
   name: string;
   conversation_config: {
@@ -39,7 +58,7 @@ export type AgentCreateBody = {
       first_message: string;
       language: string;
       dynamic_variables?: { dynamic_variable_placeholders: Record<string, string> };
-      prompt: { prompt: string; llm: string; tools: ClientTool[] };
+      prompt: { prompt: string; llm: string; tools: ClientTool[]; built_in_tools: { skip_turn: SystemTool } };
     };
     tts: { voice_id: string; model_id: string; expressive_mode: boolean };
   };
@@ -47,6 +66,7 @@ export type AgentCreateBody = {
     overrides: {
       conversation_config_override: {
         agent: { prompt: { prompt: boolean }; first_message: boolean; language: boolean };
+        tts: { speed: boolean; stability: boolean };
       };
     };
     auth: { enable_auth: boolean };
@@ -121,7 +141,12 @@ function body(input: {
         ...(input.dynamicVariables
           ? { dynamic_variables: { dynamic_variable_placeholders: { ...input.dynamicVariables } } }
           : {}),
-        prompt: { prompt: input.prompt, llm: input.opts.llm || DEFAULT_LLM, tools: input.tools },
+        prompt: {
+          prompt: input.prompt,
+          llm: input.opts.llm || DEFAULT_LLM,
+          tools: input.tools,
+          built_in_tools: { skip_turn: { ...SKIP_TURN_TOOL, params: { ...SKIP_TURN_TOOL.params } } },
+        },
       },
       tts: {
         voice_id: input.voiceId,
@@ -133,6 +158,8 @@ function body(input: {
       overrides: {
         conversation_config_override: {
           agent: { prompt: { prompt: true }, first_message: true, language: true },
+          // Agent Settings voice preset and speed (src/lib/agents/settings.ts voiceOverrides).
+          tts: { speed: true, stability: true },
         },
       },
       // Signed URLs from /api/voice/signed-url keep working with auth on.
@@ -164,4 +191,11 @@ export function buildAgentBodies(
       opts,
     }),
   };
+}
+
+/** PATCH /v1/convai/agents/{agent_id} body for an existing agent: the create body's config, name kept as is. */
+export type AgentPatchBody = Pick<AgentCreateBody, "conversation_config" | "platform_settings">;
+
+export function agentPatchBody(create: AgentCreateBody): AgentPatchBody {
+  return { conversation_config: create.conversation_config, platform_settings: create.platform_settings };
 }

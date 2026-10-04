@@ -13,14 +13,19 @@ export type ActivitySnapshot = {
 
 export const TYPING_WINDOW_MS = 1500;
 export const READING_WINDOW_MS = 4000;
+/** Voice activity: speaking while the VAD score is above VAD_THRESHOLD, released VAD_RELEASE_MS after the last such score. */
+export const VAD_THRESHOLD = 0.5;
+export const VAD_RELEASE_MS = 600;
 
 export function createActivityTracker({ now }: { now: () => number }) {
   const start = now();
   let lastKeystroke = -Infinity;
   let lastPointer = -Infinity;
   let lastFrameChange = -Infinity;
-  let lastSpeechEnd = -Infinity;
-  let speaking = false;
+  // noteSpeech (explicit on/off) and the VAD signal; either one makes the user speak.
+  let manualEnd = -Infinity;
+  let manual = false;
+  let lastVoice = -Infinity;
 
   return {
     noteKeystroke() {
@@ -33,11 +38,18 @@ export function createActivityTracker({ now }: { now: () => number }) {
       lastFrameChange = now();
     },
     noteSpeech(active: boolean) {
-      if (speaking && !active) lastSpeechEnd = now();
-      speaking = active;
+      if (manual && !active) manualEnd = now();
+      manual = active;
+    },
+    /** One VAD score from the voice SDK (0..1). */
+    noteVad(score: number) {
+      if (score > VAD_THRESHOLD) lastVoice = now();
     },
     snapshot(): ActivitySnapshot {
       const t = now();
+      const voiced = t - lastVoice < VAD_RELEASE_MS;
+      const speaking = manual || voiced;
+      const lastSpeechEnd = Math.max(manualEnd, voiced ? -Infinity : lastVoice + VAD_RELEASE_MS);
       const typing = t - lastKeystroke < TYPING_WINDOW_MS;
       const reading =
         !typing &&

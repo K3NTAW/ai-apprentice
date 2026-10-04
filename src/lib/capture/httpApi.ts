@@ -37,6 +37,24 @@ export async function createCaptureSession(expert: string, agentId?: string | nu
   return s.id;
 }
 
+/** POST /api/session/<id>/end; never throws (logged), the debrief opens either way. */
+export async function endCaptureSession(sessionId: string, fetchImpl: typeof fetch = fetch): Promise<boolean> {
+  try {
+    const res = await fetchImpl(`/api/session/${encodeURIComponent(sessionId)}/end`, { method: "POST" });
+    if (!res.ok) throw new Error(`end ${res.status}`);
+    return true;
+  } catch (err) {
+    console.warn("capture: could not end the session", err instanceof Error ? err.message : err);
+    return false;
+  }
+}
+
+/** End task: POST /end first, then open the debrief (also when ending failed). */
+export async function endThenNavigate(sessionId: string, navigate: () => void, fetchImpl: typeof fetch = fetch): Promise<void> {
+  await endCaptureSession(sessionId, fetchImpl);
+  navigate();
+}
+
 /** The session's agent from /api/agents/<id>; null when missing, unreadable or malformed. */
 export async function loadAgent(agentId: string | null | undefined, fetchImpl: typeof fetch = fetch): Promise<Agent | null> {
   if (!agentId) return null;

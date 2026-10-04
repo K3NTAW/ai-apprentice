@@ -69,3 +69,6 @@ body { user-select: none; }
 .dock.off .state { color: var(--mu); }
 .dock.off .rec, .dock.paused .rec { background: var(--fa); animation: none; }
 @media (prefers-reduced-motion: reduce) { .ack { animation: none; } }
+
+/* Off the record: the large 'Back on the record' button under the card. */
+.btn.big { width: 100%; height: 48px; font-size: 15px; justify-content: center; }
