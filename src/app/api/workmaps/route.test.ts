@@ -82,13 +82,13 @@ describe("GET /api/workmaps", () => {
     state.signedIn = false;
     const res = await get();
     expect(res.status).toBe(401);
-    expect(res.headers.get("Server-Timing")).toMatch(/^auth;dur=/);
+    expect(res.headers.get("Server-Timing")).toMatch(/^ctx-auth;dur=\d+(\.\d)?, db;dur=0\.0, total;dur=/);
   });
 
   it("lists the active workspace's maps newest first, all of them without ?confirmed", async () => {
     const res = await get();
     expect(res.status).toBe(200);
-    expect(res.headers.get("Server-Timing")).toMatch(/^auth;dur=\d+(\.\d)?, db;dur=\d+(\.\d)?$/);
+    expect(res.headers.get("Server-Timing")).toMatch(/^ctx-auth;dur=\d+(\.\d)?, db;dur=\d+(\.\d)?, total;dur=\d+(\.\d)?$/);
     const body = await res.json();
     expect(body.maps.map((m: { workmap: WorkMap }) => m.workmap.task)).toEqual(["new", "mid", "draft", "old"]);
     expect(body.session).toBeNull();
