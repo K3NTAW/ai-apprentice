@@ -15,28 +15,50 @@ for (const btn of document.querySelectorAll("[data-action]")) {
 
 api.onState((v) => {
   if (!v || typeof v !== "object") return;
-  $("dock").classList.toggle("collapsed", v.collapsed === true);
-  $("collapse").textContent = v.side === "left" ? "‹" : "›";
+  const off = v.offRecord === true;
+  const dock = $("dock");
+  dock.classList.toggle("collapsed", v.collapsed === true);
+  dock.classList.toggle("left", v.side === "left");
+  dock.classList.toggle("off", off);
+  dock.classList.toggle("paused", v.paused === true);
+  $("chev").setAttribute("d", v.side === "left" ? "M15 6l-6 6 6 6" : "m9 6 6 6-6 6");
   window.companionAvatar.setAvatarSrc($("avatar"), v.avatar);
   window.companionAvatar.setAvatarSrc($("tab-avatar"), v.avatar);
+  $("header").textContent = str(v.header);
   $("name").textContent = str(v.name);
   $("role").textContent = str(v.role);
-  $("say").textContent = str(v.say);
-  show($("say"), str(v.say) !== "");
-  show($("offrec"), v.offRecord === true);
-  show($("paused"), v.paused === true);
+  $("state-label").textContent = str(v.stateLabel);
+  $("rec-label").textContent = str(v.recLabel);
+  $("say-text").textContent = str(v.say);
+  show($("say"), str(v.say) !== "" && !off);
+  show($("offrec"), off);
   $("asked").textContent = num(v.asked);
   $("guardrails").textContent = num(v.guardrails);
+  $("tab-asked").textContent = num(v.asked);
+  show($("tab-asked"), typeof v.asked === "number" && v.asked > 0);
+  // Off the record: the canvas swaps the primary button to "Back on the record" (same off_record_toggle action).
+  $("off-label").textContent = off ? "Back on the record" : "Off the record";
+  show($("off-dot"), off);
+  $("off-btn").className = off ? "btn bk grow" : "btn bw grow";
+  $("end-btn").className = off ? "btn bw" : "btn bk";
   const items = [];
   for (const line of Array.isArray(v.feed) ? v.feed : []) {
+    const kind = KINDS.includes(line.kind) ? line.kind : "step";
     const li = document.createElement("li");
-    li.className = KINDS.includes(line.kind) ? line.kind : "step";
+    li.className = `it ${kind}`;
     const icon = document.createElement("span");
-    icon.className = "icon-kind";
+    icon.className = "ib";
     icon.textContent = str(line.icon);
+    const body = document.createElement("span");
+    body.className = "body";
+    const label = document.createElement("span");
+    label.className = "xs kind";
+    label.textContent = kind;
     const text = document.createElement("span");
+    text.className = "text";
     text.textContent = str(line.text);
-    li.append(icon, text);
+    body.append(label, text);
+    li.append(icon, body);
     items.push(li);
   }
   $("feed").replaceChildren(...items);

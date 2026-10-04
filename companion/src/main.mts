@@ -42,7 +42,7 @@ import {
 import { mapRect, type DisplayInfo } from "./overlay.mjs";
 import type { Allowlist } from "./origin.mjs";
 import { Pairing } from "./pairing.mjs";
-import { isPanelAction, panelMaterial, panelViewModel } from "./panel.mjs";
+import { isPanelAction, materialOptions, panelMaterial, panelViewModel, surfaceMaterial } from "./panel.mjs";
 import { formatPairingLine, isPermissionKey } from "./pairingWindow.mjs";
 import { canStartHook, PermissionMonitor, readPermissions } from "./permissions.mjs";
 import { allowDisplayMedia, checkPermission, DISPLAY_MEDIA_OPTIONS, grantPermission, isUrlAllowed, pickPrimarySource } from "./permissionsGrant.mjs";
@@ -292,30 +292,40 @@ function dockWorkArea(): Electron.Rectangle {
   return screen.getPrimaryDisplay().workArea;
 }
 
-function createDock(): BrowserWindow {
-  const win = new BrowserWindow({
-    ...dockBounds(dockWorkArea(), dock.side, dock.collapsed),
-    // macOS: a non-activating panel; with focusable false and showInactive it never takes focus from the expert's app.
-    ...(process.platform === "darwin" ? { type: "panel" as const } : {}),
-    transparent: true,
-    frame: false,
-    hasShadow: false,
-    resizable: false,
-    maximizable: false,
-    minimizable: false,
-    fullscreenable: false,
-    focusable: false,
-    skipTaskbar: true,
-    show: false,
-    alwaysOnTop: true,
-    title: "AI Apprentice agent",
-    webPreferences: {
-      preload: path.join(here, "dockPreload.cjs"),
-      contextIsolation: true,
-      sandbox: true,
-      nodeIntegration: false,
-    },
-  });
+function createDock(material = surfaceMaterial("dock", process.platform, process.getSystemVersion())): BrowserWindow {
+  const dockMaterial = material;
+  let win: BrowserWindow;
+  try {
+    win = new BrowserWindow({
+      ...dockBounds(dockWorkArea(), dock.side, dock.collapsed),
+      // macOS: a non-activating panel; with focusable false and showInactive it never takes focus from the expert's app.
+      ...(process.platform === "darwin" ? { type: "panel" as const } : {}),
+      transparent: true,
+      // Acrylic behind the CSS glass on Windows 22H2+; solid (CSS only) elsewhere. See surfaceMaterial.
+      ...(dockMaterial === "acrylic" ? { backgroundMaterial: "acrylic" as const } : {}),
+      frame: false,
+      hasShadow: false,
+      resizable: false,
+      maximizable: false,
+      minimizable: false,
+      fullscreenable: false,
+      focusable: false,
+      skipTaskbar: true,
+      show: false,
+      alwaysOnTop: true,
+      title: "AI Apprentice agent",
+      webPreferences: {
+        preload: path.join(here, "dockPreload.cjs"),
+        contextIsolation: true,
+        sandbox: true,
+        nodeIntegration: false,
+      },
+    });
+  } catch (err) {
+    if (material === "solid") throw err;
+    console.warn("[companion] dock material failed, using solid:", err);
+    return createDock("solid");
+  }
   win.setAlwaysOnTop(true, "floating");
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   // Like the overlays: keep the dock out of the whole-monitor frames sent to vision.
@@ -572,18 +582,18 @@ function showPanel(): void {
   }
   // Shows in the Dock while open, so it is reachable when the tray item is hidden by the notch.
   void app.dock?.show();
-  const material = panelMaterial(process.platform, process.getSystemVersion());
-  const win = new BrowserWindow({
-    width: 380,
-    height: 520,
+  let material = panelMaterial(process.platform, process.getSystemVersion());
+  // FloatPanel.dc.html: 520 px wide. A material the OS refuses falls back to the solid canvas colour.
+  const panelOptions = (m: typeof material): Electron.BrowserWindowConstructorOptions => ({
+    width: 520,
+    height: 680,
     frame: false,
     resizable: false,
     maximizable: false,
     fullscreenable: false,
     title: PRODUCT_NAME,
     show: false,
-    ...(material === "vibrancy" ? { vibrancy: "under-window" as const, visualEffectState: "active" as const, backgroundColor: "#00000000" } : {}),
-    ...(material === "mica" ? { backgroundMaterial: "mica" as const, backgroundColor: "#00000000" } : {}),
+    ...materialOptions(m),
     webPreferences: {
       preload: path.join(here, "panelPreload.cjs"),
       contextIsolation: true,
@@ -591,6 +601,14 @@ function showPanel(): void {
       nodeIntegration: false,
     },
   });
+  let win: BrowserWindow;
+  try {
+    win = new BrowserWindow(panelOptions(material));
+  } catch (err) {
+    console.warn("[companion] panel material failed, using solid:", err);
+    material = "solid";
+    win = new BrowserWindow(panelOptions(material));
+  }
   panel = win;
   // Like the overlays and the dock: the panel never appears in captured frames.
   win.setContentProtection(true);

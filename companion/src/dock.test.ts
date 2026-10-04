@@ -90,11 +90,14 @@ describe("dock view and placement", () => {
 
   it("collapses to the 56 px avatar tab at the docked edge and persists it", () => {
     const wa = { x: 0, y: 25, width: 1440, height: 875 };
-    expect(dockBounds(wa, "right", false)).toEqual({ x: 1440 - 300 - 8, y: 25 + Math.round((875 - 525) / 2), width: 300, height: 525 });
+    // Presentational (T-0136, canvas Dock.dc.html): 340 px wide, 12 px margin; tab 56 x 196 flush with the edge.
+    expect(dockBounds(wa, "right", false)).toEqual({ x: 1440 - 340 - 12, y: 25 + Math.round((875 - 525) / 2), width: 340, height: 525 });
     const tab = dockBounds(wa, "right", true);
     expect(tab.width).toBe(56);
-    expect(tab.x).toBe(1440 - 56 - 8);
-    expect(dockBounds(wa, "left", true).x).toBe(8);
+    expect(tab.height).toBe(196);
+    expect(tab.x).toBe(1440 - 56);
+    expect(dockBounds(wa, "left", true).x).toBe(0);
+    expect(dockBounds({ x: 0, y: 0, width: 800, height: 150 }, "right", true).height).toBe(150);
     let s = reduceDock(initialDock(), { type: "collapse", collapsed: true });
     expect(dockViewModel({ state: s, session: capture, mode: "idle", target: null, say: null, paused: false }).collapsed).toBe(true);
     expect(parseDockPrefs(serializeDockPrefs({ collapsed: true }))).toEqual({ collapsed: true });

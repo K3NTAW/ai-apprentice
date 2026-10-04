@@ -53,7 +53,7 @@ api.onState((v) => {
   if (!v || typeof v !== "object") return;
   const pairing = v.pairing || {};
   $("state").textContent = str(pairing.stateText);
-  $("state").className = pairing.paired ? "state paired" : "state";
+  $("state").className = pairing.paired ? "xs mu state paired" : "xs mu state";
   $("code").textContent = str(pairing.code);
   show($("pairing"), v.firstRun === true);
   show($("session"), v.firstRun !== true);
@@ -76,6 +76,7 @@ api.onState((v) => {
   for (const m of Array.isArray(pairing.missing) ? pairing.missing : []) {
     const btn = document.createElement("button");
     btn.type = "button";
+    btn.className = "btn bw";
     btn.textContent = str(m.button);
     btn.title = `Missing: ${str(m.label)}`;
     btn.addEventListener("click", () => api.openSettings(m.key));
@@ -86,12 +87,12 @@ api.onState((v) => {
   $("shortcuts").replaceChildren();
   for (const sc of Array.isArray(v.shortcuts) ? v.shortcuts : []) {
     const row = document.createElement("div");
-    row.className = "shortcut";
+    row.className = "row";
     const label = document.createElement("span");
     label.textContent = str(sc.label);
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.className = "keys";
+    btn.className = "kc keys";
     btn.textContent = recording === sc.action ? "Press keys… (Esc cancels)" : str(sc.display);
     btn.addEventListener("click", () => {
       recording = sc.action;

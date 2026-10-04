@@ -20,10 +20,14 @@ export const LEARNED_KINDS = ["step", "shortcut", "guardrail"] as const;
 export type LearnedKind = (typeof LEARNED_KINDS)[number];
 export const MAX_LEARNED_TEXT = 140;
 export const FEED_MAX = 8;
-export const DOCK_WIDTH = 300;
+// Sizes from Dock.dc.html: 340 px wide, 12 px off the edge, 24 px radius drawn by CSS inside a transparent window
+// (the window bounds equal the glass rect, so no native corner shows). The collapsed tab is 56 x 196, flush with the edge.
+export const DOCK_WIDTH = 340;
 export const DOCK_TAB_WIDTH = 56;
+export const DOCK_TAB_HEIGHT = 196;
 export const DOCK_HEIGHT_RATIO = 0.6;
-export const DOCK_MARGIN = 8;
+export const DOCK_MARGIN = 12;
+export const DOCK_RADIUS = 24;
 export const KIND_ICONS: Record<LearnedKind, string> = { step: "→", shortcut: "⌘", guardrail: "⚠" };
 
 export type LearnedLine = { kind: LearnedKind; text: string };
@@ -107,7 +111,28 @@ export type DockView = {
   guardrails: number;
   offRecord: boolean;
   paused: boolean;
+  /** Lowercase canvas copy, e.g. "ai apprentice · training". User content (name, role, feed) is never transformed. */
+  header: string;
+  stateLabel: string;
+  recLabel: string;
 };
+
+const MODE_HEADER = { capture: "training", teach: "teaching" } as const;
+const STATE_LABELS: Record<BuddyMode, string> = {
+  idle: "watching · quiet while you type",
+  listening: "listening · quiet while you type",
+  thinking: "thinking",
+  speaking: "talking",
+  paused: "paused",
+};
+
+/** Header, state line and recording pill copy for the dock (Dock.dc.html). */
+export function dockLabels(i: { mode: DockSession["mode"]; buddy: BuddyMode; offRecord: boolean; paused: boolean }): { header: string; stateLabel: string; recLabel: string } {
+  const header = i.mode ? `ai apprentice · ${MODE_HEADER[i.mode]}` : "ai apprentice";
+  if (i.offRecord) return { header, stateLabel: "paused · off the record", recLabel: "off" };
+  if (i.paused) return { header, stateLabel: STATE_LABELS.paused, recLabel: "paused" };
+  return { header, stateLabel: STATE_LABELS[i.buddy] ?? STATE_LABELS.idle, recLabel: i.mode ? "rec" : "on" };
+}
 
 export function dockViewModel(i: { state: DockState; session: DockSession | null; mode: BuddyMode; target: PointStyle | null; say: string | null; paused: boolean }): DockView {
   const agent = i.session?.agent;
@@ -123,6 +148,7 @@ export function dockViewModel(i: { state: DockState; session: DockSession | null
     guardrails: i.session?.guardrails ?? 0,
     offRecord: i.session?.off_record ?? false,
     paused: i.paused,
+    ...dockLabels({ mode: i.session?.mode ?? null, buddy: i.mode, offRecord: i.session?.off_record ?? false, paused: i.paused }),
   };
 }
 
@@ -130,9 +156,10 @@ export type Bounds = { x: number; y: number; width: number; height: number };
 
 export function dockBounds(workArea: Bounds, side: DockSide, collapsed: boolean): Bounds {
   const width = collapsed ? DOCK_TAB_WIDTH : DOCK_WIDTH;
-  const height = collapsed ? DOCK_TAB_WIDTH + 2 * DOCK_MARGIN : Math.round(workArea.height * DOCK_HEIGHT_RATIO);
+  const height = collapsed ? Math.min(DOCK_TAB_HEIGHT, workArea.height) : Math.round(workArea.height * DOCK_HEIGHT_RATIO);
+  const margin = collapsed ? 0 : DOCK_MARGIN;
   const y = workArea.y + Math.round((workArea.height - height) / 2);
-  const x = side === "right" ? workArea.x + workArea.width - width - DOCK_MARGIN : workArea.x + DOCK_MARGIN;
+  const x = side === "right" ? workArea.x + workArea.width - width - margin : workArea.x + margin;
   return { x, y, width, height };
 }
 

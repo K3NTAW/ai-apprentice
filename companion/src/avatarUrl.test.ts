@@ -93,6 +93,8 @@ describe("avatar data URLs", () => {
       const csp = /Content-Security-Policy" content="([^"]+)"/.exec(html)?.[1] ?? "";
       expect(csp, f).toContain("default-src 'none'");
       expect(csp, f).toMatch(/img-src data:(;|$)/);
+      // T-0136: bundled Geist, fonts from the app only (no remote font hosts).
+      expect(csp, f).toContain("font-src 'self'");
       expect(html.indexOf("avatarSrc.js"), f).toBeGreaterThan(0);
     }
   });

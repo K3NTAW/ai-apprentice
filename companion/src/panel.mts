@@ -92,14 +92,42 @@ export function panelViewModel(input: PanelInput): PanelView {
   };
 }
 
-export type PanelMaterial = "vibrancy" | "mica" | "solid";
+export type PanelMaterial = "vibrancy" | "mica" | "acrylic" | "solid";
+export type Surface = "panel" | "dock" | "overlay";
 
-/** Vibrancy on macOS, Mica on Windows 11 22H2+ (build 22621, where Electron's backgroundMaterial works), else solid. */
-export function panelMaterial(platform: Platform, systemVersion: string): PanelMaterial {
+/** Windows 11 22H2: the first build where Electron's backgroundMaterial (mica, acrylic) works. */
+export const WIN_MATERIAL_BUILD = 22621;
+/** Solid fallback, the canvas glass colour (rgba(251,251,251,.88) on the canvas backdrop) as an opaque window colour. */
+export const SOLID_BACKGROUND = "#FBFBFB";
+
+function windowsBuild(systemVersion: string): number {
+  const build = Number(String(systemVersion).split(".")[2]);
+  return Number.isFinite(build) ? build : 0;
+}
+
+/**
+ * Native window material per surface. The panel is an opaque frameless window: vibrancy on macOS, Mica on Windows 11 22H2+
+ * (build 22621), else solid. The dock and the overlay are transparent windows whose glass and radius are drawn by CSS
+ * (a native material fills the whole window rect and would square the dock's 24 px corners and frost the whole overlay),
+ * so they stay solid on macOS and older Windows; on Windows 22H2+ the dock gets acrylic, the transient-surface material,
+ * behind its CSS glass, with the window bounds equal to the glass rect.
+ */
+export function surfaceMaterial(surface: Surface, platform: Platform | string, systemVersion: string): PanelMaterial {
+  if (surface === "overlay") return "solid";
+  const winNative = platform === "win32" && windowsBuild(systemVersion) >= WIN_MATERIAL_BUILD;
+  if (surface === "dock") return winNative ? "acrylic" : "solid";
   if (platform === "darwin") return "vibrancy";
-  if (platform === "win32") {
-    const build = Number(systemVersion.split(".")[2]);
-    return Number.isFinite(build) && build >= 22621 ? "mica" : "solid";
-  }
-  return "solid";
+  return winNative ? "mica" : "solid";
+}
+
+/** The panel's material (kept for callers and tests). */
+export function panelMaterial(platform: Platform | string, systemVersion: string): PanelMaterial {
+  return surfaceMaterial("panel", platform, systemVersion);
+}
+
+/** BrowserWindow options for a material; any window creation error falls back to materialOptions("solid"). */
+export function materialOptions(material: PanelMaterial): { vibrancy?: "under-window"; visualEffectState?: "active"; backgroundMaterial?: "mica" | "acrylic"; backgroundColor: string } {
+  if (material === "vibrancy") return { vibrancy: "under-window", visualEffectState: "active", backgroundColor: "#00000000" };
+  if (material === "mica" || material === "acrylic") return { backgroundMaterial: material, backgroundColor: "#00000000" };
+  return { backgroundColor: SOLID_BACKGROUND };
 }

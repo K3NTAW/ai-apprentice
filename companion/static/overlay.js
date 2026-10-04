@@ -5,6 +5,10 @@ const root = document.getElementById("root");
 const buddyEl = document.getElementById("buddy");
 const sayEl = document.getElementById("say");
 const avatarEl = document.getElementById("avatar");
+const pathEl = document.getElementById("path");
+const pathLine = document.getElementById("path-line");
+const geo = window.companionPath;
+const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
 const px = (n) => `${Number(n) || 0}px`;
 const OFFSET = 18;
 const FLY_MS = 400;
@@ -12,6 +16,7 @@ const MODES = ["idle", "listening", "thinking", "speaking", "paused"];
 
 let view = { buddy: false, mode: "idle", say: null, target: null, halos: [], avatar: null };
 let half = 9;
+let pathShown = false;
 let cursor = null;
 let pos = null;
 let flight = null;
@@ -29,7 +34,7 @@ function drawHalos(halos) {
     root.appendChild(box);
     if (typeof h.text === "string" && h.text) {
       const bubble = document.createElement("div");
-      bubble.className = "bubble";
+      bubble.className = "glass caption";
       bubble.textContent = h.text;
       bubble.style.left = px(h.rect.x);
       const below = h.rect.y + h.rect.h + 10;
@@ -50,14 +55,36 @@ function goal() {
 const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
 function startFlight(to) {
-  if (!pos) {
+  if (!pos || reduced.matches) {
     pos = to;
+    flight = null;
     return;
   }
   // Quadratic curve with the control point lifted off the straight line.
   const mx = (pos.x + to.x) / 2;
   const my = (pos.y + to.y) / 2 - Math.min(160, Math.hypot(to.x - pos.x, to.y - pos.y) / 3);
   flight = { from: { ...pos }, ctrl: { x: mx, y: my }, to, start: performance.now() };
+  pathShown = false;
+}
+
+/** Draw the dotted path once per flight; clear it when the flight ends, the buddy leaves this display, or capture stops. */
+function syncPath(visible) {
+  const on = geo.showPath({ flying: flight !== null, visible, reducedMotion: reduced.matches, paused: view.mode === "paused", offRecord: view.offRecord === true });
+  if (!on) {
+    if (pathShown || !pathEl.classList.contains("hidden")) clearPath();
+    return;
+  }
+  if (pathShown) return;
+  const pts = geo.flightPoints(flight.from, flight.ctrl, flight.to, geo.MAX_POINTS, { width: window.innerWidth, height: window.innerHeight });
+  pathLine.setAttribute("d", geo.pathData(pts));
+  pathEl.classList.remove("hidden");
+  pathShown = true;
+}
+
+function clearPath() {
+  pathLine.setAttribute("d", "");
+  pathEl.classList.add("hidden");
+  pathShown = false;
 }
 
 function placeBubble() {
@@ -68,11 +95,11 @@ function placeBubble() {
   sayEl.classList.remove("hidden");
   const w = sayEl.offsetWidth;
   const h = sayEl.offsetHeight;
-  // Right-below the buddy, flipped left/up at the display edge; the buddy already sits off the hotspot.
-  let x = pos.x + 14;
-  let y = pos.y + 14;
-  if (x + w > window.innerWidth) x = pos.x - 14 - w;
-  if (y + h > window.innerHeight) y = pos.y - 14 - h;
+  // Under the buddy, left edges aligned (Buddy.dc.html: +2 px, 6 px gap), flipped left/up at the display edge.
+  let x = pos.x - half + 2;
+  let y = pos.y + half + 6;
+  if (x + w > window.innerWidth) x = pos.x + half - w;
+  if (y + h > window.innerHeight) y = pos.y - half - 6 - h;
   sayEl.style.left = px(Math.max(0, x));
   sayEl.style.top = px(Math.max(0, y));
 }
@@ -101,6 +128,11 @@ function frame(now) {
     }
     buddyEl.style.transform = `translate(${pos.x - half}px, ${pos.y - half}px)`;
   }
+  try {
+    syncPath(view.buddy && g !== null);
+  } catch {
+    clearPath();
+  }
   placeBubble();
   requestAnimationFrame(frame);
 }
@@ -111,7 +143,7 @@ window.companionOverlay.onView((next) => {
   const mode = MODES.includes(view.mode) ? view.mode : "idle";
   // The avatar (a validated data URL) only ever goes to the img src; null keeps the v2 orb.
   const hasAvatar = window.companionAvatar.setAvatarSrc(avatarEl, view.avatar);
-  half = hasAvatar ? 14 : 9;
+  half = hasAvatar ? 23 : 9;
   buddyEl.className = `buddy ${mode}${hasAvatar ? " has-avatar" : ""}${buddyEl.classList.contains("hidden") ? " hidden" : ""}`;
   sayEl.textContent = typeof view.say === "string" ? view.say : "";
   const key = view.target ? `${view.target.id}:${view.target.rect.x},${view.target.rect.y}` : null;

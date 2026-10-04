@@ -1,46 +1,48 @@
-:root {
-  color-scheme: light dark;
-  --bg: #f6f7f9; --card: rgba(255, 255, 255, 0.75); --fg: #15171a; --muted: #6b7280; --line: rgba(0, 0, 0, 0.08);
-  --blue: #2f6bff; --warn: #b45309; --danger: #c0262d;
-}
-@media (prefers-color-scheme: dark) {
-  :root { --bg: #1b1d21; --card: rgba(255, 255, 255, 0.06); --fg: #eceef1; --muted: #9aa1ab; --line: rgba(255, 255, 255, 0.09); }
-}
-html[data-material="vibrancy"], html[data-material="mica"] { --bg: transparent; }
-* { box-sizing: border-box; }
+/* Floating panel, 1:1 with FloatPanel.dc.html. The window material (vibrancy/mica/acrylic) shows through only when
+   main picked one; the solid fallback paints the canvas glass colour. */
 html, body { margin: 0; height: 100%; }
-body {
-  background: var(--bg); color: var(--fg); font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
-  padding: 0 12px 12px; overflow-y: auto; border-radius: 14px; user-select: none;
+body { background: transparent; overflow: hidden; user-select: none; }
+.sheet {
+  box-sizing: border-box; height: 100%; padding: 22px; display: flex; flex-direction: column; gap: 16px; overflow-y: auto;
+  /* The panel is an opaque frameless window: the OS rounds its corners, so the sheet fills it edge to edge. */
+  background: rgba(251,251,251,.88); border: 0; border-radius: 0; box-shadow: inset 0 1px 1px #fffc;
 }
-.hidden { display: none !important; }
-.titlebar { -webkit-app-region: drag; display: flex; align-items: center; gap: 8px; height: 40px; }
+html[data-material="vibrancy"] .sheet, html[data-material="mica"] .sheet, html[data-material="acrylic"] .sheet { background: rgba(251,251,251,.55); }
+.pill { box-shadow: 0 4px 12px rgba(0,0,0,.06), inset 0 1px 1px #fffc; }
+.titlebar { -webkit-app-region: drag; display: flex; align-items: center; gap: 14px; }
 .titlebar button { -webkit-app-region: no-drag; }
-.brand { font-weight: 600; display: flex; align-items: center; gap: 6px; }
-.orb { width: 10px; height: 10px; border-radius: 50%; background: var(--blue); box-shadow: 0 0 8px rgba(47, 107, 255, 0.6); }
-.state { margin-left: auto; color: var(--muted); font-size: 12px; }
-.state.paired { color: #16a34a; }
-.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-top: 10px; }
-.label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin-bottom: 4px; }
-.code { font-size: 34px; font-weight: 600; letter-spacing: 0.08em; font-variant-numeric: tabular-nums; }
-.muted { color: var(--muted); }
-.title { font-weight: 600; font-size: 15px; margin-top: 6px; }
-.qa { margin-top: 8px; }
+.logo { width: 56px; height: 56px; border-radius: 17px; }
+.orb { width: 18px; height: 18px; border-radius: 50%; background: var(--bl); box-shadow: 0 0 12px rgba(15,127,255,.6); }
+.who { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.brand { font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+.state.paired { color: var(--gr); }
+.btn.sq { width: 32px; height: 32px; padding: 0; }
+.card { border-radius: 18px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+.session { display: flex; flex-direction: column; gap: 16px; }
+.code { font-size: 34px; font-weight: 600; letter-spacing: .08em; }
+.between { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.tags { display: inline-flex; gap: 6px; }
+.tag { display: inline-flex; align-items: center; height: 22px; padding: 0 9px; border-radius: 999px; font-size: 12px; font-weight: 500; background: var(--s3); color: var(--mu); }
+.tag.off { background: var(--cos); color: var(--co); }
+.title { font-weight: 600; font-size: 14px; }
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; padding-top: 4px; }
+.stats > span { display: flex; flex-direction: column; }
+.num { font-size: 17px; font-weight: 600; }
 .text { white-space: pre-wrap; word-wrap: break-word; max-height: 72px; overflow-y: auto; user-select: text; }
-.row { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
-.counters b { font-variant-numeric: tabular-nums; }
-.pill { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: rgba(47, 107, 255, 0.14); color: var(--blue); }
-.pill.warn { background: rgba(180, 83, 9, 0.14); color: var(--warn); }
-.stack { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
-.shortcut { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4px; }
-.error { grid-column: 1 / -1; color: var(--danger); font-size: 12px; }
-button {
-  font: inherit; color: var(--fg); background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 5px 10px; cursor: pointer;
-}
-button:hover:not(:disabled) { border-color: var(--blue); }
-button:disabled { opacity: 0.45; cursor: default; }
-button.danger { color: var(--danger); }
-button.link { border: none; color: var(--blue); padding: 4px 0; margin-top: 6px; }
-button.icon { border: none; font-size: 18px; padding: 0 4px; }
-button.keys { font-variant-numeric: tabular-nums; min-width: 120px; }
-.toggle { margin-left: auto; display: flex; align-items: center; gap: 4px; }
+.question { font-size: 15px; font-weight: 500; }
+.answer { font-size: 15px; color: var(--bl); }
+.actions { display: flex; gap: 8px; }
+.actions .btn { flex: 1; }
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.colsec { display: flex; flex-direction: column; }
+.colsec .head { padding-bottom: 6px; }
+.hint { padding-bottom: 4px; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 0; border-top: 1px solid var(--ln); flex-wrap: wrap; }
+.kc.keys { cursor: pointer; min-width: 64px; height: 22px; }
+.kc.keys:focus-visible { outline: 2px solid var(--bl); outline-offset: 2px; }
+.error { flex-basis: 100%; color: var(--rd); font-size: 12px; }
+.stack { display: flex; flex-direction: column; }
+.stack .btn { justify-content: space-between; }
+.link { height: 28px; padding: 0; }
+.toggle { cursor: pointer; }
+.footer { display: flex; gap: 8px; justify-content: space-between; padding-top: 2px; }
