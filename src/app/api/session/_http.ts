@@ -8,6 +8,8 @@ import {
   InvalidOffRecordRangeError,
   InvalidSessionIdError,
   isValidSessionId,
+  ProcessesUnavailableError,
+  ProcessNotFoundError,
   SessionNotFoundError,
   type SessionStore,
 } from "@/lib/store";
@@ -42,6 +44,9 @@ export async function handle(fn: () => Promise<Response>): Promise<Response> {
     if (err instanceof InvalidSessionIdError) return badRequest(err.message);
     if (err instanceof InvalidOffRecordRangeError) return badRequest(err.message);
     if (err instanceof SessionNotFoundError) return notFound(err.message);
+    if (err instanceof ProcessNotFoundError) return notFound(err.message);
+    // Migration 20261004030000_processes not applied: a stable 503, never a 500. The UI falls back to sessions.
+    if (err instanceof ProcessesUnavailableError) return Response.json({ error: err.code, message: err.message }, { status: 503 });
     // getStore errors: never fall back to the file store.
     if (err instanceof Error && err.message === "supabase_not_configured") {
       return Response.json({ error: "supabase_not_configured" }, { status: 503 });

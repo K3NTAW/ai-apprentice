@@ -84,3 +84,32 @@ describe("agentStats", () => {
     expect(statText(none.shortcuts)).toBe("none yet");
   });
 });
+
+describe("agentStats with processes", () => {
+  const p = (x: { agent_id?: string; workmap: WorkMap; confirmed?: boolean; archived_at?: string | null }) => ({
+    agent_id: A,
+    confirmed: true,
+    archived_at: null,
+    ...x,
+  });
+
+  it("counts confirmed, non-archived processes instead of sessions when the agent has processes", () => {
+    const sessions = [s({ workmap: workmap(true, [["session rule"]]) }), s({ workmap: workmap(true, [["session rule 2"]]) })];
+    const processes = [
+      p({ workmap: workmap(true, [["Never above 5000", "never above 5000 "]], [sc("Cmd+S")]) }),
+      p({ workmap: workmap(true, [["Archived rule"]]), archived_at: "2026-10-04T08:00:00.000Z" }),
+      p({ workmap: workmap(false, [["Draft rule"]]), confirmed: false }),
+      p({ agent_id: B, workmap: workmap(true, [["Other agent rule"]]) }),
+    ];
+    const st = agentStats(A, sessions, processes);
+    expect(st).toMatchObject({ processes: 1, guardrails: 1, shortcuts: 1 });
+    // Last trained still comes from the capture sessions.
+    expect(st.last_trained).toBe("2026-10-01T08:00:00.000Z");
+  });
+
+  it("falls back to sessions when the agent has no process (or the table is missing)", () => {
+    const sessions = [s({ workmap: workmap(true, [["a"], ["b"]]) })];
+    expect(agentStats(A, sessions, [p({ agent_id: B, workmap: workmap(true, []) })])).toMatchObject({ processes: 1, guardrails: 2 });
+    expect(agentStats(A, sessions)).toMatchObject({ processes: 1, guardrails: 2 });
+  });
+});

@@ -93,6 +93,29 @@ beforeEach(() => {
   state.signedIn = true;
 });
 
+describe("GET /api/export?agent_id with processes", () => {
+  it("exports the confirmed, non-archived processes of the agent, titled by the process, when it has any", async () => {
+    const id = await seed(WS_A, USER, [map("Session map", "Session rule")]);
+    const store = createSupabaseStore(state.fake.client as never, { workspaceId: WS_A, userId: USER });
+    await store.createProcess({ agent_id: id, title: "Pay invoices", workmap: map("old task", "Process rule") });
+    const archived = await store.createProcess({ agent_id: id, title: "Old", workmap: map("x", "Archived rule") });
+    await store.updateProcess(archived.id, { archived: true });
+    await store.createProcess({ agent_id: id, title: "Draft", workmap: map("y", "Draft rule", false), confirmed: false });
+    const md = await (await get(`agent_id=${id}`)).text();
+    expect(md).toContain("## Agent instructions: Pay invoices");
+    expect(md).toContain("Process rule");
+    for (const gone of ["Session rule", "Archived rule", "Draft rule"]) expect(md).not.toContain(gone);
+  });
+
+  it("falls back to the confirmed sessions while the processes table is missing", async () => {
+    const id = await seed(WS_A, USER, [map("Code invoices", "Never book above 5000")]);
+    state.fake.missingTables.add("processes");
+    const res = await get(`agent_id=${id}`);
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain("Never book above 5000");
+  });
+});
+
 describe("GET /api/export?agent_id", () => {
   it("returns the guardrails of every confirmed Work Map of the agent, one section per process", async () => {
     const id = await seed(WS_A, USER, [map("Code invoices", "Never book above 5000"), map("Approve capex", "Stop at 10000"), map("Draft", "Not confirmed", false)]);
