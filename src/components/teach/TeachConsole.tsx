@@ -276,6 +276,9 @@ export default function TeachConsole(p: TeachConsoleProps) {
       {p.banner && <p className="text-xs" style={{ color: "var(--mu)" }}>{p.banner}</p>}
       {p.shareWarning && <p className="text-[13px]" style={{ color: "var(--am)" }}>{p.shareWarning}</p>}
       {p.notice && <p className="text-[13px]" style={{ color: "var(--am)" }}>{p.notice}</p>}
+      {host === "websocket" && p.companion.status !== "paired" && (
+        <p className="text-xs" style={{ color: "var(--mu)" }}>Companion not paired: the tutor stops by voice only, no halo over the app.</p>
+      )}
 
       {p.result ? (
         <Summary p={p} />
@@ -347,9 +350,6 @@ export default function TeachConsole(p: TeachConsoleProps) {
             <Card className="flex flex-col" style={{ padding: "20px 22px", gap: 10 }}>
               <h2 className="ui-t3">On your screen now</h2>
               {host === "websocket" ? <AppStatus companion={p.companion} /> : <CompanionSlot host={host} companion={p.companion} />}
-              {host === "websocket" && p.companion.status !== "paired" && (
-                <p className="text-xs" style={{ color: "var(--mu)" }}>Companion not paired: the tutor stops by voice only, no halo over the app.</p>
-              )}
             </Card>
           </div>
         </div>

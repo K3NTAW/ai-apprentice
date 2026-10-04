@@ -3,7 +3,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import AgentDetail, { type AgentDetailProps } from "@/components/agents/AgentDetail";
 import { AGENT_A, CREATED_BY, MEMBERS, SESSIONS } from "@/components/agents/fixtures";
 import LearnView from "@/components/agents/LearnView";
@@ -15,6 +15,9 @@ import TeachConsole, { type TeachConsoleProps } from "@/components/teach/TeachCo
 import { agentStats } from "@/lib/agents/stats";
 import { EMAIL_FLOW_WORKMAP } from "@/lib/teach/fixtures";
 import WorkMapViewer, { QUOTE_FONT } from "./WorkMapViewer";
+
+// the settings tab renders AgentSettings, which reads the app router
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }));
 
 const canvas = (f: string) => readFileSync(join(process.cwd(), "docs/design/canvas", f), "utf8");
 const noop = () => {};

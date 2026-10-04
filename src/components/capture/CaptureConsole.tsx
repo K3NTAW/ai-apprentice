@@ -7,7 +7,7 @@ import type { ScreenEvent } from "@/lib/types";
 import { describeEvent } from "@/lib/voice/prompts";
 import type { TransportHost } from "@/lib/companion/transport";
 import type { CompanionCardProps } from "./CompanionCard";
-import CompanionSlot, { AppStatus } from "./DesktopPanel";
+import CompanionSlot from "./DesktopPanel";
 import { buttonClass, Card } from "@/components/ui";
 
 export type CaptureConsoleProps = {
@@ -24,7 +24,7 @@ export type CaptureConsoleProps = {
   savedForDebrief: number;
   feed: ScreenEvent[];
   companion: CompanionCardProps;
-  /** Which companion transport runs: bridge (desktop app), websocket (opt-in), none (browser), detecting. Default websocket. */
+  /** Which companion transport runs: bridge (desktop app), websocket (opt-in), none (browser), detecting. Default bridge (design previews); the apps always pass it. */
   host?: TransportHost;
   onExpertChange(name: string): void;
   onStart(): void;
@@ -51,7 +51,7 @@ const stat = (n: number, label: string) => (
 );
 
 export default function CaptureConsole(p: CaptureConsoleProps) {
-  const host = p.host ?? "websocket";
+  const host = p.host ?? "bridge";
   return (
     <div className="flex min-w-0 flex-col" style={{ padding: "28px 40px 56px", gap: 22 }} data-testid="capture-console">
       <div className="flex flex-wrap items-end justify-between" style={{ gap: 16 }}>
@@ -162,7 +162,7 @@ export default function CaptureConsole(p: CaptureConsoleProps) {
 
           <Card className="flex flex-col" style={{ padding: 22, gap: 14 }}>
             <h2 className="ui-t3">Companion</h2>
-            {host === "websocket" ? <AppStatus companion={p.companion} /> : <CompanionSlot host={host} companion={p.companion} />}
+            <CompanionSlot host={host} companion={p.companion} />
           </Card>
 
           <Card className="flex flex-col" style={{ padding: 22, gap: 14 }}>

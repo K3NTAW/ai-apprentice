@@ -120,7 +120,11 @@ function Shortcuts({ rows, expert }: { rows: ShortcutRow[]; expert: string }) {
           {rows.map((s) => (
             <div key={`${s.chord}|${s.app}`} role="row" className="grid items-center" style={{ gridTemplateColumns: SHORTCUT_COLS, gap: 16, padding: "14px 20px", borderBottom: "1px solid var(--ln)" }}>
               <span role="cell">
-                <Chord keys={s.chord.split(/[+\s]+/).filter(Boolean)} />
+                {/* keycaps for the eye, "Cmd+Shift+T" for screen readers and page search */}
+                <span className="sr-only">{s.chord.split(/[+\s]+/).filter(Boolean).join("+")}</span>
+                <span aria-hidden="true">
+                  <Chord keys={s.chord.split(/[+\s]+/).filter(Boolean)} />
+                </span>
               </span>
               <span role="cell" style={{ color: "var(--mu)" }}>
                 {s.app}
