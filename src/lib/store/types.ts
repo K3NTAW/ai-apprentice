@@ -1,7 +1,7 @@
 // Store contract shared by the file and supabase backends. Leaf module: imports nothing from ./index, ./file or ./supabase.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { RedactOptions } from "@/lib/redact";
-import type { Agent, Avatar, QAPair, ScreenEvent, Session, TranscriptEntry, WorkMap } from "@/lib/types";
+import type { Agent, Avatar, QAPair, ScreenEvent, Session, SessionDigest, TranscriptEntry, WorkMap } from "@/lib/types";
 
 export type SessionSummary = {
   id: string;
@@ -28,7 +28,10 @@ export interface SessionStore {
   /** agent_id must name an agent of the same workspace, else AgentNotFoundError. */
   createSession(input: { kind: Session["kind"]; expert?: string; agent_id?: string }): Promise<Session>;
   getSession(id: string): Promise<Session | null>;
+  /** Newest first, with child row counts. Supabase: one query per page (embedded counts). */
   listSessions(): Promise<SessionSummary[]>;
+  /** Every session newest first without child rows: one query per page. Stats, the control room and /api/workmaps read this. */
+  listSessionDigests(): Promise<SessionDigest[]>;
   /** Newest first, at most limit (default RECENT_SESSIONS_DEFAULT). For lists only: counts may be zero (supabase skips them). */
   recentSessions(limit?: number): Promise<SessionSummary[]>;
   appendEvents(id: string, events: ScreenEvent[]): Promise<Session>;

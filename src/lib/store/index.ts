@@ -14,6 +14,7 @@ export {
   isValidSessionId,
   SessionNotFoundError,
 } from "./types";
+export type { SessionDigest } from "@/lib/types";
 export type { AgentInput, AgentPatch, OffRecordRange, SaveFrameResult, SessionStore, SessionSummary, StoreContext } from "./types";
 export { dataDir, fileStore, framePath } from "./file";
 export { createSupabaseStore } from "./supabase";

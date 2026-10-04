@@ -12,6 +12,7 @@ import {
   type QAPair,
   type ScreenEvent,
   type Session,
+  type SessionDigest,
   type TranscriptEntry,
   type WorkMap,
 } from "@/lib/types";
@@ -242,6 +243,28 @@ async function listSessions(): Promise<SessionSummary[]> {
   return sessions.map((s) => withoutDanglingAgent(s, agentIds));
 }
 
+/** Local mode has no users: created_by is null. */
+async function listSessionDigests(): Promise<SessionDigest[]> {
+  const out: SessionDigest[] = [];
+  for (const sum of await listSessions()) {
+    const s = await readSession(sum.id).catch(() => null);
+    if (!s) continue;
+    out.push({
+      id: s.id,
+      kind: s.kind,
+      started_at: s.started_at,
+      ...(s.ended_at !== undefined ? { ended_at: s.ended_at } : {}),
+      ...(s.expert !== undefined ? { expert: s.expert } : {}),
+      ...(s.workmap ? { workmap: s.workmap } : {}),
+      off_record_ranges: s.off_record_ranges,
+      ...(s.teach ? { teach: s.teach } : {}),
+      ...(sum.agent_id ? { agent_id: sum.agent_id } : {}),
+      created_by: null,
+    });
+  }
+  return out;
+}
+
 async function recentSessions(limit = RECENT_SESSIONS_DEFAULT): Promise<SessionSummary[]> {
   return (await listSessions()).slice(0, Math.max(0, limit));
 }
@@ -383,6 +406,7 @@ export const fileStore: SessionStore = {
   createSession,
   getSession,
   listSessions,
+  listSessionDigests,
   recentSessions,
   appendEvents,
   appendTranscript,

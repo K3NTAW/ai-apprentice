@@ -169,11 +169,14 @@ function TeachInner({ sessionId, localMode, agentParam = null, transport }: Teac
 
   useEffect(() => {
     let live = true;
-    void loadPickerOptions(localMode).then((opts) => {
-      if (!live) return;
-      setOptions(opts);
-      setSelected(preselect(opts, sessionId));
-    });
+    loadPickerOptions(localMode).then(
+      (opts) => {
+        if (!live) return;
+        setOptions(opts);
+        setSelected(preselect(opts, sessionId));
+      },
+      (err) => live && setBanner(`Work Maps could not be loaded (${err instanceof Error ? err.message : String(err)}). Reload to try again.`),
+    );
     return () => {
       live = false;
     };
@@ -192,12 +195,15 @@ function TeachInner({ sessionId, localMode, agentParam = null, transport }: Teac
   useEffect(() => {
     if (!selected) return;
     let live = true;
-    void loadWorkMap(selected).then((m) => {
-      if (!live) return;
-      setWorkmap(m.workmap);
-      setWorkmapSessionId(m.sessionId);
-      setBanner(m.banner);
-    });
+    loadWorkMap(selected).then(
+      (m) => {
+        if (!live) return;
+        setWorkmap(m.workmap);
+        setWorkmapSessionId(m.sessionId);
+        setBanner(m.banner);
+      },
+      (err) => live && setBanner(`The Work Map could not be loaded (${err instanceof Error ? err.message : String(err)}). Reload to try again.`),
+    );
     return () => {
       live = false;
     };

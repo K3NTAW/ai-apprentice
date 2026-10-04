@@ -20,7 +20,7 @@ const SIZES = [1, 5, 50] as const;
 
 /** Queries before the change (recorded against the old code) and after it, per N in SIZES. */
 const BEFORE = { listSessions: [4, 16, 151], dashboard: [11, 43, 403], agents: [12, 44, 404] };
-const AFTER = BEFORE;
+const AFTER = { listSessions: [1, 1, 1], dashboard: [2, 2, 2], agents: [3, 3, 3] };
 const EXPECTED = AFTER;
 
 function thenable(value: unknown): unknown {

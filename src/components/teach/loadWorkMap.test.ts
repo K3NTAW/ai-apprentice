@@ -24,16 +24,22 @@ const SESSIONS = [
   session("new", "2026-10-01T08:00:00Z", workmap(true)),
 ];
 
-function mockApi(sessions: Session[]) {
+/** Fake GET /api/workmaps over the given sessions (same filters as the route); status overrides the answer. */
+function mockApi(sessions: Session[], status = 200) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) => {
-      if (url === "/api/session") {
-        return Response.json({ sessions: sessions.map((s) => ({ id: s.id, kind: s.kind, has_workmap: !!s.workmap })) });
-      }
-      const id = decodeURIComponent(url.split("/").pop() ?? "");
-      const s = sessions.find((x) => x.id === id);
-      return s ? Response.json(s) : new Response("{}", { status: 404 });
+      const u = new URL(url, "http://localhost");
+      if (u.pathname !== "/api/workmaps") return new Response("{}", { status: 404 });
+      if (status !== 200) return Response.json({ error: "x" }, { status });
+      const item = (s: Session) => ({ ...s, expert: s.expert ?? null, agent_id: null, ended_at: null });
+      const maps = sessions
+        .filter((s) => s.kind === "capture" && s.workmap && (u.searchParams.get("confirmed") !== "1" || s.workmap.confirmed_by_expert))
+        .sort((a, b) => Date.parse(b.started_at) - Date.parse(a.started_at))
+        .slice(0, Number(u.searchParams.get("limit") ?? 50))
+        .map(item);
+      const hit = sessions.find((s) => s.id === u.searchParams.get("session_id") && s.workmap);
+      return Response.json({ maps, session: hit ? item(hit) : null });
     }),
   );
 }
@@ -85,6 +91,24 @@ describe("loadWorkMap", () => {
     expect(l.workmap).toBe(SAMPLE_WORKMAP);
     expect(l.sessionId).toBeNull();
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("makes exactly one request, also for ?session=<id>", async () => {
+    mockApi(SESSIONS);
+    await loadWorkMap("draft");
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(String(vi.mocked(fetch).mock.calls[0][0])).toBe("/api/workmaps?confirmed=1&limit=1&session_id=draft");
+    vi.mocked(fetch).mockClear();
+    const l = await loadWorkMap("bare");
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(l.sessionId).toBe("new");
+    expect(l.banner).toBe("Session bare has no Work Map. Latest confirmed session new.");
+  });
+
+  it.each([401, 403, 500])("a %i answer throws instead of falling back to the sample", async (status) => {
+    mockApi(SESSIONS, status);
+    await expect(loadWorkMap(null)).rejects.toMatchObject({ name: "WorkMapLoadError", status });
+    await expect(loadPickerOptions(false)).rejects.toMatchObject({ status });
   });
 
   it("falls back to the sample when nothing is confirmed", async () => {

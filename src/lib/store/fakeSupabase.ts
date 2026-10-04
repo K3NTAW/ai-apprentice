@@ -5,6 +5,7 @@
 // session_frames.storage_path prefix check, timestamptz output strings and the storage not-found error shape.
 // Agents: RLS by workspace, the insert policy (created_by = auth.uid()), the sessions (workspace_id, agent_id)
 // foreign key (23503) and its on delete set null (agent_id). Not modelled: triggers (updated_at, guards).
+// Embedded counts on sessions (select "*,session_events(count)"): [{ count }] of the visible child rows.
 // Not modelled: workspace roles (owner/expert/learner), column projection on count queries.
 
 type Row = Record<string, unknown>;
@@ -341,11 +342,19 @@ class FakeQuery {
     if (!this.columns) return out;
     // Plain columns and aliased JSON paths (alias:col->>key); a missing key or a null column reads as null.
     return Object.fromEntries(
-      this.columns.map((c) => {
+      this.columns.flatMap((c): [string, unknown][] => {
+        if (c === "*") return Object.entries(out);
+        const embedded = /^(\w+)\(count\)$/.exec(c);
+        if (embedded) {
+          const child = embedded[1];
+          if (this.table !== "sessions" || !(child in PKS) || child === "sessions" || child === "agents") unsupported(`embedded ${c} on ${this.table}`);
+          const n = this.fake.tables[child].filter((r) => r.session_id === row.id && this.fake.rowVisible(child, r)).length;
+          return [[child, [{ count: n }]]];
+        }
         const m = /^(\w+):(\w+)->>?(\w+)$/.exec(c);
-        if (!m) return [c, out[c]];
+        if (!m) return [[c, out[c]]];
         const obj = out[m[2]] as Row | null | undefined;
-        return [m[1], obj?.[m[3]] ?? null];
+        return [[m[1], obj?.[m[3]] ?? null]];
       }),
     );
   }

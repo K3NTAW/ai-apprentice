@@ -1,5 +1,5 @@
 import type { SessionStore } from "@/lib/store";
-import type { Session } from "@/lib/types";
+import type { SessionDigest } from "@/lib/types";
 import { exportGuardrailsMarkdown } from "@/lib/workmap";
 import { badRequest, notFound, withApi } from "../session/_http";
 
@@ -11,11 +11,9 @@ const markdown = (body: string) => new Response(body, { headers: { "content-type
 const demote = (md: string) => md.replace(/^#/gm, "##");
 
 /** The agent's confirmed capture Work Maps, newest first (same order as the agent page). */
-async function confirmedMaps(store: SessionStore, agentId: string): Promise<Session[]> {
-  const ids = (await store.listSessions()).filter((s) => s.agent_id === agentId && s.kind === "capture" && s.has_workmap).map((s) => s.id);
-  const sessions = await Promise.all(ids.map((id) => store.getSession(id)));
-  return sessions
-    .filter((s): s is Session => !!s && s.agent_id === agentId && s.workmap?.confirmed_by_expert === true)
+async function confirmedMaps(store: SessionStore, agentId: string): Promise<SessionDigest[]> {
+  return (await store.listSessionDigests())
+    .filter((s) => s.agent_id === agentId && s.kind === "capture" && s.workmap?.confirmed_by_expert === true)
     .sort((a, b) => Date.parse(b.started_at) - Date.parse(a.started_at) || a.id.localeCompare(b.id));
 }
 

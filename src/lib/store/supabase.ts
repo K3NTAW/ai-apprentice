@@ -23,6 +23,7 @@ import {
   type QAPair,
   type ScreenEvent,
   type Session,
+  type SessionDigest,
   type TranscriptEntry,
 } from "@/lib/types";
 import {
@@ -358,40 +359,55 @@ export function createSupabaseStore(
       return row ? assemble(row) : null;
     },
 
-    // N+1: one count query per child table per session. Accepted for the MVP.
+    // One query per page: the child counts are PostgREST embedded counts, no query per session.
     async listSessions() {
-      const rows = await selectAll<SessionRow>("select sessions", () =>
+      type Counted = { count: number }[] | null | undefined;
+      type CountedRow = SessionRow & { session_events: Counted; session_transcript: Counted; session_qa: Counted };
+      const n = (c: Counted) => c?.[0]?.count ?? 0;
+      const rows = await selectAll<CountedRow>("select sessions", () =>
         client
           .from("sessions")
-          .select("*")
+          .select("*,session_events(count),session_transcript(count),session_qa(count)")
           .eq("workspace_id", workspaceId)
           .order("started_at", { ascending: false })
           .order("id", { ascending: false }),
       );
-      const count = async (table: string, id: string) => {
-        const res = await client.from(table).select("*", { count: "exact", head: true }).eq("session_id", id);
-        if (res.error) fail(`count ${table}`, res.error);
-        return res.count ?? 0;
-      };
-      const out: SessionSummary[] = [];
-      for (const r of rows) {
-        const [events, transcript, qa] = await Promise.all([
-          count("session_events", r.id),
-          count("session_transcript", r.id),
-          count("session_qa", r.id),
-        ]);
-        out.push({
+      return rows.map(
+        (r): SessionSummary => ({
           id: r.id,
           kind: r.kind,
           started_at: normTs(r.started_at),
           ...(r.ended_at !== null ? { ended_at: normTs(r.ended_at) } : {}),
           ...(r.expert !== null ? { expert: r.expert } : {}),
-          counts: { events, transcript, qa },
+          counts: { events: n(r.session_events), transcript: n(r.session_transcript), qa: n(r.session_qa) },
           has_workmap: r.workmap !== null,
           ...(r.agent_id ? { agent_id: r.agent_id } : {}),
-        });
-      }
-      return out;
+        }),
+      );
+    },
+
+    async listSessionDigests() {
+      const rows = await selectAll<Omit<SessionRow, "workspace_id">>("select session digests", () =>
+        client
+          .from("sessions")
+          .select("id,kind,expert,agent_id,started_at,ended_at,workmap,off_record_ranges,created_by")
+          .eq("workspace_id", workspaceId)
+          .order("started_at", { ascending: false })
+          .order("id", { ascending: false }),
+      );
+      return rows.map(
+        (r): SessionDigest => ({
+          id: r.id,
+          kind: r.kind,
+          started_at: normTs(r.started_at),
+          ...(r.ended_at !== null ? { ended_at: normTs(r.ended_at) } : {}),
+          ...(r.expert !== null ? { expert: r.expert } : {}),
+          ...(r.workmap !== null ? { workmap: r.workmap } : {}),
+          off_record_ranges: r.off_record_ranges ?? [],
+          ...(r.agent_id ? { agent_id: r.agent_id } : {}),
+          created_by: r.created_by,
+        }),
+      );
     },
 
     // One query, no child counts: the shell calls this on every page. has_workmap reads workmap->>task

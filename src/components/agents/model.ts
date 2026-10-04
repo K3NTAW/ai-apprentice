@@ -10,7 +10,7 @@
 import { z } from "zod";
 import { agentStats, type AgentStats } from "@/lib/agents/stats";
 import type { CreatedBy, DashboardMember } from "@/lib/dashboard/summary";
-import { AGENT_EXPERT_NAME_MAX, type Agent, type Guardrail, type Session } from "@/lib/types";
+import { AGENT_EXPERT_NAME_MAX, type Agent, type Guardrail, type Session, type SessionDigest } from "@/lib/types";
 import { countsLine, formatT, formatZurich } from "@/lib/workmap/view";
 
 export const AGENT_TABS = ["processes", "shortcuts", "guardrails", "learners", "settings"] as const;
@@ -91,7 +91,7 @@ export function filterCards(cards: readonly GalleryCard[], query: string, filter
   );
 }
 
-export function galleryCards(agents: readonly Agent[], sessions: readonly Session[]): GalleryCard[] {
+export function galleryCards(agents: readonly Agent[], sessions: readonly SessionDigest[]): GalleryCard[] {
   return [...agents]
     .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id))
     .map((a) => {
@@ -113,7 +113,7 @@ export function galleryCards(agents: readonly Agent[], sessions: readonly Sessio
     });
 }
 
-const confirmedOf = (agentId: string, sessions: readonly Session[]) =>
+const confirmedOf = (agentId: string, sessions: readonly SessionDigest[]) =>
   sessions
     .filter((s) => s.agent_id === agentId && s.kind === "capture" && s.workmap?.confirmed_by_expert === true)
     .sort((a, b) => Date.parse(b.started_at) - Date.parse(a.started_at) || a.id.localeCompare(b.id));
@@ -128,7 +128,7 @@ function understood(steps: readonly { scores?: { reason_captured?: number; guard
 }
 
 /** The agent's confirmed Work Maps, newest first. */
-export function agentProcesses(agentId: string, sessions: readonly Session[]): ProcessRow[] {
+export function agentProcesses(agentId: string, sessions: readonly SessionDigest[]): ProcessRow[] {
   return confirmedOf(agentId, sessions).map((s) => ({
     sessionId: s.id,
     task: s.workmap!.task || "Untitled capture",
@@ -151,7 +151,7 @@ export type GuardrailRow = {
 };
 
 /** Every guardrail across the agent's confirmed Work Maps, with the expert quote and a link to the screen moment. */
-export function agentGuardrails(agentId: string, sessions: readonly Session[]): GuardrailRow[] {
+export function agentGuardrails(agentId: string, sessions: readonly SessionDigest[]): GuardrailRow[] {
   return confirmedOf(agentId, sessions).flatMap((s) =>
     s.workmap!.steps.flatMap((step) =>
       step.guardrails.map((g) => ({
@@ -180,7 +180,7 @@ const ShortcutSchema = z.object({
 export type ShortcutRow = { chord: string; app: string; what: string; why: string; task: string; href: string };
 
 /** Glossary of the agent's shortcuts from its confirmed Work Maps; one row per chord and app, first seen wins. */
-export function agentShortcuts(agentId: string, sessions: readonly Session[]): ShortcutRow[] {
+export function agentShortcuts(agentId: string, sessions: readonly SessionDigest[]): ShortcutRow[] {
   const seen = new Set<string>();
   const rows: ShortcutRow[] = [];
   for (const s of confirmedOf(agentId, sessions))
@@ -217,12 +217,12 @@ export type LearnerProcess = {
 };
 export type LearnerRow = { key: string; label: string; mastered: number; steps: number; processes: LearnerProcess[] };
 
-const teachTime = (s: Session) => Date.parse(s.teach?.finished_at ?? s.ended_at ?? s.started_at) || 0;
+const teachTime = (s: SessionDigest) => Date.parse(s.teach?.finished_at ?? s.ended_at ?? s.started_at) || 0;
 
 /** Who practised with this agent and their mastery (latest session per learner and process). */
 export function agentLearners(
   agentId: string,
-  sessions: readonly Session[],
+  sessions: readonly SessionDigest[],
   members: readonly DashboardMember[],
   createdBy: CreatedBy,
 ): LearnerRow[] {
@@ -267,12 +267,12 @@ export const masteryText = (mastered: number, steps: number) =>
   steps > 0 ? `${mastered} of ${steps} steps mastered (${Math.round((mastered / steps) * 100)}%)` : `${mastered} steps mastered`;
 
 /** Learn: only agents with at least one confirmed process are offered. */
-export function learnAgents(agents: readonly Agent[], sessions: readonly Session[]): GalleryCard[] {
+export function learnAgents(agents: readonly Agent[], sessions: readonly SessionDigest[]): GalleryCard[] {
   return galleryCards(agents, sessions).filter((c) => c.stats.processes > 0);
 }
 
 /** Learn: agents without a confirmed process yet, shown dimmed as 'Still training' (not startable). */
-export function learnTraining(agents: readonly Agent[], sessions: readonly Session[]): GalleryCard[] {
+export function learnTraining(agents: readonly Agent[], sessions: readonly SessionDigest[]): GalleryCard[] {
   return galleryCards(agents, sessions).filter((c) => c.stats.processes === 0);
 }
 
@@ -280,7 +280,7 @@ export type LearnProcess = ProcessRow & { teachHref: string; focus: string[]; pr
 
 /** Learn: the agent's confirmed processes, each linking to Teach, with the judgment-call steps the agent focuses on
  * and the screen entities to practise with. */
-export function learnProcesses(agentId: string, sessions: readonly Session[]): LearnProcess[] {
+export function learnProcesses(agentId: string, sessions: readonly SessionDigest[]): LearnProcess[] {
   const maps = new Map(confirmedOf(agentId, sessions).map((s) => [s.id, s.workmap!]));
   return agentProcesses(agentId, sessions).map((p) => {
     const steps = maps.get(p.sessionId)?.steps ?? [];

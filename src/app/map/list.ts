@@ -1,5 +1,5 @@
 // Pure row builder for the Work Map list (/map): capture sessions with a Work Map, newest first.
-import type { Session } from "@/lib/types";
+import type { Session, WorkMap } from "@/lib/types";
 import { countsLine, formatZurich } from "@/lib/workmap/view";
 
 export type MapListRow = {
@@ -12,9 +12,12 @@ export type MapListRow = {
   href: string;
 };
 
-export function mapListRows(sessions: Session[]): MapListRow[] {
+/** A Session or a /api/workmaps item. */
+export type MapListSource = Pick<Session, "id" | "kind" | "started_at"> & { expert?: string | null; workmap?: WorkMap };
+
+export function mapListRows(sessions: readonly MapListSource[]): MapListRow[] {
   return sessions
-    .filter((s): s is Session & { workmap: NonNullable<Session["workmap"]> } => s.kind === "capture" && !!s.workmap)
+    .filter((s): s is MapListSource & { workmap: WorkMap } => s.kind === "capture" && !!s.workmap)
     .sort((a, b) => Date.parse(b.started_at) - Date.parse(a.started_at))
     .map((s) => ({
       id: s.id,

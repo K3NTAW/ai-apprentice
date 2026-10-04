@@ -10,7 +10,7 @@
 // - 'start a session' (or 'start session', 'start') starts Capture for the selected agent: /capture?agent=<id>.
 //   The selected agent defaults to the first gallery card; with no agents or a viewer role (canCreate false)
 //   there is no Start action.
-import type { Agent, Guardrail, Session } from "@/lib/types";
+import type { Agent, Guardrail, SessionDigest } from "@/lib/types";
 
 export const HOME_PLACEHOLDER = "Ask how something is done, or start a session";
 export const HOME_LABEL = "Ask an agent or start a session";
@@ -27,7 +27,7 @@ export type HomeEntry = {
   href: string;
 };
 
-export function homeIndex(agents: readonly Pick<Agent, "id" | "name">[], sessions: readonly Session[]): HomeEntry[] {
+export function homeIndex(agents: readonly Pick<Agent, "id" | "name">[], sessions: readonly SessionDigest[]): HomeEntry[] {
   const names = new Map(agents.map((a) => [a.id, a.name]));
   return sessions.flatMap((s) => {
     const wm = s.workmap;

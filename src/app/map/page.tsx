@@ -3,10 +3,8 @@
 // Work Map list: the workspace's capture sessions that have a Work Map, newest first.
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import type { Session } from "@/lib/types";
+import { WORKMAPS_MAX_LIMIT, type WorkMapsResponse } from "@/lib/workmap/items";
 import { mapListRows, type MapListRow } from "./list";
-
-type Summary = { id: string; kind: Session["kind"]; has_workmap: boolean };
 
 export default function MapListPage() {
   const [rows, setRows] = useState<MapListRow[] | null>(null);
@@ -16,18 +14,11 @@ export default function MapListPage() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch("/api/session", { cache: "no-store" });
-        if (!res.ok) throw new Error(`GET /api/session ${res.status}`);
-        const { sessions } = (await res.json()) as { sessions: Summary[] };
-        const full = await Promise.all(
-          sessions
-            .filter((s) => s.kind === "capture" && s.has_workmap)
-            .map(async (s) => {
-              const r = await fetch(`/api/session/${encodeURIComponent(s.id)}`, { cache: "no-store" });
-              return r.ok ? ((await r.json()) as Session) : null;
-            }),
-        );
-        if (!cancelled) setRows(mapListRows(full.filter((s): s is Session => s !== null)));
+        // One request for every map; no fetch per session.
+        const res = await fetch(`/api/workmaps?limit=${WORKMAPS_MAX_LIMIT}`, { cache: "no-store" });
+        if (!res.ok) throw new Error(`GET /api/workmaps ${res.status}`);
+        const { maps } = (await res.json()) as WorkMapsResponse;
+        if (!cancelled) setRows(mapListRows(maps));
       } catch (err) {
         if (!cancelled) setError(String(err));
       }

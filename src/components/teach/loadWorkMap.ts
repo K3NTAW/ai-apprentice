@@ -1,7 +1,9 @@
 // Which Work Map Teach uses: ?session=<id>, else the latest confirmed capture session, else SAMPLE_WORKMAP.
 // The picker lists the workspace's confirmed Work Maps; the sample is offered only in local mode or when none exist.
+// Each loader is one GET /api/workmaps. A non-ok answer (401, 403, 5xx) throws WorkMapLoadError: no silent sample.
 import { SAMPLE_WORKMAP } from "@/lib/teach/sampleWorkMap";
 import type { Session, WorkMap } from "@/lib/types";
+import { WORKMAPS_MAX_LIMIT, type WorkMapsResponse } from "@/lib/workmap/items";
 import { formatZurich } from "@/lib/workmap/view";
 
 export type LoadedMap = { workmap: WorkMap; sessionId: string | null; banner: string };
@@ -12,40 +14,37 @@ export const SAMPLE_LABEL = "Sample (demo)";
 
 export type PickerOption = { id: string; label: string };
 
-type Summary = { id: string; kind: Session["kind"]; has_workmap: boolean };
+/** Anything with a Work Map the picker can list: a Session or a /api/workmaps item. */
+export type PickerSource = Pick<Session, "id" | "kind" | "started_at"> & { expert?: string | null; workmap?: WorkMap };
 
-async function getSession(id: string): Promise<Session | null> {
-  const res = await fetch(`/api/session/${encodeURIComponent(id)}`, { cache: "no-store" });
-  return res.ok ? ((await res.json()) as Session) : null;
+export class WorkMapLoadError extends Error {
+  constructor(readonly status: number) {
+    super(`GET /api/workmaps ${status}`);
+    this.name = "WorkMapLoadError";
+  }
+}
+
+async function fetchWorkMaps(params: Record<string, string>): Promise<WorkMapsResponse> {
+  const res = await fetch(`/api/workmaps?${new URLSearchParams(params)}`, { cache: "no-store" });
+  if (!res.ok) throw new WorkMapLoadError(res.status);
+  return (await res.json()) as WorkMapsResponse;
 }
 
 const sampleMap = (banner: string): LoadedMap => ({ workmap: SAMPLE_WORKMAP, sessionId: null, banner });
 
+/** One request: ?session_id returns the named map (confirmed or not) next to the latest confirmed one. */
 export async function loadWorkMap(sessionId: string | null): Promise<LoadedMap> {
   if (sessionId === SAMPLE_ID) return sampleMap("Sample Work Map (demo).");
-  try {
-    if (sessionId) {
-      const s = await getSession(sessionId);
-      if (s?.workmap) return { workmap: s.workmap, sessionId: s.id, banner: `Work Map from session ${s.id}.` };
-    }
-    const res = await fetch("/api/session", { cache: "no-store" });
-    const { sessions = [] } = res.ok ? ((await res.json()) as { sessions?: Summary[] }) : {};
-    for (const sum of sessions.filter((x) => x.kind === "capture" && x.has_workmap)) {
-      const s = await getSession(sum.id);
-      if (s?.workmap?.confirmed_by_expert) {
-        const note = sessionId ? `Session ${sessionId} has no Work Map. ` : "";
-        return { workmap: s.workmap, sessionId: s.id, banner: `${note}Latest confirmed session ${s.id}.` };
-      }
-    }
-  } catch {
-    // fall through to the sample
-  }
+  const { maps, session } = await fetchWorkMaps({ confirmed: "1", limit: "1", ...(sessionId ? { session_id: sessionId } : {}) });
+  if (session) return { workmap: session.workmap, sessionId: session.id, banner: `Work Map from session ${session.id}.` };
   const note = sessionId ? `Session ${sessionId} has no Work Map. ` : "";
+  const latest = maps[0];
+  if (latest) return { workmap: latest.workmap, sessionId: latest.id, banner: `${note}Latest confirmed session ${latest.id}.` };
   return sampleMap(`${note}No confirmed session found: using the sample Work Map (demo backup).`);
 }
 
 /** Confirmed capture Work Maps, newest first, then the sample in local mode or when there are none. */
-export function pickerOptions(sessions: Session[], localMode: boolean): PickerOption[] {
+export function pickerOptions(sessions: readonly PickerSource[], localMode: boolean): PickerOption[] {
   const confirmed = sessions
     .filter((s) => s.kind === "capture" && s.workmap?.confirmed_by_expert === true)
     .sort((a, b) => Date.parse(b.started_at) - Date.parse(a.started_at))
@@ -59,16 +58,8 @@ export function preselect(options: PickerOption[], sessionId: string | null): st
   return options[0]?.id ?? null;
 }
 
-/** Reads the workspace's sessions and builds the picker options. */
+/** The workspace's confirmed maps in one request, as picker options. Throws WorkMapLoadError on a non-ok answer. */
 export async function loadPickerOptions(localMode: boolean): Promise<PickerOption[]> {
-  let full: Session[] = [];
-  try {
-    const res = await fetch("/api/session", { cache: "no-store" });
-    const { sessions = [] } = res.ok ? ((await res.json()) as { sessions?: Summary[] }) : {};
-    const loaded = await Promise.all(sessions.filter((x) => x.kind === "capture" && x.has_workmap).map((x) => getSession(x.id)));
-    full = loaded.filter((s): s is Session => s !== null);
-  } catch {
-    // no workspace maps: the sample is offered
-  }
-  return pickerOptions(full, localMode);
+  const { maps } = await fetchWorkMaps({ confirmed: "1", limit: String(WORKMAPS_MAX_LIMIT) });
+  return pickerOptions(maps, localMode);
 }

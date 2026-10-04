@@ -1,6 +1,6 @@
 // Pure builder for the control room (/dashboard) and the Work Map Learners section.
 // Input: full sessions from the store, workspace members and who created each session (RLS applies upstream).
-import type { Session, WorkMap } from "@/lib/types";
+import type { Session, SessionDigest, WorkMap } from "@/lib/types";
 import { countsLine, formatZurich } from "@/lib/workmap/view";
 
 export type WorkflowStatus = "capturing" | "debrief pending" | "confirmed";
@@ -44,9 +44,9 @@ const time = (iso: string | undefined) => {
   return Number.isNaN(n) ? 0 : n;
 };
 
-const lastUpdate = (s: Session) => (time(s.ended_at) > time(s.started_at) ? s.ended_at! : s.started_at);
+const lastUpdate = (s: SessionDigest) => (time(s.ended_at) > time(s.started_at) ? s.ended_at! : s.started_at);
 
-export function workflowStatus(s: Session): WorkflowStatus {
+export function workflowStatus(s: SessionDigest): WorkflowStatus {
   if (s.workmap?.confirmed_by_expert === true) return "confirmed";
   if (s.workmap || s.ended_at) return "debrief pending";
   return "capturing";
@@ -57,7 +57,7 @@ function stepLabels(ids: string[], workmap: WorkMap | undefined): string[] {
   return ids.map((id) => workmap?.steps.find((st) => String(st.n) === id || st.title === id)?.title ?? id);
 }
 
-export function expertWorkflows(sessions: Session[]): ExpertWorkflows[] {
+export function expertWorkflows(sessions: SessionDigest[]): ExpertWorkflows[] {
   const byExpert = new Map<string, { latest: number; rows: { t: number; row: WorkflowRow }[] }>();
   for (const s of sessions) {
     if (s.kind !== "capture") continue;
@@ -81,7 +81,7 @@ export function expertWorkflows(sessions: Session[]): ExpertWorkflows[] {
     .map(([expert, e]) => ({ expert, workflows: e.rows.sort((a, b) => b.t - a.t).map((r) => r.row) }));
 }
 
-function masteryRow(teach: Session, map: Session, learner: string): MasteryRow {
+function masteryRow(teach: SessionDigest, map: SessionDigest, learner: string): MasteryRow {
   const p = teach.teach!;
   return {
     workmapSessionId: map.id,
@@ -95,16 +95,16 @@ function masteryRow(teach: Session, map: Session, learner: string): MasteryRow {
   };
 }
 
-const teachTime = (s: Session) => time(s.teach?.finished_at ?? s.ended_at ?? s.started_at);
+const teachTime = (s: SessionDigest) => time(s.teach?.finished_at ?? s.ended_at ?? s.started_at);
 
 /** Teach sessions linked to a Work Map by Session.teach.workmap_session_id, newest first. */
-function linkedTeach(sessions: Session[], mapId: string): Session[] {
+function linkedTeach(sessions: SessionDigest[], mapId: string): SessionDigest[] {
   return sessions
     .filter((s) => s.kind === "teach" && s.teach?.workmap_session_id === mapId)
     .sort((a, b) => teachTime(b) - teachTime(a));
 }
 
-export function learnerSummaries(sessions: Session[], members: DashboardMember[], createdBy: CreatedBy): LearnerSummary[] {
+export function learnerSummaries(sessions: SessionDigest[], members: DashboardMember[], createdBy: CreatedBy): LearnerSummary[] {
   const confirmed = sessions.filter((s) => s.kind === "capture" && s.workmap?.confirmed_by_expert === true);
   return members
     .filter((m) => m.role === "learner")
@@ -118,14 +118,14 @@ export function learnerSummaries(sessions: Session[], members: DashboardMember[]
     }));
 }
 
-export function buildDashboard(sessions: Session[], members: DashboardMember[], createdBy: CreatedBy): DashboardSummary {
+export function buildDashboard(sessions: SessionDigest[], members: DashboardMember[], createdBy: CreatedBy): DashboardSummary {
   return { experts: expertWorkflows(sessions), learners: learnerSummaries(sessions, members, createdBy) };
 }
 
 /** Learners section of one Work Map: who practised it, when and the result. Latest session per person. */
 export function workmapLearners(
   mapId: string,
-  sessions: Session[],
+  sessions: SessionDigest[],
   members: DashboardMember[],
   createdBy: CreatedBy,
 ): MasteryRow[] {

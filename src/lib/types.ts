@@ -250,6 +250,8 @@ export const SessionSchema = z.object({
   agent_id: z.string().optional(),
 });
 export type Session = z.infer<typeof SessionSchema>;
+/** A session without its child rows (events, transcript, Q&A, frames), plus its creator. Lists, stats and the control room read this. */
+export type SessionDigest = Omit<Session, "events" | "transcript" | "qa" | "frames"> & { created_by?: string | null };
 
 // AVATAR CONTRACT, shared by the web app, src/lib/avatar/render.ts and the API. Single source: AvatarSchema.
 export const AVATAR_SHAPES = ["blob", "round", "square", "pill", "bean", "star"] as const;

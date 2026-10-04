@@ -204,6 +204,23 @@ export function runStoreContract(name: string, makeStore: () => SessionStore | P
       expect(kept?.expert).toBe("Sabine");
     });
 
+    it("lists session digests newest first, without child rows", async () => {
+      const a = await store.createAgent({ name: "Digest Agent", role: "Ops", avatar });
+      const first = await store.createSession({ kind: "capture", expert: "Sabine", agent_id: a.id });
+      await store.appendEvents(first.id, [event(1)]);
+      await store.saveWorkMap(first.id, workmap);
+      await new Promise((r) => setTimeout(r, 5));
+      const second = await store.createSession({ kind: "teach" });
+      const digests = await store.listSessionDigests();
+      const ids = digests.map((d) => d.id);
+      expect(ids.indexOf(second.id)).toBeLessThan(ids.indexOf(first.id));
+      const d = digests.find((x) => x.id === first.id)!;
+      expect(d).toMatchObject({ kind: "capture", expert: "Sabine", agent_id: a.id, workmap });
+      expect(d).not.toHaveProperty("events");
+      expect(d).not.toHaveProperty("transcript");
+      expect(digests.find((x) => x.id === second.id)?.workmap).toBeUndefined();
+    });
+
     it("reports missing sessions and invalid ids", async () => {
       const id = "s_missing";
       expect(await store.getSession(id)).toBeNull();
