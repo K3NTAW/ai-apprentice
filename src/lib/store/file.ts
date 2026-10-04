@@ -3,6 +3,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { isEmptySession } from "@/lib/capture/empty";
 import { redactText } from "@/lib/redact";
 import {
   AgentSchema,
@@ -313,6 +314,7 @@ async function readSessions(): Promise<SessionSummary[]> {
       ...(s.agent_id ? { agent_id: s.agent_id } : {}),
       ...(s.workmap ? { task: s.workmap.task, confirmed: s.workmap.confirmed_by_expert } : {}),
       ...(s.teach ? { mastered: s.teach.mastered.length, practiced: new Set([...s.teach.mastered, ...s.teach.practice]).size } : {}),
+      ...(isEmptySession(s) ? { empty: true } : {}),
     });
   }
   return out.sort((a, b) => b.started_at.localeCompare(a.started_at));

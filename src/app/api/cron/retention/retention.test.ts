@@ -1,10 +1,15 @@
 // /api/cron/retention: bearer CRON_SECRET or nothing. Signed-in users without the bearer get 401 too.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const h = vi.hoisted(() => ({ run: vi.fn(async () => ({ agents: 1, deleted: 2, more: false })), ctx: vi.fn() }));
+const h = vi.hoisted(() => ({
+  run: vi.fn(async () => ({ agents: 1, deleted: 2, more: false })),
+  purge: vi.fn(async () => ({ purged: 3 })),
+  ctx: vi.fn(),
+}));
 vi.mock("@/lib/auth/context", () => ({ requireContext: h.ctx }));
 vi.mock("@/lib/supabase/env", () => ({ appMode: () => "local" }));
 vi.mock("@/lib/agents/admin", async (orig) => ({ ...(await orig<typeof import("@/lib/agents/admin")>()), runRetention: h.run, fileDataPort: () => ({}) }));
+vi.mock("@/lib/capture/emptyPurge", () => ({ purgeEmptySessions: h.purge, fileEmptyPurgePort: () => ({}), supabaseEmptyPurgePort: () => ({}) }));
 
 import { GET } from "./route";
 
@@ -13,6 +18,7 @@ const call = (auth?: string) => GET(new Request("http://localhost/api/cron/reten
 
 beforeEach(() => {
   h.run.mockClear();
+  h.purge.mockClear();
   h.ctx.mockReset();
   h.ctx.mockResolvedValue({ userId: "u", role: "owner" });
 });
@@ -27,6 +33,7 @@ describe("cron retention route", () => {
       expect(await res.json()).toEqual({ error: "unauthorized" });
     }
     expect(h.run).not.toHaveBeenCalled();
+    expect(h.purge).not.toHaveBeenCalled();
   });
   it("signed out without a bearer answers the requireContext response", async () => {
     vi.stubEnv("CRON_SECRET", SECRET);
@@ -43,7 +50,22 @@ describe("cron retention route", () => {
     vi.stubEnv("CRON_SECRET", SECRET);
     const res = await call(`Bearer ${SECRET}`);
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ agents: 1, deleted: 2, more: false });
+    expect(await res.json()).toEqual({ agents: 1, deleted: 2, more: false, empty_purged: 3 });
+    expect(h.purge).toHaveBeenCalledTimes(1);
     expect(h.ctx).not.toHaveBeenCalled();
+  });
+  it("runs retention and the empty purge independently and reports both", async () => {
+    vi.stubEnv("CRON_SECRET", SECRET);
+    h.run.mockRejectedValueOnce(new Error("storage down"));
+    let res = await call(`Bearer ${SECRET}`);
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({ error: "retention_failed", empty_purged: 3 });
+    expect(h.purge).toHaveBeenCalledTimes(1);
+
+    h.purge.mockRejectedValueOnce(new Error("db down"));
+    res = await call(`Bearer ${SECRET}`);
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({ agents: 1, deleted: 2, more: false, empty_error: "empty_purge_failed" });
+    expect(h.run).toHaveBeenCalledTimes(2);
   });
 });

@@ -75,3 +75,32 @@ After `supabase db push`:
 
 Rollback: supabase/rollbacks/20261004030000_processes.down.sql (lossy: drops processes, versions and sessions.process_id),
 then `supabase migration repair --status reverted 20261004030000`.
+
+# Manual checks: processes slice (b), empty runs (T-0213)
+
+Rule (src/lib/capture/empty.ts): an ended capture is empty when it lasted under 30 s, or has fewer than 3 screen
+events and no answered question. A Work Map with steps or a link to a process keeps it. The mark is derived, not
+stored, so older runs (no events, no Work Map, or a Work Map without steps) read as empty too: the one-time cleanup.
+
+1. Start a capture and end it within 30 s. The page goes to the debrief, which shows 'No work recorded' with Delete
+   and no 'Start debrief'. The sidebar lists the run as 'No work recorded'. No process appears on the agent page.
+2. `POST /api/workmap {session_id}` for that run answers 409 `empty_session`; the session still has no Work Map.
+3. Delete on the debrief page answers 204 and returns to the agent page; the run is gone from the sidebar.
+   `DELETE /api/session/<id>` for a run with work answers 409 `not_empty` and keeps it; as a non-creator expert, 403.
+4. A capture of a minute with 2 events and one answered question is not empty: Start debrief shows as before.
+5. With an empty run that ended 24 h ago or more, `GET /api/cron/retention` with the CRON_SECRET bearer answers
+   `empty_purged: n` (n >= 1) and the run, its rows and frames are gone. A run that ended under 24 h ago stays.
+6. One-time cleanup: the existing 'unspecified task' run (no events) shows as 'No work recorded' and the next cron
+   run purges it. If it was already backfilled into a process, delete that process as owner (slice a, check 6).
+
+## Fix round (T-0242)
+
+7. Supabase mode: the old 'unspecified task' run (Work Map with `steps: []`) shows as 'No work recorded' in the
+   sidebar, with Delete for its creator or an owner. Delete asks first, then the entry is gone. A learner or another
+   expert sees no Delete.
+8. The agent's Processes list (and export, stats, Learn) never shows a Work Map without steps: the 'unspecified
+   task' entry is gone, whether it was a legacy session or a backfilled process. Backfill skips such sessions.
+9. The purge reads sessions with plain filters (kind capture, ended 24 h ago or more) and applies the same rule in
+   code; it works before the processes migration too (no `process_id` column).
+10. `GET /api/cron/retention` runs retention and the purge independently: if one fails the answer is 502 with
+    `error` or `empty_error` for it and the other's result (`deleted`, `empty_purged`) still in the body.

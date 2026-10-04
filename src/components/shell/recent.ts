@@ -2,14 +2,17 @@
 // and teach sessions of the request-context workspace), grouped Today/Yesterday/Earlier in Europe/Zurich.
 // Titles: 'Training Pip · supplier invoices' (capture running), 'Work Map · duplicate check' (capture with a map),
 // 'Debrief · Czech approvals' (capture ended, no map yet), 'Lena learns supplier invoices' (teach with a learner),
-// else '<agent> · <topic>'. Second line: live elapsed time, 'x of y mastered', 'confirmed', '<agent> · 14:05' or the date.
+// else '<agent> · <topic>'. An empty capture run (lib/capture/empty, also one whose Work Map has no steps) is 'No work
+// recorded'; the list offers Delete on it to its creator or an owner (canDelete), and so does its page. Second line: live elapsed time, 'x of y mastered', 'confirmed', '<agent> · 14:05' or the date.
+import { NO_WORK_RECORDED } from "@/lib/capture/empty";
 import { sessionHref } from "@/lib/search/palette";
 import type { SessionSummary } from "@/lib/store/types";
 
 export const RECENT_LIMIT = 6;
 const TZ = "Europe/Zurich";
 
-export type RecentItem = { id: string; title: string; meta: string; href: string; live: boolean };
+/** deletable: an empty run the viewer may delete (the list shows Delete). */
+export type RecentItem = { id: string; title: string; meta: string; href: string; live: boolean; deletable?: boolean };
 export type RecentGroup = { label: "Today" | "Yesterday" | "Earlier"; items: RecentItem[] };
 /** ok with groups (possibly empty), or error when the store could not be read. */
 export type RecentSessions = { kind: "ok"; groups: RecentGroup[] } | { kind: "error" };
@@ -33,6 +36,7 @@ function title(s: SessionSummary, agent: string | undefined, live: boolean): str
     return join(agent ?? s.expert, topic) || "Teach";
   }
   if (live) return agent ? `Training ${join(agent, topic)}` : join("Training", topic ?? s.expert);
+  if (s.empty) return NO_WORK_RECORDED;
   if (s.has_workmap) return join("Work Map", topic ?? agent);
   return join("Debrief", topic ?? agent ?? s.expert);
 }
@@ -45,7 +49,14 @@ function meta(s: SessionSummary, agent: string | undefined, started: Date, label
   return agent ? `${agent} · ${time(started)}` : time(started);
 }
 
-export function groupRecent(sessions: SessionSummary[], now: Date, agents: AgentNames = {}, limit = RECENT_LIMIT): RecentGroup[] {
+/** canDelete: may the viewer delete this session (creator or owner); only empty, ended runs are ever deletable. */
+export function groupRecent(
+  sessions: SessionSummary[],
+  now: Date,
+  agents: AgentNames = {},
+  limit = RECENT_LIMIT,
+  canDelete: (s: SessionSummary) => boolean = () => false,
+): RecentGroup[] {
   const today = day(now);
   const yesterday = day(new Date(now.getTime() - 86_400_000));
   const latest = sessions
@@ -61,6 +72,7 @@ export function groupRecent(sessions: SessionSummary[], now: Date, agents: Agent
     const live = !s.ended_at;
     const agent = s.agent_id ? agents[s.agent_id] : undefined;
     const item: RecentItem = { id: s.id, title: title(s, agent, live), meta: meta(s, agent, started, label, live, now), href: sessionHref(s), live };
+    if (s.empty && !live && canDelete(s)) item.deletable = true;
     const last = groups[groups.length - 1];
     if (last?.label === label) last.items.push(item);
     else groups.push({ label, items: [item] });

@@ -4,10 +4,12 @@
 // Voice is optional: when it cannot start, the question shows on screen and the expert types the answer.
 import type { TrainIntent } from "@/lib/processes/train";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { voiceStartNotice } from "@/components/capture/dailyLimit";
 import WorkMapViewer from "@/components/map/WorkMapViewer";
 import { buttonClass } from "@/components/ui";
+import { isEmptySession, NO_WORK_RECORDED } from "@/lib/capture/empty";
 import { createDebriefController, type DebriefController, type DebriefState } from "@/lib/debrief/controller";
 import { createHttpDebriefApi } from "@/lib/debrief/httpApi";
 import { SCORE_THRESHOLD, type Session } from "@/lib/types";
@@ -46,6 +48,8 @@ function DebriefInner({ sessionId, preview, intent }: { sessionId: string; previ
   const [answer, setAnswer] = useState("");
   const ctrlRef = useRef<DebriefController | null>(null);
   const voiceModeRef = useRef(false);
+  const router = useRouter();
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (preview) return;
@@ -135,6 +139,24 @@ function DebriefInner({ sessionId, preview, intent }: { sessionId: string; previ
     [view?.workmap],
   );
 
+  // An empty run (lib/capture/empty) has nothing to debrief: no Work Map is built, Delete removes it.
+  const empty = !!session && !view && isEmptySession(session);
+
+  async function deleteRun() {
+    if (!session || deleting) return;
+    setDeleting(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/session/${encodeURIComponent(sessionId)}`, { method: "DELETE" });
+      if (!res.ok) throw new Error(`DELETE session ${res.status}`);
+      router.push(session.agent_id ? `/agents/${encodeURIComponent(session.agent_id)}` : "/");
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setDeleting(false);
+    }
+  }
+
   const phase = view?.phase ?? "idle";
   const inTeachBack = phase === "teach_back" || phase === "corrected" || phase === "confirmed";
 
@@ -173,7 +195,19 @@ function DebriefInner({ sessionId, preview, intent }: { sessionId: string; previ
 
       <div className="flex flex-wrap items-start" style={{ gap: 20 }}>
         <div className="flex min-w-0 flex-col" style={{ flex: "3 1 560px", gap: 20 }}>
-          {session && !view && (
+          {empty && (
+            <div className="ui-card flex flex-col items-start" style={{ padding: 28, gap: 18, background: "var(--stage)" }}>
+              <h2 className="ui-t2">{NO_WORK_RECORDED}</h2>
+              <p className="text-[13px]" style={{ color: "var(--mu)" }}>
+                This run ended before any work was recorded, so there is nothing to debrief and no process was created. It
+                is removed automatically 24 h after it ended.
+              </p>
+              <button type="button" disabled={deleting} onClick={deleteRun} className={buttonClass("secondary")}>
+                {deleting ? "Deleting…" : "Delete"}
+              </button>
+            </div>
+          )}
+          {session && !view && !empty && (
             <div className="ui-card flex flex-col items-start" style={{ padding: 28, gap: 18, background: "var(--stage)" }}>
               <p style={{ fontSize: 15 }}>
                 A few follow-up questions about what is still unclear, then I explain the whole process back so you can confirm

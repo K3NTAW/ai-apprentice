@@ -8,6 +8,7 @@ import type { Membership, Role } from "@/lib/auth/context";
 import CommandPalette from "./CommandPalette";
 import HideInApp from "./HideInApp";
 import NavLink from "./NavLink";
+import RecentDelete from "./RecentDelete";
 import SidebarFrame from "./SidebarFrame";
 import UserCard from "./UserCard";
 import WorkspaceSwitcher from "./WorkspaceSwitcher";
@@ -113,17 +114,26 @@ function RecentList({ recent }: { recent: RecentSessions }) {
             <span className="text-xs" style={{ color: "var(--fa)", padding: gi === 0 ? "0 12px 6px" : "10px 12px 6px" }}>
               {g.label}
             </span>
-            {g.items.map((s) => (
-              <HoverPrefetchLink key={s.id} href={s.href} className="ui-rb">
-                <span className="truncate text-[13px]" style={{ fontWeight: s.live ? 500 : undefined }}>
-                  {s.title}
-                </span>
-                <span className="flex items-center gap-[6px] text-xs" style={{ color: "var(--fa)" }}>
-                  {s.live && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--rd)" }} />}
-                  {s.meta}
-                </span>
-              </HoverPrefetchLink>
-            ))}
+            {g.items.map((s) => {
+              const link = (
+                <HoverPrefetchLink key={s.id} href={s.href} className={s.deletable ? "ui-rb min-w-0 flex-1" : "ui-rb"}>
+                  <span className="truncate text-[13px]" style={{ fontWeight: s.live ? 500 : undefined }}>
+                    {s.title}
+                  </span>
+                  <span className="flex items-center gap-[6px] text-xs" style={{ color: "var(--fa)" }}>
+                    {s.live && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--rd)" }} />}
+                    {s.meta}
+                  </span>
+                </HoverPrefetchLink>
+              );
+              if (!s.deletable) return link;
+              return (
+                <div key={s.id} className="flex items-center gap-[4px]">
+                  {link}
+                  <RecentDelete id={s.id} />
+                </div>
+              );
+            })}
           </div>
         ))
       )}

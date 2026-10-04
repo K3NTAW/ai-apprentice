@@ -19,6 +19,10 @@ export type SessionSummary = {
   /** Teach progress counts (Session.teach) where the backend stores them. */
   mastered?: number;
   practiced?: number;
+  /** An ended capture with no recorded work (lib/capture/empty): the sidebar shows 'No work recorded'. */
+  empty?: boolean;
+  /** Who started the session, where the backend stores it (the recent list's Delete: creator or owner). */
+  created_by?: string;
 };
 
 export const RECENT_SESSIONS_DEFAULT = 6;

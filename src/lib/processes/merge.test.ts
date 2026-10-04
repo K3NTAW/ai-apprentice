@@ -2,10 +2,11 @@ import { describe, expect, it } from "vitest";
 import type { Process } from "@/lib/store/types";
 import type { SessionDigest, WorkMap } from "@/lib/types";
 import { workMapItems } from "@/lib/workmap/items";
-import { agentWorkMaps, teachWorkMapSessions } from "./merge";
+import { agentWorkMaps, isLegacyConfirmed, teachWorkMapSessions } from "./merge";
 
 const A = "agent-a";
-const wm = (task: string, confirmed = true): WorkMap => ({ task, expert: "S", confirmed_by_expert: confirmed, steps: [], open_questions: [] });
+const step = { n: 1 } as unknown as WorkMap["steps"][number];
+const wm = (task: string, confirmed = true): WorkMap => ({ task, expert: "S", confirmed_by_expert: confirmed, steps: [step], open_questions: [] });
 const s = (id: string, day: number, workmap: WorkMap, process_id?: string) =>
   ({ id, kind: "capture", agent_id: A, started_at: `2026-09-0${day}T08:00:00.000Z`, workmap, ...(process_id ? { process_id } : {}) }) as unknown as SessionDigest;
 const p = (id: string, title: string, extra: Partial<Process> = {}): Process => ({
@@ -24,6 +25,13 @@ const p = (id: string, title: string, extra: Partial<Process> = {}): Process => 
 });
 
 describe("agentWorkMaps", () => {
+  it("never lists an empty run: a session or process whose Work Map has no steps (the 'unspecified task' entry)", () => {
+    const empty = { ...wm("unspecified task"), steps: [] };
+    expect(isLegacyConfirmed(s("blank", 1, empty))).toBe(false);
+    const maps = agentWorkMaps(A, [p("pe", "unspecified task", { workmap: empty }), p("p1", "Proc")], [s("blank", 1, empty), s("legacy", 2, wm("legacy"))]);
+    expect(maps.map((m) => m.id)).toEqual(["p1", "legacy"]);
+  });
+
   it("links a process to its newest linked capture session, legacy sessions to themselves", () => {
     const sessions = [s("old", 1, wm("v1"), "p1"), s("new", 2, wm("v2"), "p1"), s("legacy", 3, wm("legacy"))];
     expect(agentWorkMaps(A, [p("p1", "Proc"), p("p2", "Unlinked")], sessions).map((m) => [m.id, m.sessionId])).toEqual([

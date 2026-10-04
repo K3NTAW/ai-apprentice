@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isEmptySession } from "@/lib/capture/empty";
 import { gaps, isUnderstood, rebuildWorkMap, teachBackText } from "@/lib/workmap";
 import { consumeUsage } from "@/lib/usage";
 import { notFound, parseBody, requireCreatorOrOwner, withApi } from "../session/_http";
@@ -21,6 +22,8 @@ export function POST(req: Request): Promise<Response> {
     if (denied) return denied;
     const session = await api.store.getSession(session_id);
     if (!session) return notFound(`session not found: ${session_id}`);
+    // An empty run (lib/capture/empty) never builds a Work Map, so it never becomes a process.
+    if (isEmptySession(session)) return Response.json({ error: "empty_session", message: "No work recorded" }, { status: 409 });
     // Rescore only between debrief answers; a full rebuild past its budget keeps the last map (rescored).
     const { workmap, mode } = await rebuildWorkMap(session, { rescoreOnly: rescore_only });
     await api.store.saveWorkMap(session_id, workmap);

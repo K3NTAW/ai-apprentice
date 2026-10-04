@@ -45,6 +45,8 @@ export const qaPair = (id: string, t: number, extra: Partial<QAPair> = {}): QAPa
 });
 
 const workmap: WorkMap = { task: "pay invoice", expert: "Sabine", confirmed_by_expert: false, steps: [], open_questions: [] };
+// Backfill needs recorded work: a confirmed Work Map with steps (a Work Map without steps is an empty run).
+const step: WorkMap["steps"][number] = { n: 1, title: "s", decision: "d", is_judgment_call: false, screen_moment: { t: 0, entity: "e" }, guardrails: [], scores: { reason_captured: 1, guardrail_captured: 1 }, reason: null };
 const avatar: Avatar = { shape: "blob", face: "smile", color: "#3366FF", accent: "#FFCC00" };
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const byKey = <T,>(xs: T[], k: (x: T) => string) => [...xs].sort((a, b) => k(a).localeCompare(k(b)));
@@ -314,7 +316,7 @@ export function runStoreContract(name: string, makeStore: () => SessionStore | P
     it("backfills one process per legacy confirmed session, idempotently, and lists the link on digests", async () => {
       const a = await store.createAgent({ name: "Legacy Agent", role: "AP", avatar });
       const legacy = await store.createSession({ kind: "capture", expert: "Sabine", agent_id: a.id });
-      await store.saveWorkMap(legacy.id, { ...workmap, task: "  Book   invoices ", confirmed_by_expert: true });
+      await store.saveWorkMap(legacy.id, { ...workmap, task: "  Book   invoices ", confirmed_by_expert: true, steps: [step] });
       const draft = await store.createSession({ kind: "capture", expert: "Sabine", agent_id: a.id });
       await store.saveWorkMap(draft.id, workmap);
       const held = await store.createSession({ kind: "capture", expert: "Sabine", agent_id: a.id });
@@ -384,7 +386,7 @@ export function runStoreContract(name: string, makeStore: () => SessionStore | P
     it("does not recreate a deleted process on the next backfill", async () => {
       const a = await store.createAgent({ name: "Tombstone Agent", role: "AP", avatar });
       const legacy = await store.createSession({ kind: "capture", expert: "Sabine", agent_id: a.id });
-      await store.saveWorkMap(legacy.id, { ...workmap, confirmed_by_expert: true });
+      await store.saveWorkMap(legacy.id, { ...workmap, confirmed_by_expert: true, steps: [step] });
       const [p] = await backfillProcesses(store, { agent_id: a.id });
       expect(p).toMatchObject({ agent_id: a.id });
       expect(await store.deleteProcess(p.id)).toBe(true);

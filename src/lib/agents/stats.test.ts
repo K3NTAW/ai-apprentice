@@ -76,7 +76,7 @@ describe("agentStats", () => {
   });
 
   it("counts unique chords across confirmed Work Maps; 0 renders as 'none yet'", () => {
-    const one = agentStats(A, [s({ workmap: workmap(true, [], [sc("Cmd+J"), sc("CMD+J"), sc("F5")]) })]);
+    const one = agentStats(A, [s({ workmap: workmap(true, [[]], [sc("Cmd+J"), sc("CMD+J"), sc("F5")]) })]);
     expect(one.shortcuts).toBe(2);
     expect(statText(one.shortcuts)).toBe("2");
     const none = agentStats(A, [s({ workmap: workmap(true, []) }), s({ workmap: workmap(false, [], [sc("Cmd+J")]) })]);

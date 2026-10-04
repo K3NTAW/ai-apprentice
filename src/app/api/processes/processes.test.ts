@@ -48,7 +48,8 @@ import { POST as backfillPost } from "./backfill/route";
 import { GET as listGet, POST as createPost } from "./route";
 
 const avatar = { shape: "blob", face: "smile", color: "#3366FF", accent: "#FFCC00" } as const;
-const workmap: WorkMap = { task: "pay invoice", expert: "Sabine", confirmed_by_expert: true, steps: [], open_questions: [] };
+const step: WorkMap["steps"][number] = { n: 1, title: "s", decision: "d", is_judgment_call: false, screen_moment: { t: 0, entity: "e" }, guardrails: [], scores: { reason_captured: 1, guardrail_captured: 1 }, reason: null };
+const workmap: WorkMap = { task: "pay invoice", expert: "Sabine", confirmed_by_expert: true, steps: [step], open_questions: [] };
 
 const req = (method: string, payload?: unknown, query = "") =>
   new Request(`http://localhost/api/processes${query}`, payload === undefined ? { method } : { method, body: JSON.stringify(payload) });

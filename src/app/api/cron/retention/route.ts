@@ -4,9 +4,13 @@
 // than 16 characters no bearer is accepted. Without a valid bearer the request is handled like any user route
 // (requireContext: 401 signed out, 403 no workspace, 503 misconfigured) and a signed-in user still gets 401.
 // Work: src/lib/agents/admin.ts runRetention with the service role (idempotent, at most RETENTION_BATCH frames
-// per run, Storage objects before rows).
+// per run, Storage objects before rows). Then the empty capture runs that ended 24 h ago or more
+// (src/lib/capture/emptyPurge.ts, at most EMPTY_PURGE_BATCH per run); the answer adds empty_purged.
+// The two run independently: either may fail (error / empty_error in the answer, 502, or 503 for settings) and the
+// other still runs and reports its result.
 import { fileDataPort, runRetention, SettingsUnavailableError, supabaseRetentionPort, validCronBearer } from "@/lib/agents/admin";
 import { requireContext } from "@/lib/auth/context";
+import { fileEmptyPurgePort, purgeEmptySessions, supabaseEmptyPurgePort } from "@/lib/capture/emptyPurge";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { appMode } from "@/lib/supabase/env";
 
@@ -20,12 +24,38 @@ export async function GET(req: Request) {
   }
   const mode = appMode();
   if (mode === "misconfigured") return Response.json({ error: "supabase_not_configured" }, { status: 503 });
+  const now = Date.now();
+  let db: ReturnType<typeof createSupabaseAdminClient> | null = null;
   try {
-    const port = mode === "local" ? fileDataPort() : supabaseRetentionPort(createSupabaseAdminClient());
-    return Response.json(await runRetention(port, Date.now()));
+    db = mode === "local" ? null : createSupabaseAdminClient();
   } catch (err) {
-    if (err instanceof SettingsUnavailableError) return Response.json({ error: err.code, message: err.message }, { status: 503 });
-    console.error("cron retention:", err instanceof Error ? err.message : String(err));
-    return Response.json({ error: "retention_failed" }, { status: 502 });
+    console.error("cron retention:", message(err));
+    return Response.json({ error: "retention_failed", empty_error: "empty_purge_failed" }, { status: 502 });
   }
+  // Two independent jobs: a failure in one never skips the other, and the answer reports both.
+  let status = 200;
+  let retention: Record<string, unknown>;
+  try {
+    retention = { ...(await runRetention(db ? supabaseRetentionPort(db) : fileDataPort(), now)) };
+  } catch (err) {
+    console.error("cron retention:", message(err));
+    if (err instanceof SettingsUnavailableError) {
+      retention = { error: err.code, message: err.message };
+      status = 503;
+    } else {
+      retention = { error: "retention_failed" };
+      status = 502;
+    }
+  }
+  let empty: Record<string, unknown>;
+  try {
+    empty = { empty_purged: (await purgeEmptySessions(db ? supabaseEmptyPurgePort(db) : fileEmptyPurgePort(), now)).purged };
+  } catch (err) {
+    console.error("cron empty purge:", message(err));
+    empty = { empty_error: "empty_purge_failed" };
+    if (status === 200) status = 502;
+  }
+  return Response.json({ ...retention, ...empty }, { status });
 }
+
+const message = (err: unknown) => (err instanceof Error ? err.message : String(err));

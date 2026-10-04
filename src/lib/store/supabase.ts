@@ -13,6 +13,7 @@
 // pageSize must not exceed the project's max-rows, otherwise a capped page looks short and paging stops.
 import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { EMPTY_MIN_EVENTS, isAnswered, isEmptyCapture, type RunFacts } from "@/lib/capture/empty";
 import { redactText } from "@/lib/redact";
 import {
   AgentSchema,
@@ -568,28 +569,65 @@ export function createSupabaseStore(
     },
 
     // One query, no child counts: the shell calls this on every page. has_workmap reads workmap->>task
-    // (always set by saveWorkMap) so the workmap body is not transferred.
+    // (always set by saveWorkMap) and first_step workmap->steps->0 (null when the Work Map has no steps) so the
+    // workmap body is not transferred. The empty mark is the shared rule (lib/capture/empty): event counts are
+    // embedded, process_id is read when migration 20261004030000_processes is applied, and the answered Q&A of the
+    // few ended captures without recorded work that are long enough and have fewer than EMPTY_MIN_EVENTS events are
+    // read in one more query (none when there is no such session).
     async recentSessions(limit = RECENT_SESSIONS_DEFAULT) {
-      const res = await client
-        .from("sessions")
-        .select("id,kind,expert,agent_id,started_at,ended_at,has_workmap:workmap->>task,confirmed:workmap->confirmed_by_expert")
-        .eq("workspace_id", workspaceId)
-        .order("started_at", { ascending: false })
-        .order("id", { ascending: false })
-        .limit(Math.max(0, limit));
+      const cols =
+        "id,kind,expert,agent_id,created_by,started_at,ended_at,has_workmap:workmap->>task,first_step:workmap->steps->0,confirmed:workmap->confirmed_by_expert,session_events(count)";
+      const read = (c: string) =>
+        client
+          .from("sessions")
+          .select(c)
+          .eq("workspace_id", workspaceId)
+          .order("started_at", { ascending: false })
+          .order("id", { ascending: false })
+          .limit(Math.max(0, limit));
+      let res = await read(`${cols},process_id`);
+      if (res.error && isProcessesMissing(res.error)) res = await read(cols);
       if (res.error) fail("select recent sessions", res.error);
-      type RecentRow = Pick<SessionRow, "id" | "kind" | "expert" | "started_at" | "ended_at" | "agent_id"> & { has_workmap: string | null; confirmed: boolean | null };
-      return ((res.data ?? []) as RecentRow[]).map(
+      type RecentRow = Pick<SessionRow, "id" | "kind" | "expert" | "started_at" | "ended_at" | "agent_id"> & {
+        created_by?: string | null;
+        process_id?: string | null;
+        has_workmap: string | null;
+        first_step: unknown;
+        confirmed: boolean | null;
+        session_events?: { count: number }[] | null;
+      };
+      const rows = (res.data ?? []) as unknown as RecentRow[];
+      const facts = (r: RecentRow, answered: number): RunFacts => ({
+        kind: r.kind,
+        started_at: normTs(r.started_at),
+        ended_at: r.ended_at === null ? null : normTs(r.ended_at),
+        events: r.session_events?.[0]?.count ?? 0,
+        answered,
+        // hasWork: a Work Map with at least one step.
+        work: r.first_step !== null && r.first_step !== undefined,
+        process_id: r.process_id ?? null,
+      });
+      const unsure = rows.filter((r) => isEmptyCapture(facts(r, 0)) && !isEmptyCapture({ ...facts(r, 0), events: EMPTY_MIN_EVENTS }));
+      const answered = new Map<string, number>();
+      if (unsure.length > 0) {
+        const qa = await client.from("session_qa").select("session_id,payload").in("session_id", unsure.map((r) => r.id));
+        if (qa.error) fail("select recent session_qa", qa.error);
+        for (const q of (qa.data ?? []) as { session_id: string; payload: QAPair }[])
+          if (isAnswered(q.payload)) answered.set(q.session_id, (answered.get(q.session_id) ?? 0) + 1);
+      }
+      return rows.map(
         (r): SessionSummary => ({
           id: r.id,
           kind: r.kind,
           started_at: normTs(r.started_at),
           ...(r.ended_at !== null ? { ended_at: normTs(r.ended_at) } : {}),
           ...(r.expert !== null ? { expert: r.expert } : {}),
-          counts: { events: 0, transcript: 0, qa: 0 },
+          counts: { events: r.session_events?.[0]?.count ?? 0, transcript: 0, qa: 0 },
           has_workmap: r.has_workmap !== null,
           ...(r.agent_id ? { agent_id: r.agent_id } : {}),
           ...(r.has_workmap !== null ? { task: r.has_workmap, confirmed: r.confirmed === true } : {}),
+          ...(r.created_by ? { created_by: r.created_by } : {}),
+          ...(isEmptyCapture(facts(r, answered.get(r.id) ?? 0)) ? { empty: true } : {}),
         }),
       );
     },

@@ -126,7 +126,7 @@ describe("supabase store only", () => {
   it("backfill: concurrent calls create each process once and keep the session's started_at as created_at", async () => {
     const { fake, store } = supabaseFixture();
     const a = await store.createAgent({ name: "A", role: "R", avatar: { shape: "blob", face: "smile", color: "#3366FF", accent: "#FFCC00" } });
-    const wm = { task: "t", expert: "S", confirmed_by_expert: true, steps: [], open_questions: [] };
+    const wm = { task: "t", expert: "S", confirmed_by_expert: true, steps: [{ n: 1, title: "s", decision: "d", is_judgment_call: false, screen_moment: { t: 0, entity: "e" }, guardrails: [], scores: { reason_captured: 1, guardrail_captured: 1 }, reason: null }], open_questions: [] };
     const older = await store.createSession({ kind: "capture", agent_id: a.id });
     await store.saveWorkMap(older.id, { ...wm, task: "older" });
     const newer = await store.createSession({ kind: "capture", agent_id: a.id });

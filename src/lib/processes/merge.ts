@@ -4,14 +4,17 @@
 // and Teach read the agent's confirmed, non-archived processes merged with these legacy sessions (agentWorkMaps).
 // Teach starts from a capture session: a process is taught through its newest linked capture session (sessionId),
 // with the process's current Work Map (teachWorkMapSessions).
+// A Work Map without steps is no recorded work (lib/capture/empty hasWork, the empty-run rule): such a session is
+// never a legacy process (and never backfilled), and such a process never shows in the lists (T-0242).
+import { hasWork } from "@/lib/capture/empty";
 import type { Process } from "@/lib/store/types";
 import type { SessionDigest, WorkMap } from "@/lib/types";
 
 export type LegacyLike = Pick<SessionDigest, "kind" | "workmap" | "agent_id" | "process_id">;
 
-/** A capture session of an agent with an expert-confirmed Work Map that no process holds yet. */
+/** A capture session of an agent with an expert-confirmed Work Map with steps that no process holds yet. */
 export function isLegacyConfirmed<S extends LegacyLike>(s: S): s is S & { workmap: WorkMap; agent_id: string } {
-  return s.kind === "capture" && !!s.agent_id && s.workmap?.confirmed_by_expert === true && !s.process_id;
+  return s.kind === "capture" && !!s.agent_id && s.workmap?.confirmed_by_expert === true && hasWork(s.workmap) && !s.process_id;
 }
 
 /**
@@ -34,7 +37,7 @@ function anchors(sessions: readonly MergeSession[]): Map<string, string> {
 }
 
 /**
- * The agent's confirmed Work Maps, newest first: confirmed, non-archived processes (titled by the process, dated
+ * The agent's confirmed Work Maps with steps, newest first: confirmed, non-archived processes (titled by the process, dated
  * by created_at) and legacy confirmed sessions (dated by started_at). Other agents are ignored.
  */
 export function agentWorkMaps(
@@ -44,7 +47,7 @@ export function agentWorkMaps(
 ): AgentWorkMap[] {
   const linked = anchors(sessions);
   const fromProcesses = processes
-    .filter((p) => p.agent_id === agentId && p.confirmed && !p.archived_at)
+    .filter((p) => p.agent_id === agentId && p.confirmed && !p.archived_at && hasWork(p.workmap))
     .map((p): AgentWorkMap => ({ source: "process", id: p.id, title: p.title, workmap: p.workmap, at: p.created_at, sessionId: linked.get(p.id) ?? null }));
   const fromSessions = sessions
     .filter((s) => s.agent_id === agentId && isLegacyConfirmed(s))

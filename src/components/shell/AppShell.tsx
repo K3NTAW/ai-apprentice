@@ -3,6 +3,7 @@
 import { getRequestContext, type RequestContext } from "@/lib/auth/context";
 import { readMostly } from "@/lib/cache/readMostly";
 import { getStore } from "@/lib/store";
+import type { SessionSummary } from "@/lib/store/types";
 import { readLocalOnboarding } from "@/lib/onboarding/file";
 import { finishSetupVisible, onboardingEnabled } from "@/lib/onboarding/state";
 import ShellHeader, { type ShellUser } from "./ShellHeader";
@@ -47,7 +48,9 @@ export async function recentSessions(ctx: RequestContext, now = new Date()): Pro
     const rows = supabase
       ? await readMostly("recent-sessions", ctx, ["sessions"], () => store.recentSessions(RECENT_LIMIT))
       : await store.recentSessions(RECENT_LIMIT);
-    return { kind: "ok", groups: groupRecent(rows, now, await names) };
+    // Delete on an empty run: its creator or an owner, as DELETE /api/session/<id> checks.
+    const canDelete = (s: SessionSummary) => ctx.role === "owner" || (!!s.created_by && s.created_by === ctx.userId);
+    return { kind: "ok", groups: groupRecent(rows, now, await names, RECENT_LIMIT, canDelete) };
   } catch {
     return { kind: "error" };
   }

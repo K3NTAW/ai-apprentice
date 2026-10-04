@@ -482,7 +482,7 @@ class FakeQuery {
   private project(row: Row): Row {
     const out = structuredClone(row);
     if (!this.columns) return out;
-    // Plain columns and aliased JSON paths (alias:col->>key); a missing key or a null column reads as null.
+    // Plain columns and aliased JSON paths (alias:col->>key, alias:col->key->0); a missing key or a null column reads as null.
     return Object.fromEntries(
       this.columns.flatMap((c): [string, unknown][] => {
         if (c === "*") return Object.entries(out);
@@ -493,10 +493,15 @@ class FakeQuery {
           const n = this.fake.tables[child].filter((r) => r.session_id === row.id && this.fake.rowVisible(child, r)).length;
           return [[child, [{ count: n }]]];
         }
-        const m = /^(\w+):(\w+)->>?(\w+)$/.exec(c);
+        const m = /^(\w+):(\w+)((?:->>?\w+)+)$/.exec(c);
         if (!m) return [[c, out[c]]];
-        const obj = out[m[2]] as Row | null | undefined;
-        return [[m[1], obj?.[m[3]] ?? null]];
+        // Each step reads an object key or, on an array, an index (workmap->steps->0); a miss reads as null.
+        let v: unknown = out[m[2]];
+        for (const key of m[3].split(/->>?/).slice(1)) {
+          if (Array.isArray(v)) v = /^\d+$/.test(key) ? v[Number(key)] : undefined;
+          else v = v && typeof v === "object" ? (v as Row)[key] : undefined;
+        }
+        return [[m[1], v ?? null]];
       }),
     );
   }
