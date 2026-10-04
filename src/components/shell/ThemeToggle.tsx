@@ -75,7 +75,7 @@ export default function ThemeToggle() {
     setChoice(next);
   }
   return (
-    <div role="group" aria-label="Theme" className="flex items-center gap-[10px]" style={{ padding: "6px 10px" }} data-testid="theme-toggle">
+    <div role="group" aria-label="Theme" className="flex flex-wrap items-center gap-[10px]" style={{ padding: "6px 10px" }} data-testid="theme-toggle">
       <svg className="ui-ic" viewBox="0 0 24 24" aria-hidden="true">
         <path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z" />
       </svg>

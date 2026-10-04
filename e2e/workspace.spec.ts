@@ -12,7 +12,7 @@ test.describe("workspace", () => {
 
   test("owner view: invite, revoke, role, remove each show a result", async ({ page }) => {
     await page.goto("/workspace/preview");
-    await expectCovered(page, { ...SHELL, "Sign out": "url", Remove: "live", expert: "state", learner: "state", Invite: "live", Revoke: "live" });
+    await expectCovered(page, { ...SHELL, "Sign out": "url", Save: "live", Remove: "live", expert: "state", learner: "state", Invite: "live", Revoke: "live" });
     await page.getByRole("radio", { name: "expert" }).click();
     await expect(page.getByRole("radio", { name: "expert" })).toHaveAttribute("aria-checked", "true");
     await page.getByLabel(/email/i).first().fill("new.person@example.com");

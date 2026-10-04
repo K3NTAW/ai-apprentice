@@ -80,7 +80,7 @@ function NameEditor({ initial, onSaved, onCancel }: { initial: string; onSaved: 
 export default function UserCard({ user }: { user: UserCardUser | null }) {
   const [name, setName] = useState(() => cardName(user));
   const [editing, setEditing] = useState(false);
-  const { open, setOpen, rootRef, buttonRef, menuRef, onMenuKeyDown, menuStyle } = useMenu("side", 280);
+  const { open, setOpen, rootRef, buttonRef, menuRef, onMenuKeyDown, menuStyle } = useMenu("side", 300);
   const menuId = useId();
   return (
     <div className="relative md:w-full" ref={rootRef}>
