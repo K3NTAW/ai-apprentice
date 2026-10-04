@@ -266,8 +266,10 @@ function DebriefInner({ sessionId, preview, intent }: { sessionId: string; previ
               )}
             </section>
           )}
-          {view?.busy && phase === "asking" && !view.question && (
-            <p className="text-[13px]" style={{ color: "var(--mu)" }}>Updating the Work Map with your answer…</p>
+          {view?.thinking && (
+            <p className="text-[13px]" style={{ color: "var(--mu)" }} role="status" aria-busy="true" data-testid="debrief-thinking">
+              {view.endReason ? "Thinking: putting the whole process together…" : "Thinking about your answer…"}
+            </p>
           )}
 
           {view?.endReason && (

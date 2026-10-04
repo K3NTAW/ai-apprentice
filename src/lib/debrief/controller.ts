@@ -1,7 +1,8 @@
 // Debrief loop (docs/BUILD_SPEC.md Module 2, section 6 row 3): gap-driven follow-ups, rising scores,
 // spoken teach-back with expert confirm. Framework free; all I/O is injected.
+// Pacing: one full build at start, a rescore only after each answer, one full rebuild before the teach-back.
 import { fallbackQuestion } from "@/lib/capture/controller";
-import { buildDebriefTurn, buildTeachBackTurn } from "@/lib/voice/prompts";
+import { buildAskTurn, buildTeachBackTurn, buildThinkingTurn } from "@/lib/voice/prompts";
 import type { Gap } from "@/lib/workmap";
 import { newId, type QAPair, type ScreenEvent, type Session, type TranscriptEntry, type WorkMap } from "@/lib/types";
 
@@ -54,6 +55,8 @@ export type DebriefControllerOptions = {
 export type DebriefState = {
   phase: DebriefPhase;
   busy: boolean;
+  /** True while the Work Map scores an answer or rebuilds before the teach-back. */
+  thinking?: boolean;
   question: DebriefQuestion | null;
   queue: DebriefQuestion[];
   asked: DebriefQuestion[];
@@ -109,6 +112,7 @@ export function createDebriefController(opts: DebriefControllerOptions) {
   const state: DebriefState = {
     phase: "idle",
     busy: false,
+    thinking: false,
     question: null,
     queue: [],
     asked: [],
@@ -126,6 +130,8 @@ export function createDebriefController(opts: DebriefControllerOptions) {
   };
   let tQuestion = 0;
   let stopped = false;
+  /** Answers posted since the last full build (each only rescored). */
+  let rescoredSinceFull = 0;
 
   const changed = () => onChange?.();
   const fail = (where: string, err: unknown) => {
@@ -205,22 +211,39 @@ export function createDebriefController(opts: DebriefControllerOptions) {
     return null;
   }
 
-  function beginTeachBack(reason: EndReason) {
-    state.endReason = reason;
-    state.question = null;
-    state.phase = "teach_back";
-    voice.injectContext(`Debrief questions are done (${reason}). Give the teach-back next.`);
-    voice.promptTurn(buildTeachBackTurn(state.teachBack ?? ""));
+  /** One full rebuild before the teach-back; on failure (e.g. the route timed out) the last map stays. */
+  async function fullRebuild() {
+    if (!rescoredSinceFull) return;
+    state.thinking = true;
+    changed();
+    try {
+      applyBuild(await api.buildWorkMap(sessionId, false));
+      rescoredSinceFull = 0;
+    } catch (err) {
+      fail("rebuild", err);
+    } finally {
+      state.thinking = false;
+    }
   }
 
-  function askNext() {
+  async function beginTeachBack(reason: EndReason) {
+    state.endReason = reason;
+    state.question = null;
+    await fullRebuild();
+    if (stopped) return;
+    state.phase = "teach_back";
+    voice.injectContext(`Debrief questions are done (${reason}). Give the teach-back next.`);
+    voice.promptTurn(buildTeachBackTurn(state.teachBack ?? "", { closing: true }));
+  }
+
+  async function askNext() {
     const reason = shouldEnd();
     if (reason) return beginTeachBack(reason);
     const q = state.queue.shift()!;
     state.question = q;
     state.phase = "asking";
     tQuestion = getT();
-    voice.promptTurn(buildDebriefTurn([q.text]));
+    voice.promptTurn(buildAskTurn(q.text));
   }
 
   async function postEntry(speaker: TranscriptEntry["speaker"], text: string, t = getT()) {
@@ -238,8 +261,9 @@ export function createDebriefController(opts: DebriefControllerOptions) {
     state.error = null;
     changed();
     try {
-      applyBuild(await api.buildWorkMap(sessionId));
-      if (!stopped) askNext();
+      applyBuild(await api.buildWorkMap(sessionId, false));
+      rescoredSinceFull = 0;
+      if (!stopped) await askNext();
     } catch (err) {
       state.phase = "idle";
       fail("buildWorkMap", err);
@@ -277,13 +301,18 @@ export function createDebriefController(opts: DebriefControllerOptions) {
     try {
       await postEntry("expert", answer, tAnswer);
       await api.postQA(qa);
-      applyBuild(await api.buildWorkMap(sessionId));
+      rescoredSinceFull += 1;
+      state.thinking = true;
+      changed();
+      voice.promptTurn(buildThinkingTurn());
+      applyBuild(await api.buildWorkMap(sessionId, true));
     } catch (err) {
       fail("answer", err);
       state.queue = buildQueue(state.gaps);
     }
+    state.thinking = false;
+    if (!stopped) await askNext();
     state.busy = false;
-    if (!stopped) askNext();
     changed();
   }
 
@@ -319,7 +348,7 @@ export function createDebriefController(opts: DebriefControllerOptions) {
           phase: "debrief",
           about: "other",
         });
-        applyBuild(await api.buildWorkMap(sessionId));
+        applyBuild(await api.buildWorkMap(sessionId, false));
         // Confirm after the rebuild so the correction note stays on the saved map.
         const res = await api.confirm(sessionId, false, correction);
         if (res && res.workmap) state.workmap = res.workmap;

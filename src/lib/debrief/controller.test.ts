@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { SCORE_THRESHOLD, type QAPair, type ScreenEvent, type WorkMap, type WorkMapStep } from "@/lib/types";
 import type { Gap } from "@/lib/workmap";
+import { buildAskTurn, buildTeachBackTurn, DEBRIEF_CLOSING_LINE, TAGS } from "@/lib/voice/prompts";
 import { createDebriefController, spokenSeconds, type BuildResult, type DebriefApi } from "./controller";
 
 const step = (n: number, score: number, judgment = true): WorkMapStep => ({
@@ -39,7 +40,7 @@ function fakeApi(opts: { stepCount?: number; start?: number; rise?: number } = {
   const { stepCount = 3, start = 0.2, rise = 0.1 } = opts;
   let builds = 0;
   const api = {
-    buildWorkMap: vi.fn(async () => {
+    buildWorkMap: vi.fn(async (_id: string, _rescoreOnly?: boolean) => {
       const score = Math.min(1, start + rise * builds++);
       return build(Array.from({ length: stepCount }, (_, i) => step(i + 1, score)));
     }),
@@ -137,8 +138,8 @@ describe("debrief controller", () => {
     await answerAll(ctrl);
     const s = ctrl.getState();
     expect(api.postQA).toHaveBeenCalledTimes(s.followUpsAsked);
-    expect(api.buildWorkMap).toHaveBeenCalledTimes(s.followUpsAsked + 1);
-    expect(s.history.length).toBe(s.followUpsAsked + 1);
+    expect(api.buildWorkMap).toHaveBeenCalledTimes(s.followUpsAsked + 2);
+    expect(s.history.length).toBe(s.followUpsAsked + 2);
     const series = s.history.map((h) => h.steps[0].reason_captured);
     for (let i = 1; i < series.length; i++) expect(series[i]).toBeGreaterThan(series[i - 1]);
     expect(s.endReason).toBe("all steps above threshold");
@@ -187,5 +188,79 @@ describe("debrief controller", () => {
     expect(api.confirm).not.toHaveBeenCalled();
     expect(ctrl.getState().awaitingCorrection).toBe(true);
     expect(ctrl.getState().phase).toBe("teach_back");
+  });
+
+  it("n answers make n rescore-only calls and one full rebuild before the teach-back", async () => {
+    const api = fakeApi({ start: 0.2, rise: 0.1 });
+    const v = voice();
+    const ctrl = createDebriefController({ api, voice: v, sessionId: "s1", now: () => 0 });
+    await ctrl.start();
+    await answerAll(ctrl);
+    const s = ctrl.getState();
+    const n = s.followUpsAsked;
+    expect(n).toBeGreaterThanOrEqual(3);
+    const modes = api.buildWorkMap.mock.calls.map((c) => c[1]);
+    expect(modes).toEqual([false, ...Array(n).fill(true), false]);
+    expect(s.phase).toBe("teach_back");
+    // The teach-back is prompted after the full rebuild and speaks its result.
+    const lastBuild = api.buildWorkMap.mock.invocationCallOrder.at(-1)!;
+    const teachBackCall = v.promptTurn.mock.calls.findIndex((c) => String(c[0]).startsWith(TAGS.teachBack));
+    expect(v.promptTurn.mock.invocationCallOrder[teachBackCall]).toBeGreaterThan(lastBuild);
+    expect(s.history.length).toBe(n + 2);
+  });
+
+  it("shows a thinking state and a filler turn while an answer rescores", async () => {
+    const api = fakeApi({ start: 0.2, rise: 0.1 });
+    const v = voice();
+    const ctrl = createDebriefController({ api, voice: v, sessionId: "s1", now: () => 0 });
+    await ctrl.start();
+    let release!: (r: BuildResult) => void;
+    api.buildWorkMap.mockImplementationOnce(() => new Promise<BuildResult>((res) => (release = res)));
+    const pending = ctrl.onExpertUtterance("Because the controller signs off.");
+    await vi.waitFor(() => expect(ctrl.getState().thinking).toBe(true));
+    expect(v.promptTurn).toHaveBeenLastCalledWith(TAGS.thinking);
+    release(build([step(1, 0.5), step(2, 0.5), step(3, 0.5)]));
+    await pending;
+    expect(ctrl.getState().thinking).toBe(false);
+    expect(ctrl.getState().phase).toBe("asking");
+  });
+
+  it("asks single follow-ups with [ASK] and says the closing line exactly once, at the end", async () => {
+    const api = fakeApi({ start: 0.2, rise: 0.1 });
+    const v = voice();
+    const ctrl = createDebriefController({ api, voice: v, sessionId: "s1", now: () => 0 });
+    await ctrl.start();
+    await answerAll(ctrl);
+    const turns = v.promptTurn.mock.calls.map((c) => String(c[0]));
+    const asks = turns.filter((t) => t.startsWith(TAGS.ask));
+    expect(asks).toEqual(ctrl.getState().asked.map((q) => buildAskTurn(q.text)));
+    expect(turns.some((t) => t.startsWith(TAGS.debrief))).toBe(false);
+    expect(turns.filter((t) => t.includes(DEBRIEF_CLOSING_LINE))).toHaveLength(1);
+    expect(turns.at(-1)).toBe(buildTeachBackTurn(ctrl.getState().teachBack!, { closing: true }));
+    expect(asks.every((t) => !t.includes(DEBRIEF_CLOSING_LINE))).toBe(true);
+    // A corrected teach-back does not repeat the closing line.
+    await ctrl.onTeachBackResult({ confirmed: false, correction: "It is 5000." });
+    const after = v.promptTurn.mock.calls.map((c) => String(c[0]));
+    expect(after.filter((t) => t.includes(DEBRIEF_CLOSING_LINE))).toHaveLength(1);
+  });
+
+  it("keeps the last Work Map and still gives the teach-back when the full rebuild times out", async () => {
+    const api = fakeApi({ start: 0.9, rise: 0 });
+    api.buildWorkMap.mockImplementation(async (_id, rescoreOnly) => {
+      if (rescoreOnly === false && api.buildWorkMap.mock.calls.length > 1) throw new Error("/api/workmap 504");
+      return build([step(1, 0.9), step(2, 0.9), step(3, 0.9)]);
+    });
+    const v = voice();
+    const ctrl = createDebriefController({ api, voice: v, sessionId: "s1", now: () => 0 });
+    await ctrl.start();
+    await answerAll(ctrl);
+    const s = ctrl.getState();
+    const before = s.history.at(-1);
+    expect(api.buildWorkMap.mock.calls.at(-1)![1]).toBe(false);
+    expect(s.phase).toBe("teach_back");
+    expect(s.workmap?.steps).toHaveLength(3);
+    expect(s.history.at(-1)).toBe(before);
+    expect(s.thinking).toBe(false);
+    expect(v.promptTurn).toHaveBeenLastCalledWith(expect.stringContaining(DEBRIEF_CLOSING_LINE));
   });
 });
