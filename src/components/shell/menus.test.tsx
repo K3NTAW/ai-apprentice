@@ -3,7 +3,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { workspaceLabel } from "@/lib/workspace/create";
-import { createWorkspace, displayName, saveDisplayName, switchWorkspace, type MenuDeps } from "./menuActions";
+import { createWorkspace, displayName, renameWorkspace, saveDisplayName, switchWorkspace, type MenuDeps } from "./menuActions";
 import ShellHeader, { type ShellUser } from "./ShellHeader";
 import { applyThemeChoice, storedChoice, THEME_KEY } from "./ThemeToggle";
 import { CreateWorkspaceDialog } from "./WorkspaceSwitcher";
@@ -180,5 +180,21 @@ describe("user menu", () => {
     expect(local).toMatch(/data-testid="user-name"[^>]*>Local user<\/span>/);
     expect(local).not.toContain("edit-name");
     expect(local).not.toContain("Sign out");
+  });
+});
+
+describe("Rename workspace", () => {
+  it("validates, then PATCHes /api/workspace with the trimmed name and city", async () => {
+    const bad = deps();
+    expect((await renameWorkspace({ name: "  ", city: "" }, bad.deps)).ok).toBe(false);
+    expect(bad.fetch).not.toHaveBeenCalled();
+    const d = deps(200);
+    expect(await renameWorkspace({ name: " Treasury ", city: " Zug " }, d.deps)).toEqual({ ok: true });
+    expect(d.fetch).toHaveBeenCalledWith("/api/workspace", expect.objectContaining({ method: "PATCH", body: JSON.stringify({ name: "Treasury", city: "Zug" }) }));
+    expect(d.reload).not.toHaveBeenCalled();
+  });
+
+  it("shows the refusal for a non-owner", async () => {
+    expect(await renameWorkspace({ name: "Treasury", city: "" }, deps(403).deps)).toEqual({ ok: false, error: "Only owners can rename the workspace." });
   });
 });

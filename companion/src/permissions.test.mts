@@ -40,7 +40,7 @@ describe("permission status from macOS permission APIs", () => {
     const sent: ReturnType<typeof statusMessage>[] = [];
     const monitor = new PermissionMonitor(() => readPermissions(api), (p) => sent.push(statusMessage("0.1.0", p)));
     monitor.start();
-    expect(sent[0].permissions).toEqual({ input: false, screen: true, accessibility: true, inputVerified: false });
+    expect(sent[0].permissions).toEqual({ input: false, screen: true, accessibility: true, inputVerified: false, microphone: true });
     // The hook still starts so the first event can verify Input Monitoring.
     expect(canStartHook(api)).toBe(true);
     monitor.check();
@@ -48,7 +48,7 @@ describe("permission status from macOS permission APIs", () => {
     seen = true;
     monitor.check();
     expect(sent).toHaveLength(2);
-    expect(sent[1].permissions).toEqual({ input: true, screen: true, accessibility: true, inputVerified: true });
+    expect(sent[1].permissions).toEqual({ input: true, screen: true, accessibility: true, inputVerified: true, microphone: true });
     expect(Object.keys(sent[1]).sort()).toEqual(["permissions", "protocol", "type", "version"]);
   });
 

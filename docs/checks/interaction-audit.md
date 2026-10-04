@@ -371,3 +371,4 @@ dead (no action, fails the guard).
 | /workspace/preview | button | learner | Runs 'learner' in place | works |
 | /workspace/preview | button | Remove | Runs 'Remove' in place | works |
 | /workspace/preview | button | Revoke | Runs 'Revoke' in place | works |
+| /workspace/preview | button | Save | Submits the form (Save) | works |
