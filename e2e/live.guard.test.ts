@@ -44,7 +44,7 @@ describe("e2e:live guard", () => {
   });
 
   it("masks the password field in every screenshot", () => {
-    const calls = files.flatMap((f) => [...f.text.matchAll(/\.screenshot\(([^)]*)\)/g)].map((m) => m[1]));
+    const calls = files.flatMap((f) => [...f.text.matchAll(/\.screenshot\((\{[^}]*\})/g)].map((m) => m[1]));
     expect(calls.length).toBeGreaterThan(0);
     for (const args of calls) expect(args).toMatch(/\bmask\b/);
     expect(files.find((f) => f.name === "fixtures.ts")?.text).toMatch(/input\[type=password\]/);
