@@ -14,7 +14,7 @@ Date: 2026-10-04. Question: does every button, link and page do something?
 - The table below is generated from that render pass. "before" was rendered from HEAD 354d8b2 (same test files
   copied into a clean worktree) before any edit; "after" from this branch. The test fails if a row is missing
   from the doc or the doc lists an element that does not render (A4).
-- Shell controls (sidebar, user menu, workspace switcher, recent sessions) render on every app page; they are
+- Shell controls (sidebar search, collapse toggle, user menu, workspace switcher, recent sessions) render on every app page; they are
   listed once under `/shell` (local user) and `/shell (signed in)` (owner of two workspaces, three recent sessions).
 - `/dashboard` only redirects to /agents (not rendered). Routes that redirect in local mode (`/login`) or 404 on the empty local store (`/agents/[id]`, real ids) are
   covered by their preview routes, which render the same components with fixture data.
@@ -38,6 +38,11 @@ dead (no action, fails the guard), missing (not rendered at HEAD).
   browser has no speech recognition.
 - Theme persistence (A2): localStorage, re-applied by the shell on mount. Production renders no head script by
   design (src/app/layout.test.tsx), so a light choice can flash dark on first paint.
+
+- T-0184 sidebar (rows marked T-0184): Search opens the ⌘K palette, Collapse sidebar toggles icon mode and is
+  remembered per viewer, recent sessions use the canvas title and status format (the live capture row is now
+  'Training · Sabine live · 1 h 00 min', still opening /debrief/s-live). The workspace and user cards reuse the
+  existing switcher, account, theme and sign-out controls. No new dead control.
 
 ## Not built (nothing rendered, so nothing looks clickable)
 
@@ -322,20 +327,24 @@ dead (no action, fails the guard), missing (not rendered at HEAD).
 | /shell | a | Learn | Opens /learn | works | works |  |
 | /shell | a | Start capture | Opens /capture | works | works |  |
 | /shell | a | Workspace | Opens /workspace | works | works |  |
+| /shell | button | Collapse sidebar | Collapses the sidebar to icons (label becomes 'Expand sidebar'), remembered per viewer | missing | works | T-0184: collapse toggle |
 | /shell | button | Light theme | Runs 'Light theme' in place | missing | works | new: theme toggle |
+| /shell | button | Search | Opens the ⌘K command palette (GET /api/search, workspace-scoped) | missing | works | T-0184: search field, ⌘K / Ctrl K also opens it |
 | /shell (signed in) | a | AI Apprentice home | Opens / | works | works |  |
 | /shell (signed in) | a | Account and workspace | Opens /workspace | missing | works | new: user menu account item (email, role, workspace page) |
 | /shell (signed in) | a | Agents | Opens /agents | works | works |  |
-| /shell (signed in) | a | Capture · Sabine live · 11:00 | Opens /debrief/s-live | works | works |  |
 | /shell (signed in) | a | Get the desktop app | Opens /capture#companion | works | works |  |
 | /shell (signed in) | a | Learn | Opens /learn | works | works |  |
 | /shell (signed in) | a | Start capture | Opens /capture | works | works |  |
 | /shell (signed in) | a | Teach 2026-10-01 | Opens /teach | works (href /debrief/s-teach) | works | teach session now opens its summary (/teach?session=), was its debrief |
+| /shell (signed in) | a | Training · Sabine live · 1 h 00 min | Opens /debrief/s-live | missing | works | T-0184: live session in the canvas title and status format, replaces 'Capture · Sabine live · 11:00' |
 | /shell (signed in) | a | Work Map 11:00 | Opens /map/s-map | works | works |  |
 | /shell (signed in) | a | Workspace | Opens /workspace | works | works |  |
+| /shell (signed in) | button | Collapse sidebar | Collapses the sidebar to icons (label becomes 'Expand sidebar'), remembered per viewer | missing | works | T-0184: collapse toggle |
 | /shell (signed in) | button | Finance owner | Runs 'Finance owner' in place | works | works |  |
 | /shell (signed in) | button | Light theme | Runs 'Light theme' in place | missing | works | new: theme toggle, data-theme + localStorage |
 | /shell (signed in) | button | Ops learner | Runs 'Ops learner' in place | works | works |  |
+| /shell (signed in) | button | Search | Opens the ⌘K command palette (GET /api/search, workspace-scoped) | missing | works | T-0184: search field, ⌘K / Ctrl K also opens it |
 | /shell (signed in) | button | Sign out | Submits the form (Sign out) | works | works |  |
 | /teach | button | Finish | Runs 'Finish' in place | works | works |  |
 | /teach | button | Pause | Runs 'Pause' in place | works | works |  |
