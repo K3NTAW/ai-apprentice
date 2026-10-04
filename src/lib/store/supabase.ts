@@ -36,11 +36,19 @@ import {
   inRange,
   isOffRecord,
   isValidAgentId,
+  isValidProcessId,
+  processNewestFirst,
+  processPatchValues,
+  ProcessesUnavailableError,
+  ProcessNotFoundError,
   RECENT_SESSIONS_DEFAULT,
   recognizersFromSettings,
   redactOpts,
   SessionNotFoundError,
   type OffRecordRange,
+  type Process,
+  type ProcessChangeKind,
+  type ProcessVersion,
   type SessionStore,
   type SessionSummary,
 } from "./types";
@@ -61,7 +69,11 @@ type SessionRow = {
   off_record_ranges: OffRecordRange[] | null;
   workmap: Session["workmap"] | null;
   agent_id?: string | null;
+  // Present once migration 20261004030000_processes is applied.
+  process_id?: string | null;
 };
+type ProcessRow = Process;
+type ProcessVersionRow = ProcessVersion & { workspace_id: string };
 type AgentRow = {
   id: string;
   workspace_id: string;
@@ -120,6 +132,54 @@ function toAgentOrSkip(row: AgentRow): Agent | null {
 function isAgentFkViolation(error: unknown): boolean {
   const e = (error ?? {}) as { code?: unknown; message?: unknown; details?: unknown };
   return e.code === "23503" && [e.message, e.details].some((v) => typeof v === "string" && v.includes("sessions_agent_fkey"));
+}
+
+/** SQLSTATE 23503 on processes_agent_fkey: the agent was deleted between the check and the insert. */
+function isProcessAgentFkViolation(error: unknown): boolean {
+  const e = (error ?? {}) as { code?: unknown; message?: unknown; details?: unknown };
+  return e.code === "23503" && [e.message, e.details].some((v) => typeof v === "string" && v.includes("processes_agent_fkey"));
+}
+
+/**
+ * Migration 20261004030000_processes not applied: undefined table (42P01, PostgREST PGRST205) on the processes
+ * tables, or undefined column (42703, PGRST204) sessions.process_id.
+ */
+export function isProcessesMissing(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const e = error as { code?: unknown; message?: unknown };
+  const mentions = typeof e.message === "string" && /process/i.test(e.message);
+  if (e.code === "42P01" || e.code === "PGRST205") return mentions;
+  if (e.code === "42703" || e.code === "PGRST204") return mentions;
+  return false;
+}
+
+function toProcess(r: ProcessRow): Process {
+  return {
+    id: r.id,
+    workspace_id: r.workspace_id,
+    agent_id: r.agent_id,
+    title: r.title,
+    workmap: r.workmap,
+    version: r.version,
+    confirmed: r.confirmed,
+    archived_at: r.archived_at ? normTs(r.archived_at) : null,
+    created_by: r.created_by,
+    created_at: normTs(r.created_at),
+    updated_at: normTs(r.updated_at),
+  };
+}
+
+function toProcessVersion(r: ProcessVersionRow): ProcessVersion {
+  return {
+    id: r.id,
+    process_id: r.process_id,
+    version: r.version,
+    workmap: r.workmap,
+    source_session_id: r.source_session_id,
+    change_kind: r.change_kind,
+    changed_by: r.changed_by,
+    created_at: normTs(r.created_at),
+  };
 }
 
 /** Postgres returns timestamptz as e.g. 2026-10-03T19:35:00.123+00:00; the app uses toISOString() form. */
@@ -241,6 +301,7 @@ export function createSupabaseStore(
       off_record_ranges: row.off_record_ranges ?? [],
       ...(frameList.length > 0 ? { frames: frameList } : {}),
       ...(row.agent_id ? { agent_id: row.agent_id } : {}),
+      ...(row.process_id ? { process_id: row.process_id } : {}),
     });
   }
 
@@ -334,6 +395,40 @@ export function createSupabaseStore(
           .in("name", names.slice(i, i + IN_CHUNK)),
       );
     }
+  }
+
+  /** check() for the processes tables: a missing migration throws ProcessesUnavailableError (the API answers 503). */
+  function checkP<T>(op: string, res: Result<T>): T | null {
+    if (res.error && isProcessesMissing(res.error)) throw new ProcessesUnavailableError();
+    return check(op, res);
+  }
+
+  async function insertVersion(p: Process, kind: ProcessChangeKind, sourceSessionId: string | undefined): Promise<void> {
+    checkP(
+      "insert process_versions",
+      await client.from("process_versions").insert({
+        id: randomUUID(),
+        workspace_id: workspaceId,
+        process_id: p.id,
+        version: p.version,
+        workmap: p.workmap,
+        source_session_id: sourceSessionId ?? null,
+        change_kind: kind,
+        changed_by: userId,
+      }),
+    );
+  }
+
+  async function linkSession(sessionId: string | undefined, processId: string): Promise<void> {
+    if (!sessionId) return;
+    const res = await client
+      .from("sessions")
+      .update({ process_id: processId })
+      .eq("id", sessionId)
+      .eq("workspace_id", workspaceId)
+      .select("id");
+    const rows = checkP("update sessions.process_id", res) as unknown[] | null;
+    if (!rows || rows.length === 0) throw new SessionNotFoundError(sessionId);
   }
 
   const store: SessionStore = {
@@ -624,6 +719,92 @@ export function createSupabaseStore(
       const res = await client.from("agents").delete().eq("id", id).eq("workspace_id", workspaceId).select("id");
       const rows = check("delete agents", res) as unknown[] | null;
       return !!rows && rows.length > 0;
+    },
+
+    // Archived processes are filtered here, not in the query, so one ordered paged select serves both.
+    async listProcesses(opts = {}) {
+      const rows = await selectAll<ProcessRow>("select processes", () => {
+        let q = client.from("processes").select("*").eq("workspace_id", workspaceId);
+        if (opts.agent_id !== undefined) q = q.eq("agent_id", opts.agent_id);
+        return q.order("created_at", { ascending: false }).order("id", { ascending: false });
+      }).catch((err: unknown) => {
+        if (isProcessesMissing((err as { cause?: unknown }).cause)) throw new ProcessesUnavailableError();
+        throw err;
+      });
+      return rows.map(toProcess).filter((p) => opts.include_archived || !p.archived_at).sort(processNewestFirst);
+    },
+
+    async getProcess(id) {
+      if (!isValidProcessId(id)) return null;
+      const res = await client.from("processes").select("*").eq("id", id).eq("workspace_id", workspaceId).maybeSingle();
+      const row = checkP("select processes", res) as ProcessRow | null;
+      return row ? toProcess(row) : null;
+    },
+
+    // No transaction: process, then version 1, then the session link. A failure after the insert leaves a
+    // process without its first version row; the caller sees the error and may retry.
+    async createProcess(input) {
+      if (!(await store.getAgent(input.agent_id))) throw new AgentNotFoundError(input.agent_id);
+      if (input.source_session_id !== undefined) await requireRow(input.source_session_id);
+      const res = await client
+        .from("processes")
+        .insert({
+          id: randomUUID(),
+          workspace_id: workspaceId,
+          agent_id: input.agent_id,
+          created_by: userId,
+          title: input.title,
+          workmap: input.workmap,
+          version: 1,
+          confirmed: input.confirmed ?? input.workmap.confirmed_by_expert,
+        })
+        .select("*")
+        .single();
+      if (isProcessAgentFkViolation(res.error)) throw new AgentNotFoundError(input.agent_id);
+      const p = toProcess(checkP("insert processes", res) as ProcessRow);
+      await insertVersion(p, "trained", input.source_session_id);
+      await linkSession(input.source_session_id, p.id);
+      return p;
+    },
+
+    // updated_at is also set by processes_touch_updated_at_trg. Two concurrent Work Map edits compute the same
+    // version; the second version insert then fails on process_versions_process_version_key.
+    async updateProcess(id, patch) {
+      const cur = await store.getProcess(id);
+      if (!cur) throw new ProcessNotFoundError(id);
+      if (patch.source_session_id !== undefined) await requireRow(patch.source_session_id);
+      const values = processPatchValues(cur, patch, new Date().toISOString());
+      const res = await client.from("processes").update(values).eq("id", id).eq("workspace_id", workspaceId).select("*");
+      const rows = checkP("update processes", res) as ProcessRow[] | null;
+      if (!rows || rows.length === 0) throw new ProcessNotFoundError(id);
+      const next = toProcess(rows[0]);
+      if (patch.workmap !== undefined) await insertVersion(next, patch.change_kind ?? "edited", patch.source_session_id);
+      await linkSession(patch.source_session_id, id);
+      return next;
+    },
+
+    // process_versions_process_fkey cascades the versions; sessions_process_fkey clears sessions.process_id.
+    async deleteProcess(id) {
+      if (!isValidProcessId(id)) return false;
+      const res = await client.from("processes").delete().eq("id", id).eq("workspace_id", workspaceId).select("id");
+      const rows = checkP("delete processes", res) as unknown[] | null;
+      return !!rows && rows.length > 0;
+    },
+
+    async listProcessVersions(processId) {
+      if (!isValidProcessId(processId)) return [];
+      const rows = await selectAll<ProcessVersionRow>("select process_versions", () =>
+        client
+          .from("process_versions")
+          .select("*")
+          .eq("process_id", processId)
+          .eq("workspace_id", workspaceId)
+          .order("version", { ascending: false }),
+      ).catch((err: unknown) => {
+        if (isProcessesMissing((err as { cause?: unknown }).cause)) throw new ProcessesUnavailableError();
+        throw err;
+      });
+      return rows.map(toProcessVersion);
     },
   };
   return store;

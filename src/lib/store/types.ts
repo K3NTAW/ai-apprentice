@@ -29,6 +29,61 @@ export type AgentPatch = { name?: string; role?: string; expert_name?: string | 
 
 export type OffRecordRange = Session["off_record_ranges"][number];
 
+export const PROCESS_TITLE_MAX = 120;
+export const PROCESS_CHANGE_KINDS = ["trained", "extended", "replaced", "edited"] as const;
+export type ProcessChangeKind = (typeof PROCESS_CHANGE_KINDS)[number];
+
+/** A process of an agent: the merged, current Work Map plus its version counter (table public.processes). */
+export type Process = {
+  id: string;
+  workspace_id: string;
+  agent_id: string;
+  title: string;
+  workmap: WorkMap;
+  version: number;
+  confirmed: boolean;
+  archived_at: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/** One row per Work Map change of a process (table public.process_versions). Append-only. */
+export type ProcessVersion = {
+  id: string;
+  process_id: string;
+  version: number;
+  workmap: WorkMap;
+  source_session_id: string | null;
+  change_kind: ProcessChangeKind;
+  changed_by: string | null;
+  created_at: string;
+};
+
+/** source_session_id links the session to the new process (sessions.process_id) and is kept on version 1. */
+export type ProcessInput = {
+  agent_id: string;
+  title: string;
+  workmap: WorkMap;
+  confirmed?: boolean;
+  source_session_id?: string;
+};
+
+/**
+ * PATCH semantics. A new workmap bumps version and adds a process_versions row with change_kind (default 'edited')
+ * and source_session_id (which is also linked to the process). archived true archives now, false restores.
+ */
+export type ProcessPatch = {
+  title?: string;
+  workmap?: WorkMap;
+  confirmed?: boolean;
+  archived?: boolean;
+  change_kind?: ProcessChangeKind;
+  source_session_id?: string;
+};
+
+export type ListProcessesOptions = { agent_id?: string; include_archived?: boolean };
+
 export type SaveFrameResult = { stored: true; name: string } | { stored: false; reason: "off_record" };
 
 export interface SessionStore {
@@ -58,6 +113,19 @@ export interface SessionStore {
   updateAgent(id: string, patch: AgentPatch): Promise<Agent>;
   /** False when missing or outside the workspace. Sessions keep their history; their agent_id is cleared. */
   deleteAgent(id: string): Promise<boolean>;
+  // Processes. Supabase throws ProcessesUnavailableError while migration 20261004030000_processes is not applied.
+  // Ids are UUIDs; a malformed id reads as missing. A process of another workspace is missing.
+  /** Newest first; archived processes only with include_archived. */
+  listProcesses(opts?: ListProcessesOptions): Promise<Process[]>;
+  getProcess(id: string): Promise<Process | null>;
+  /** Version 1 plus its process_versions row ('trained'). AgentNotFoundError / SessionNotFoundError for bad links. */
+  createProcess(input: ProcessInput): Promise<Process>;
+  /** Throws ProcessNotFoundError when missing or outside the workspace. */
+  updateProcess(id: string, patch: ProcessPatch): Promise<Process>;
+  /** False when missing. Versions go with it; linked sessions keep their history, their process_id is cleared. */
+  deleteProcess(id: string): Promise<boolean>;
+  /** Newest version first. Empty for a missing process. */
+  listProcessVersions(processId: string): Promise<ProcessVersion[]>;
 }
 
 /**
@@ -89,6 +157,44 @@ export class AgentNotFoundError extends Error {
     this.name = "AgentNotFoundError";
   }
 }
+
+export class ProcessNotFoundError extends Error {
+  constructor(id: string) {
+    super(`process not found: ${id}`);
+    this.name = "ProcessNotFoundError";
+  }
+}
+
+/** The processes tables are missing (migration not applied). The API answers 503, the UI falls back to sessions. */
+export class ProcessesUnavailableError extends Error {
+  readonly code = "processes_unavailable";
+  constructor() {
+    super("processes not available yet");
+    this.name = "ProcessesUnavailableError";
+  }
+}
+
+export function isValidProcessId(id: unknown): id is string {
+  return isValidAgentId(id);
+}
+
+/** The row values a ProcessPatch writes, shared by both backends. A new workmap bumps the version. */
+export function processPatchValues(
+  cur: Pick<Process, "version" | "archived_at">,
+  patch: ProcessPatch,
+  now: string,
+): Partial<Pick<Process, "title" | "workmap" | "version" | "confirmed" | "archived_at" | "updated_at">> {
+  return {
+    ...(patch.title !== undefined ? { title: patch.title } : {}),
+    ...(patch.workmap !== undefined ? { workmap: patch.workmap, version: cur.version + 1 } : {}),
+    ...(patch.confirmed !== undefined ? { confirmed: patch.confirmed } : {}),
+    ...(patch.archived !== undefined ? { archived_at: patch.archived ? (cur.archived_at ?? now) : null } : {}),
+    updated_at: now,
+  };
+}
+
+/** Version and process ordering shared by both backends: newest first, id as the tie-break. */
+export const processNewestFirst = (a: Process, b: Process) => b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id);
 
 // Agent ids are UUIDs in both backends (gen_random_uuid in the DB, randomUUID in the file backend).
 const AGENT_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

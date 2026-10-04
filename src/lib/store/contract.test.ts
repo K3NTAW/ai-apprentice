@@ -8,7 +8,7 @@ import { entry, event, qaPair, runStoreContract } from "./contract";
 import { FakeSupabase } from "./fakeSupabase";
 import { fileStore, getStore } from "./index";
 import { createSupabaseStore } from "./supabase";
-import { AgentNotFoundError, frameName, SessionNotFoundError } from "./types";
+import { AgentNotFoundError, frameName, ProcessesUnavailableError, SessionNotFoundError } from "./types";
 
 const UID = "00000000-0000-4000-8000-000000000001";
 const jpg = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
@@ -238,6 +238,43 @@ describe("supabase store only", () => {
       .from("session_frames")
       .upsert({ session_id: s.id, name: "0001.jpg", t: 1, storage_path: "elsewhere/0001.jpg" }, { onConflict: "session_id,name" });
     expect(res.error).toMatchObject({ code: "42501" });
+  });
+
+  it("throws ProcessesUnavailableError for every process method while the migration is missing", async () => {
+    const workspaceId = randomUUID();
+    const fake = new FakeSupabase({ uid: UID, workspaces: [workspaceId], missingTables: ["processes", "process_versions"] });
+    const store = createSupabaseStore(fake.client as SupabaseClient, { workspaceId, userId: UID });
+    const a = await store.createAgent({ name: "A", role: "R", avatar: { shape: "bean", face: "wink", color: "#ABCDEF", accent: "#000000" } });
+    const wm = { task: "t", expert: "e", confirmed_by_expert: true, steps: [], open_questions: [] };
+    const id = randomUUID();
+    for (const call of [
+      () => store.listProcesses(),
+      () => store.getProcess(id),
+      () => store.createProcess({ agent_id: a.id, title: "t", workmap: wm }),
+      () => store.updateProcess(id, { title: "t" }),
+      () => store.deleteProcess(id),
+      () => store.listProcessVersions(id),
+    ])
+      await expect(call()).rejects.toBeInstanceOf(ProcessesUnavailableError);
+    // Sessions keep working without the migration.
+    expect((await store.createSession({ kind: "capture" })).id).toBeDefined();
+  });
+
+  it("hides processes of another workspace and keeps created_by and changed_by from the context", async () => {
+    const { fake, client, store, workspaceId } = supabaseFixture();
+    const otherWs = randomUUID();
+    fake.visibleWorkspaces.add(otherWs);
+    const other = createSupabaseStore(client, { workspaceId: otherWs, userId: UID });
+    const avatar = { shape: "bean", face: "wink", color: "#ABCDEF", accent: "#000000" } as const;
+    const wm = { task: "t", expert: "e", confirmed_by_expert: true, steps: [], open_questions: [] };
+    const foreign = await other.createProcess({ agent_id: (await other.createAgent({ name: "B", role: "R", avatar })).id, title: "Theirs", workmap: wm });
+    const mine = await store.createProcess({ agent_id: (await store.createAgent({ name: "A", role: "R", avatar })).id, title: "Mine", workmap: wm });
+    expect(await store.getProcess(foreign.id)).toBeNull();
+    expect((await store.listProcesses()).map((p) => p.id)).toEqual([mine.id]);
+    expect(await store.deleteProcess(foreign.id)).toBe(false);
+    expect(await store.listProcessVersions(foreign.id)).toEqual([]);
+    expect(fake.tables.processes.find((p) => p.id === mine.id)).toMatchObject({ workspace_id: workspaceId, created_by: UID });
+    expect(fake.tables.process_versions.find((v) => v.process_id === mine.id)).toMatchObject({ workspace_id: workspaceId, changed_by: UID, version: 1 });
   });
 
   it("fails loudly on a method the fake does not support", () => {

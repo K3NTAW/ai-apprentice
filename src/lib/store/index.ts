@@ -12,9 +12,14 @@ export {
   isValidAgentId,
   isValidFrameName,
   isValidSessionId,
+  ProcessesUnavailableError,
+  ProcessNotFoundError,
+  PROCESS_CHANGE_KINDS,
+  PROCESS_TITLE_MAX,
   SessionNotFoundError,
 } from "./types";
 export type { SessionDigest } from "@/lib/types";
+export type { Process, ProcessChangeKind, ProcessInput, ProcessPatch, ProcessVersion, ListProcessesOptions } from "./types";
 export type { AgentInput, AgentPatch, OffRecordRange, SaveFrameResult, SessionStore, SessionSummary, StoreContext } from "./types";
 export { dataDir, fileStore, framePath } from "./file";
 export { createSupabaseStore } from "./supabase";

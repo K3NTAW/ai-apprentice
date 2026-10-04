@@ -8,6 +8,7 @@ import {
   frameName,
   InvalidOffRecordRangeError,
   InvalidSessionIdError,
+  ProcessNotFoundError,
   SessionNotFoundError,
   type SessionStore,
 } from "./types";
@@ -219,6 +220,79 @@ export function runStoreContract(name: string, makeStore: () => SessionStore | P
       expect(d).not.toHaveProperty("events");
       expect(d).not.toHaveProperty("transcript");
       expect(digests.find((x) => x.id === second.id)?.workmap).toBeUndefined();
+    });
+
+    it("creates, gets, lists, updates, archives and deletes processes, with a version row per Work Map change", async () => {
+      const a = await store.createAgent({ name: "Process Agent", role: "AP", avatar });
+      const other = await store.createAgent({ name: "Other Agent", role: "AP", avatar });
+      const s = await store.createSession({ kind: "capture", expert: "Sabine", agent_id: a.id });
+      const p = await store.createProcess({ agent_id: a.id, title: "Pay invoice", workmap: { ...workmap, confirmed_by_expert: true }, source_session_id: s.id });
+      expect(p).toMatchObject({ agent_id: a.id, title: "Pay invoice", version: 1, confirmed: true, archived_at: null });
+      expect(p.id).toMatch(UUID_RE);
+      expect(new Date(p.created_at).toISOString()).toBe(p.created_at);
+      expect(await store.getProcess(p.id)).toEqual(p);
+      expect((await store.getSession(s.id))?.process_id).toBe(p.id);
+
+      await new Promise((r) => setTimeout(r, 3));
+      const q = await store.createProcess({ agent_id: a.id, title: "Draft", workmap, confirmed: false });
+      expect(q.confirmed).toBe(false);
+      const o = await store.createProcess({ agent_id: other.id, title: "Theirs", workmap });
+      expect((await store.listProcesses({ agent_id: a.id })).map((x) => x.id)).toEqual([q.id, p.id]);
+      expect((await store.listProcesses()).map((x) => x.id)).toEqual(expect.arrayContaining([p.id, q.id, o.id]));
+
+      const renamed = await store.updateProcess(p.id, { title: "Pay supplier invoice" });
+      expect(renamed).toMatchObject({ title: "Pay supplier invoice", version: 1, created_at: p.created_at });
+      const s2 = await store.createSession({ kind: "capture", expert: "Sabine", agent_id: a.id });
+      const extended = { ...workmap, task: "pay invoice v2", confirmed_by_expert: true };
+      const v2 = await store.updateProcess(p.id, { workmap: extended, change_kind: "extended", source_session_id: s2.id });
+      expect(v2).toMatchObject({ version: 2, workmap: extended, title: "Pay supplier invoice" });
+      expect((await store.getSession(s2.id))?.process_id).toBe(p.id);
+      const v3 = await store.updateProcess(p.id, { workmap: { ...extended, open_questions: ["why?"] } });
+      expect(v3.version).toBe(3);
+
+      const versions = await store.listProcessVersions(p.id);
+      expect(versions.map((v) => [v.version, v.change_kind, v.source_session_id])).toEqual([
+        [3, "edited", null],
+        [2, "extended", s2.id],
+        [1, "trained", s.id],
+      ]);
+      expect(versions[1].workmap).toEqual(extended);
+      expect(versions[2].workmap.task).toBe("pay invoice");
+
+      const archived = await store.updateProcess(q.id, { archived: true });
+      expect(archived.archived_at).toEqual(expect.any(String));
+      expect((await store.listProcesses({ agent_id: a.id })).map((x) => x.id)).toEqual([p.id]);
+      expect((await store.listProcesses({ agent_id: a.id, include_archived: true })).map((x) => x.id)).toEqual([q.id, p.id]);
+      expect((await store.updateProcess(q.id, { archived: false })).archived_at).toBeNull();
+
+      expect(await store.deleteProcess(p.id)).toBe(true);
+      expect(await store.deleteProcess(p.id)).toBe(false);
+      expect(await store.getProcess(p.id)).toBeNull();
+      expect(await store.listProcessVersions(p.id)).toEqual([]);
+      const kept = await store.getSession(s.id);
+      expect(kept?.process_id).toBeUndefined();
+      expect(kept?.expert).toBe("Sabine");
+      await expect(store.updateProcess(p.id, { title: "x" })).rejects.toBeInstanceOf(ProcessNotFoundError);
+      expect(await store.getProcess("not-a-uuid")).toBeNull();
+      expect(await store.deleteProcess("not-a-uuid")).toBe(false);
+      expect(await store.listProcessVersions("not-a-uuid")).toEqual([]);
+
+      // Deleting the agent deletes its processes and their versions.
+      await store.deleteAgent(a.id);
+      expect(await store.getProcess(q.id)).toBeNull();
+      expect(await store.listProcessVersions(q.id)).toEqual([]);
+      expect(await store.getProcess(o.id)).toMatchObject({ id: o.id });
+    });
+
+    it("rejects a process for a missing agent or source session", async () => {
+      await expect(
+        store.createProcess({ agent_id: "00000000-0000-4000-8000-00000000dead", title: "x", workmap }),
+      ).rejects.toBeInstanceOf(AgentNotFoundError);
+      const a = await store.createAgent({ name: "A", role: "R", avatar });
+      await expect(store.createProcess({ agent_id: a.id, title: "x", workmap, source_session_id: "s_missing" })).rejects.toBeInstanceOf(
+        SessionNotFoundError,
+      );
+      expect(await store.listProcesses({ agent_id: a.id })).toEqual([]);
     });
 
     it("reports missing sessions and invalid ids", async () => {

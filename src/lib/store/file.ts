@@ -15,6 +15,7 @@ import {
   type SessionDigest,
   type TranscriptEntry,
   type WorkMap,
+  WorkMapSchema,
 } from "@/lib/types";
 import {
   AgentNotFoundError,
@@ -26,13 +27,23 @@ import {
   inRange,
   isOffRecord,
   isValidAgentId,
+  isValidProcessId,
   isValidSessionId,
+  processNewestFirst,
+  processPatchValues,
+  ProcessNotFoundError,
   recognizersFromSettings,
   redactOpts,
   SessionNotFoundError,
   type AgentInput,
   type AgentPatch,
+  type ListProcessesOptions,
   type OffRecordRange,
+  type Process,
+  type ProcessChangeKind,
+  type ProcessInput,
+  type ProcessPatch,
+  type ProcessVersion,
   type SaveFrameResult,
   type SessionStore,
   RECENT_SESSIONS_DEFAULT,
@@ -186,6 +197,7 @@ function deleteAgent(id: string): Promise<boolean> {
     const left = agents.filter((a) => a.id !== id);
     if (left.length === agents.length) return false;
     await writeAtomic(agentsFile(), left);
+    await deleteProcessesWhere((p) => p.agent_id === id);
     for (const s of await readSessions()) {
       if (s.agent_id !== id) continue;
       await mutate(s.id, (x) => {
@@ -416,6 +428,146 @@ async function readFrame(id: string, name: string): Promise<Buffer | null> {
   }
 }
 
+// Processes: data/processes.json holds { processes, versions } and is written atomically through one write queue,
+// so a process and its version rows always land together. Local mode: workspace 'local', created_by and
+// changed_by null. Like on delete cascade: deleting the agent deletes its processes; deleting a process deletes its
+// versions and clears sessions.process_id.
+type ProcessData = { processes: Process[]; versions: ProcessVersion[] };
+const processesFile = () => path.join(dataDir(), "processes.json");
+// Not a valid session id, so it never shares a queue with a session.
+const PROCESSES_QUEUE = "\0processes";
+
+async function readProcessData(): Promise<ProcessData> {
+  let raw: string;
+  try {
+    raw = await readFile(processesFile(), "utf8");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return { processes: [], versions: [] };
+    throw err;
+  }
+  const d = JSON.parse(raw) as Partial<ProcessData>;
+  return { processes: d.processes ?? [], versions: d.versions ?? [] };
+}
+
+/** fn mutates d in place; a throw leaves the file untouched. */
+function mutateProcesses<T>(fn: (d: ProcessData) => T): Promise<T> {
+  return enqueue(PROCESSES_QUEUE, async () => {
+    const d = await readProcessData();
+    const result = fn(d);
+    await writeAtomic(processesFile(), d);
+    return result;
+  });
+}
+
+function versionRow(p: Process, kind: ProcessChangeKind, sourceSessionId: string | undefined): ProcessVersion {
+  return {
+    id: randomUUID(),
+    process_id: p.id,
+    version: p.version,
+    workmap: p.workmap,
+    source_session_id: sourceSessionId ?? null,
+    change_kind: kind,
+    changed_by: null,
+    created_at: p.updated_at,
+  };
+}
+
+async function requireSession(id: string | undefined): Promise<void> {
+  if (id === undefined) return;
+  assertId(id);
+  if (!(await readSession(id))) throw new SessionNotFoundError(id);
+}
+
+async function setSessionProcess(sessionId: string, processId: string): Promise<void> {
+  await mutate(sessionId, (s) => {
+    s.process_id = processId;
+  });
+}
+
+async function listProcesses(opts: ListProcessesOptions = {}): Promise<Process[]> {
+  return (await readProcessData()).processes
+    .filter((p) => (opts.agent_id === undefined || p.agent_id === opts.agent_id) && (opts.include_archived || !p.archived_at))
+    .sort(processNewestFirst);
+}
+
+async function getProcess(id: string): Promise<Process | null> {
+  if (!isValidProcessId(id)) return null;
+  return (await readProcessData()).processes.find((p) => p.id === id) ?? null;
+}
+
+async function createProcess(input: ProcessInput): Promise<Process> {
+  if (!(await getAgent(input.agent_id))) throw new AgentNotFoundError(input.agent_id);
+  await requireSession(input.source_session_id);
+  const workmap = WorkMapSchema.parse(input.workmap);
+  const now = new Date().toISOString();
+  const p: Process = {
+    id: randomUUID(),
+    workspace_id: LOCAL_WORKSPACE,
+    agent_id: input.agent_id,
+    title: input.title,
+    workmap,
+    version: 1,
+    confirmed: input.confirmed ?? workmap.confirmed_by_expert,
+    archived_at: null,
+    created_by: null,
+    created_at: now,
+    updated_at: now,
+  };
+  await mutateProcesses((d) => {
+    d.processes.push(p);
+    d.versions.push(versionRow(p, "trained", input.source_session_id));
+  });
+  if (input.source_session_id) await setSessionProcess(input.source_session_id, p.id);
+  return p;
+}
+
+async function updateProcess(id: string, patch: ProcessPatch): Promise<Process> {
+  if (!isValidProcessId(id)) throw new ProcessNotFoundError(id);
+  await requireSession(patch.source_session_id);
+  const workmap = patch.workmap !== undefined ? WorkMapSchema.parse(patch.workmap) : undefined;
+  const next = await mutateProcesses((d) => {
+    const i = d.processes.findIndex((p) => p.id === id);
+    if (i < 0) throw new ProcessNotFoundError(id);
+    const p: Process = { ...d.processes[i], ...processPatchValues(d.processes[i], { ...patch, workmap }, new Date().toISOString()) };
+    d.processes[i] = p;
+    if (workmap) d.versions.push(versionRow(p, patch.change_kind ?? "edited", patch.source_session_id));
+    return p;
+  });
+  if (patch.source_session_id) await setSessionProcess(patch.source_session_id, id);
+  return next;
+}
+
+/** Deletes the matching processes and their versions, then clears sessions.process_id. Returns the deleted ids. */
+async function deleteProcessesWhere(match: (p: Process) => boolean): Promise<string[]> {
+  const gone = await mutateProcesses((d) => {
+    const ids = d.processes.filter(match).map((p) => p.id);
+    d.processes = d.processes.filter((p) => !ids.includes(p.id));
+    d.versions = d.versions.filter((v) => !ids.includes(v.process_id));
+    return ids;
+  });
+  if (gone.length === 0) return gone;
+  for (const sum of await readSessions()) {
+    const s = await readSession(sum.id).catch(() => null);
+    if (!s?.process_id || !gone.includes(s.process_id)) continue;
+    await mutate(s.id, (x) => {
+      if (x.process_id && gone.includes(x.process_id)) delete x.process_id;
+    }).catch((err) => {
+      if (!(err instanceof SessionNotFoundError)) throw err;
+    });
+  }
+  return gone;
+}
+
+async function deleteProcess(id: string): Promise<boolean> {
+  if (!isValidProcessId(id)) return false;
+  return (await deleteProcessesWhere((p) => p.id === id)).length > 0;
+}
+
+async function listProcessVersions(processId: string): Promise<ProcessVersion[]> {
+  if (!isValidProcessId(processId)) return [];
+  return (await readProcessData()).versions.filter((v) => v.process_id === processId).sort((a, b) => b.version - a.version);
+}
+
 export const fileStore: SessionStore = {
   createSession,
   getSession,
@@ -435,4 +587,10 @@ export const fileStore: SessionStore = {
   createAgent,
   updateAgent,
   deleteAgent,
+  listProcesses,
+  getProcess,
+  createProcess,
+  updateProcess,
+  deleteProcess,
+  listProcessVersions,
 };

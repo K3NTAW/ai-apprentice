@@ -248,6 +248,8 @@ export const SessionSchema = z.object({
   teach: TeachProgressSchema.optional(),
   // The agent this session trains or teaches. Set at creation only; null in the DB after the agent is deleted.
   agent_id: z.string().optional(),
+  // The process this session trained (sessions.process_id). Null in the DB after the process is deleted.
+  process_id: z.string().optional(),
 });
 export type Session = z.infer<typeof SessionSchema>;
 /** A session without its child rows (events, transcript, Q&A, frames), plus its creator. Lists, stats and the control room read this. */

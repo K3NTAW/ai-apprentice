@@ -6,6 +6,9 @@
 // Agents: RLS by workspace, the insert policy (created_by = auth.uid()), the sessions (workspace_id, agent_id)
 // foreign key (23503) and its on delete set null (agent_id). Not modelled: triggers (updated_at, guards).
 // Embedded counts on sessions (select "*,session_events(count)"): [{ count }] of the visible child rows.
+// Processes: RLS by workspace, the insert policies (created_by / changed_by = auth.uid()), processes_agent_fkey
+// (23503), the cascades (agent -> processes -> versions) and sessions.process_id on delete set null.
+// missingTables answers every query on those tables with PostgREST PGRST205 (migration not applied).
 // Not modelled: workspace roles (owner/expert/learner), column projection on count queries.
 
 type Row = Record<string, unknown>;
@@ -23,16 +26,21 @@ const PKS: Record<string, string[]> = {
   session_frames: ["session_id", "name"],
   agent_reports: ["agent_id"],
   agent_deletion_requests: ["id"],
+  processes: ["id"],
+  process_versions: ["id"],
 };
 const SERIAL = new Set(["session_events", "session_transcript"]);
 // Nullable columns come back as null, like Postgres, when an insert leaves them out.
 const DEFAULTS: Record<string, Row> = {
-  sessions: { created_by: null, expert: null, ended_at: null, workmap: null, off_record_ranges: [], agent_id: null },
+  sessions: { created_by: null, expert: null, ended_at: null, workmap: null, off_record_ranges: [], agent_id: null, process_id: null },
+  processes: { created_by: null, archived_at: null, version: 1, confirmed: false },
+  process_versions: { source_session_id: null, changed_by: null },
   agents: { created_by: null, expert_name: null },
   session_qa: { t: null },
   session_frames: { t: null },
 };
-const TIMESTAMPTZ = new Set(["started_at", "ended_at", "created_at", "updated_at"]);
+const TIMESTAMPTZ = new Set(["started_at", "ended_at", "created_at", "updated_at", "archived_at"]);
+const BY_WORKSPACE = new Set(["sessions", "agents", "processes", "process_versions"]);
 
 function unsupported(what: string): never {
   throw new Error(`fakeSupabase: unsupported ${what}`);
@@ -75,14 +83,17 @@ export class FakeSupabase {
   visibleWorkspaces = new Set<string>();
   maxRows: number;
   uid: string;
+  /** Tables that do not exist yet (a migration not applied). */
+  missingTables = new Set<string>();
   /** Every query run against a table, in order: the table, the operation and its limit. */
   calls: { table: string; op: string; limit: number | null; countHead: boolean }[] = [];
   private serial = 0;
   private failures = new Map<string, FakeError | FakeStorageError>();
   readonly client: unknown;
 
-  constructor(opts: { uid: string; maxRows?: number; workspaces?: string[] }) {
+  constructor(opts: { uid: string; maxRows?: number; workspaces?: string[]; missingTables?: string[] }) {
     this.uid = opts.uid;
+    for (const t of opts.missingTables ?? []) this.missingTables.add(t);
     this.maxRows = opts.maxRows ?? 1000;
     for (const w of opts.workspaces ?? []) this.visibleWorkspaces.add(w);
     const storage = strict(
@@ -114,7 +125,7 @@ export class FakeSupabase {
   }
 
   rowVisible(table: string, row: Row): boolean {
-    if (table === "sessions" || table === "agents") return this.visibleWorkspaces.has(row.workspace_id as string);
+    if (BY_WORKSPACE.has(table)) return this.visibleWorkspaces.has(row.workspace_id as string);
     return this.sessionVisible(row.session_id);
   }
 
@@ -124,6 +135,16 @@ export class FakeSupabase {
     if (table === "agent_reports") return this.visibleWorkspaces.has(row.workspace_id as string) ? null : rlsError(table);
     if (table === "agent_deletion_requests")
       return row.requested_by === this.uid && this.visibleWorkspaces.has(row.workspace_id as string) ? null : rlsError(table);
+    if (table === "processes") {
+      if (row.created_by !== this.uid || !this.visibleWorkspaces.has(row.workspace_id as string)) return rlsError(table);
+      const ok = this.tables.agents.some((a) => a.id === row.agent_id && a.workspace_id === row.workspace_id);
+      return ok ? null : { message: 'insert or update on table "processes" violates foreign key constraint "processes_agent_fkey"', code: "23503" };
+    }
+    if (table === "process_versions") {
+      if (row.changed_by !== this.uid || !this.visibleWorkspaces.has(row.workspace_id as string)) return rlsError(table);
+      const ok = this.tables.processes.some((p) => p.id === row.process_id && p.workspace_id === row.workspace_id);
+      return ok ? null : { message: 'insert or update on table "process_versions" violates foreign key constraint "process_versions_process_fkey"', code: "23503" };
+    }
     if (table === "sessions" || table === "agents") {
       if (row.created_by !== this.uid || !this.visibleWorkspaces.has(row.workspace_id as string)) return rlsError(table);
       if (table === "sessions" && row.agent_id != null) {
@@ -141,13 +162,21 @@ export class FakeSupabase {
     return null;
   }
 
+  /** processes_agent_fkey and process_versions_process_fkey on delete cascade, sessions_process_fkey set null. */
+  cascadeProcesses(rows: Row[]): void {
+    const gone = new Set(rows.map((r) => r.id));
+    this.tables.processes = this.tables.processes.filter((p) => !gone.has(p.id));
+    this.tables.process_versions = this.tables.process_versions.filter((v) => !gone.has(v.process_id));
+    for (const r of this.tables.sessions) if (gone.has(r.process_id)) r.process_id = null;
+  }
+
   normalise(table: string, row: Row, insert = true): Row {
     const out = structuredClone(row);
     for (const k of Object.keys(out)) if (TIMESTAMPTZ.has(k)) out[k] = pgTs(out[k]);
     if (!insert) return out;
     for (const [k, v] of Object.entries(DEFAULTS[table] ?? {})) if (out[k] === undefined) out[k] = structuredClone(v);
-    if ((table === "sessions" || table === "agents") && out.created_at === undefined) out.created_at = pgTs(new Date().toISOString());
-    if (table === "agents" && out.updated_at === undefined) out.updated_at = out.created_at;
+    if (BY_WORKSPACE.has(table) && out.created_at === undefined) out.created_at = pgTs(new Date().toISOString());
+    if ((table === "agents" || table === "processes") && out.updated_at === undefined) out.updated_at = out.created_at;
     if (SERIAL.has(table) && out.id === undefined) out.id = ++this.serial;
     return out;
   }
@@ -353,7 +382,7 @@ class FakeQuery {
         const embedded = /^(\w+)\(count\)$/.exec(c);
         if (embedded) {
           const child = embedded[1];
-          if (this.table !== "sessions" || !(child in PKS) || child === "sessions" || child === "agents") unsupported(`embedded ${c} on ${this.table}`);
+          if (this.table !== "sessions" || !(child in PKS) || BY_WORKSPACE.has(child)) unsupported(`embedded ${c} on ${this.table}`);
           const n = this.fake.tables[child].filter((r) => r.session_id === row.id && this.fake.rowVisible(child, r)).length;
           return [[child, [{ count: n }]]];
         }
@@ -385,6 +414,8 @@ class FakeQuery {
 
   private run(): Result {
     this.fake.calls.push({ table: this.table, op: this.op ?? "none", limit: this.limitN, countHead: this.countHead });
+    if (this.fake.missingTables.has(this.table))
+      return { data: null, error: { message: `Could not find the table 'public.${this.table}' in the schema cache`, code: "PGRST205" }, count: null, status: 404 };
     const failure = this.fake.takeFailure(this.table);
     if (failure) return { data: null, error: failure as FakeError, count: null, status: 400 };
     const all = this.fake.tables[this.table];
@@ -450,7 +481,9 @@ class FakeQuery {
       if (this.table === "agents") {
         const gone = new Set(out.map((r) => r.id));
         for (const r of this.fake.tables.sessions) if (gone.has(r.agent_id)) r.agent_id = null;
+        this.fake.cascadeProcesses(this.fake.tables.processes.filter((p) => gone.has(p.agent_id)));
       }
+      if (this.table === "processes") this.fake.cascadeProcesses(out);
       return this.finish(out);
     }
 
