@@ -69,7 +69,7 @@ test.describe("login", () => {
     await page.getByLabel("Email").fill("ana@example.com");
     await page.getByLabel("Password", { exact: true }).fill("secret-pass");
     await page.locator("form").getByRole("button", { name: "Sign in" }).click();
-    await expect(page.getByRole("alert")).toBeVisible();
+    await expect(page.getByText("That did not work. Try again.")).toBeVisible();
   });
 
   test("forgot password and magic link reach their forms and show a result", async ({ page }) => {
@@ -78,14 +78,14 @@ test.describe("login", () => {
     await expect(page.getByRole("heading", { name: "Reset your password" })).toBeVisible();
     await page.getByLabel("Email").fill("ana@example.com");
     await page.getByRole("button", { name: "Email me a reset link" }).click();
-    await expect(page.getByRole("alert").or(page.getByRole("heading", { name: "Check your email" }))).toBeVisible();
+    await expect(page.getByText("That did not work. Try again.")).toBeVisible();
     await page.goto("/login/preview");
     await page.getByRole("button", { name: "Email me a link" }).click();
     const submit = page.locator("form button[type=submit]");
     await expect(submit).toBeVisible();
     await page.getByLabel("Email").fill("ana@example.com");
     await submit.click();
-    await expect(page.getByRole("alert").or(page.getByRole("heading", { name: "Check your email" }))).toBeVisible();
+    await expect(page.getByText("That did not work. Try again.")).toBeVisible();
   });
 
   test("link sent state: subject and back", async ({ page }) => {

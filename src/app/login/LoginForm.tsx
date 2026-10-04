@@ -89,6 +89,18 @@ export default function LoginForm({
     reset();
   };
 
+  // A thrown error (no Supabase config, network) must not leave the button busy with no message.
+  const guarded =
+    <A extends unknown[]>(fn: (...args: A) => Promise<void>) =>
+    async (...args: A) => {
+      try {
+        await fn(...args);
+      } catch {
+        setBusy(false);
+        setError("failed");
+      }
+    };
+
   function finish(res: AuthResult) {
     if (res.kind === "redirect") {
       go(res.to);
@@ -99,7 +111,7 @@ export default function LoginForm({
     else setError(res.error);
   }
 
-  async function onPassword(e: FormEvent<HTMLFormElement>) {
+  const onPassword = guarded(async function onPassword(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setBusy(true);
     setError(null);
@@ -110,9 +122,9 @@ export default function LoginForm({
       const emailRedirectTo = signupRedirectTo(location.origin, next);
       finish(await signUpWithPassword(supabase, post, { email, password, confirm, next, emailRedirectTo }));
     }
-  }
+  });
 
-  async function onResend() {
+  const onResend = guarded(async function onResend() {
     setBusy(true);
     setError(null);
     setResent(false);
@@ -120,9 +132,9 @@ export default function LoginForm({
     setBusy(false);
     if (res.ok) setResent(true);
     else setError(res.error);
-  }
+  });
 
-  async function onLink(e: FormEvent<HTMLFormElement>) {
+  const onLink = guarded(async function onLink(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setBusy(true);
     setError(null);
@@ -131,9 +143,9 @@ export default function LoginForm({
     setBusy(false);
     if (res.ok) setScreen("link_sent");
     else setError(res.error);
-  }
+  });
 
-  async function onForgot(e: FormEvent<HTMLFormElement>) {
+  const onForgot = guarded(async function onForgot(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setBusy(true);
     setError(null);
@@ -141,7 +153,7 @@ export default function LoginForm({
     setBusy(false);
     if (res.ok) setScreen("reset_sent");
     else setError(res.error);
-  }
+  });
 
   const alert = error && (
     <p role="alert" className="text-sm" style={{ color: "var(--rd)" }}>
