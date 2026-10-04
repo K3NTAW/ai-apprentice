@@ -2,6 +2,16 @@
 
 Human steps, in order. Never paste real keys into the repo, docs or issues; they live only in Supabase and Vercel.
 
+## Two Vercel projects from one repo
+
+| Project | Root Directory | What it serves | Env vars |
+| --- | --- | --- | --- |
+| app | repo root (default) | the product: `/` redirects to `/agents` (signed in) or `/login` (signed out) | steps 5 and the table below |
+| marketing | `marketing` | the public site: landing, Download, Privacy, Imprint | section 10 |
+
+Both import the same GitHub repo. Steps 1 to 9 set up the app; section 10 sets up the marketing site. The desktop
+app opens the app (APP_URL + `/agents` or `/login`), never the marketing site.
+
 The app needs Node.js runtime functions (every API route sets `runtime = "nodejs"`). The vision, workmap,
 decide and workmap/confirm routes set `maxDuration = 60`, which fits the Vercel plan limit of 60 s.
 In production without the three Supabase variables the app runs in 'misconfigured' mode: pages show a
@@ -61,10 +71,10 @@ Supabase dashboard, Authentication:
 
 `<domain>` is the production domain on Vercel (custom domain or `<project>.vercel.app`).
 
-## 4. Import the GitHub repo into Vercel
+## 4. Import the GitHub repo into Vercel (the app project)
 
-Vercel dashboard, Add New, Project, import the GitHub repo. Framework preset Next.js, default build
-command (`npm run build`) and output. Do not deploy until step 5 is done (or redeploy after it).
+Vercel dashboard, Add New, Project, import the GitHub repo. Root Directory: the repo root (leave it empty).
+Framework preset Next.js, default build command (`npm run build`) and output. Do not deploy until step 5 is done (or redeploy after it).
 
 ## 5. Environment variables
 
@@ -84,6 +94,7 @@ Vercel project, Settings, Environment Variables. Set each for **Production** and
 | DECIDE_PROVIDER | optional, forces the decide provider: jev, llm or heuristic |
 | NEXT_PUBLIC_DESKTOP_DOWNLOAD_MAC | optional, https download link for the macOS desktop app ('Get the desktop app' panel; hidden when unset) |
 | NEXT_PUBLIC_DESKTOP_DOWNLOAD_WIN | optional, https download link for the Windows desktop app |
+| NEXT_PUBLIC_MARKETING_URL | optional, the marketing site URL (section 10, e.g. `https://www.<domain>`). The login screen shows 'What is AI Apprentice?' linking there; hidden when unset |
 | NEXT_PUBLIC_COMPANION_WS | optional, `1` turns on the old local WebSocket companion in the browser (default off; per browser: localStorage `ai-apprentice.companion.ws` = `1`) |
 | VISION_MODEL | optional, overrides the vision model |
 | CRON_SECRET | server only, at least 16 characters (e.g. `openssl rand -base64 32`). Vercel Cron sends it as `Authorization: Bearer <CRON_SECRET>` to /api/cron/retention (vercel.json, daily 03:00 UTC). Unset, the route rejects every call and no screen moments expire |
@@ -121,3 +132,29 @@ Debrief and Teach show a notice and keep running in text mode where they can. Op
 | USAGE_CAP_DECIDE | 2000 | one per /api/decide call |
 | USAGE_CAP_WORKMAP | 50 | one per Work Map synthesis (/api/workmap; confirm is free) |
 | USAGE_CAP_VOICE | 60 | one per voice session start (/api/voice/signed-url) |
+
+## 10. Marketing site (second Vercel project)
+
+The landing, Download, Privacy and Imprint pages are their own Next.js project in `marketing/` (details in
+marketing/README.md). It has no server secrets.
+
+1. Vercel dashboard, Add New, Project, import the same GitHub repo again.
+2. Root Directory: `marketing`. Framework preset Next.js; install, build and output: defaults
+   (`npm ci`, `npm run build`).
+3. Environment Variables, for **Production** and **Preview**:
+
+| Name | Notes |
+| --- | --- |
+| NEXT_PUBLIC_APP_URL | the app's URL, e.g. `https://<domain>`. 'Sign in' goes to `<app>/login`, 'Open the app' to the app. Unset: no 'Sign in', the CTA is the Download page |
+| NEXT_PUBLIC_DOWNLOAD_MAC_ARM64 | https link to the macOS Apple silicon build. Unset: 'Coming soon' |
+| NEXT_PUBLIC_DOWNLOAD_MAC_X64 | https link to the macOS Intel build. Unset: 'Coming soon' |
+| NEXT_PUBLIC_DOWNLOAD_WIN | https link to the Windows build. Unset: 'Coming soon' |
+
+4. Deploy, then add the marketing domain (e.g. `www.<domain>`) under Domains.
+5. In the app project set NEXT_PUBLIC_MARKETING_URL to that domain and redeploy the app.
+
+Download links: build the desktop app (`npm --prefix companion run package` for macOS, `package:win` for Windows),
+upload each installer to a public host (e.g. a GitHub Release asset), paste each https link into the matching
+variable on the marketing project and redeploy it. A value that is not an http(s) URL counts as unset. The
+variables are inlined at build time, so every change needs a redeploy. Local check: `npm run marketing:dev`
+(port 3100) and `npm run marketing:build` from the repo root.

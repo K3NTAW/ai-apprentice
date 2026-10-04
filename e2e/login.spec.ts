@@ -1,49 +1,22 @@
 import { expect, test } from "@playwright/test";
 import { expectCovered } from "./coverage";
 
-// Landing (Main, LandingLight, LandingPhone) and login (Login, LoginSent). Local mode skips /login (it redirects to
-// /capture), so the sign-in card is exercised on /login/preview; Supabase calls fail there and must show an alert.
-test.describe("landing", () => {
-  test("anchors scroll to their section, CTAs open the app", async ({ page }) => {
+// '/' opens the product (the marketing landing is its own project in marketing/) and login (Login, LoginSent).
+// Local mode skips /login (it redirects to /capture), so the sign-in card is exercised on /login/preview; Supabase
+// calls fail there and must show an alert.
+test.describe("'/' opens the app", () => {
+  test("no marketing landing: '/' redirects to /agents (local mode has no sign-in)", async ({ page }) => {
     await page.goto("/");
-    await expectCovered(page, { "AI Apprentice": "url", "How it works": "url", "The Apprentice Test": "url", Trust: "url", "Open the app": "url", "See how it works": "url" });
-    for (const [name, hash] of [["How it works", "#how"], ["The Apprentice Test", "#test"], ["Trust", "#trust"], ["AI Apprentice", "#top"]] as const) {
-      await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name, exact: true }).or(page.getByRole("link", { name, exact: true }).first()).first().click();
-      await expect(page).toHaveURL(new RegExp(`${hash}$`));
-    }
-    await page.getByRole("link", { name: "See how it works" }).click();
-    await expect(page).toHaveURL(/#how$/);
-    await page.getByRole("link", { name: "Open the app" }).first().click();
-    await expect(page).toHaveURL(/\/capture$/);
-  });
-
-  test("light theme", async ({ page }) => {
-    await page.goto("/?theme=light");
-    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
-    const bg = await page.locator("body").evaluate((el) => getComputedStyle(el).backgroundColor);
-    await page.goto("/?theme=dark");
-    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-    expect(await page.locator("body").evaluate((el) => getComputedStyle(el).backgroundColor)).not.toBe(bg);
-  });
-
-  test("phone: menu opens the section links", async ({ page }) => {
-    await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto("/");
-    await expect(page.getByRole("navigation", { name: "Main" })).toBeHidden();
-    const menu = page.locator("details:has(summary[aria-label=Menu])");
-    await menu.locator("summary").click();
-    await expect(menu).toHaveAttribute("open", "");
-    await menu.getByRole("link", { name: "Trust" }).click();
-    await expect(page).toHaveURL(/#trust$/);
+    await expect(page).toHaveURL(/\/agents$/);
+    await expect(page.locator("[data-screen=landing]")).toHaveCount(0);
   });
 });
 
 test.describe("login", () => {
-  test("coverage, tabs, show password, back to the site", async ({ page }) => {
+  test("coverage, tabs, show password", async ({ page }) => {
     await page.goto("/login/preview");
     await expectCovered(page, {
       "AI Apprentice": "url",
-      "Back to the site": "url",
       "Sign in": "state",
       "Create account": "state",
       Show: "state",
@@ -60,8 +33,8 @@ test.describe("login", () => {
     await expect(page.getByLabel("Password", { exact: true })).toHaveAttribute("type", "text");
     await page.getByRole("button", { name: "Hide" }).click();
     await expect(page.getByLabel("Password", { exact: true })).toHaveAttribute("type", "password");
-    await page.getByRole("link", { name: "Back to the site" }).click();
-    await expect(page).toHaveURL(/:\d+\/$/);
+    // NEXT_PUBLIC_MARKETING_URL is unset in e2e: no link to the marketing site.
+    await expect(page.getByRole("link", { name: "What is AI Apprentice?" })).toHaveCount(0);
   });
 
   test("sign in without a backend shows an error", async ({ page }) => {
@@ -93,7 +66,7 @@ test.describe("login", () => {
     await expect(page.getByRole("heading", { name: "Check your email" })).toBeVisible();
     await expect(page.getByText("ana@example.com")).toBeVisible();
     await expect(page.getByText("Your AI Apprentice sign-in link")).toBeVisible();
-    await expectCovered(page, { "AI Apprentice": "url", "Back to the site": "url", "Use a different email": "state" });
+    await expectCovered(page, { "AI Apprentice": "url", "Use a different email": "state" });
     await page.locator("[data-screen=login-sent] button").first().click();
     await expect(page.getByLabel("Email")).toBeVisible();
   });

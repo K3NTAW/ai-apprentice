@@ -1,59 +1,82 @@
 import { renderToStaticMarkup } from "react-dom/server";
+import { readdirSync, readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const state = vi.hoisted(() => ({ mode: "local" as "local" | "supabase" | "misconfigured" }));
+const state = vi.hoisted(() => ({
+  mode: "local" as "local" | "supabase" | "misconfigured",
+  ctx: { kind: "signed_out" } as { kind: string } | Error,
+}));
 vi.mock("@/lib/supabase/env", () => ({ appMode: () => state.mode }));
+vi.mock("@/lib/auth/context", () => ({
+  getRequestContext: async () => {
+    if (state.ctx instanceof Error) throw state.ctx;
+    return state.ctx;
+  },
+}));
+vi.mock("next/navigation", () => ({
+  redirect: (to: string) => {
+    throw new Error(`NEXT_REDIRECT ${to}`);
+  },
+}));
 
 import Home from "./page";
 
-const render = () => renderToStaticMarkup(<Home />);
+const target = async () => {
+  try {
+    await Home();
+  } catch (e) {
+    return String(e).match(/NEXT_REDIRECT (\S+)/)?.[1] ?? String(e);
+  }
+  return null;
+};
 
 beforeEach(() => {
-  state.mode = "local";
+  state.mode = "supabase";
+  state.ctx = { kind: "signed_out" };
 });
 
-describe("landing page", () => {
-  it("renders the Main.dc.html promise, the three steps, the Apprentice Test and trust", () => {
-    const html = render();
-    expect(html).toContain("Keep the judgment when the expert retires.");
-    expect(html).toContain("For teams whose experts are about to retire");
-    expect(html).toContain("Train, Map, Teach.");
-    for (const step of ["Train", "Map", "Teach"]) expect(html).toContain(`>${step}</h3>`);
-    expect(html).toContain("Five questions any good apprentice has to answer.");
-    for (const q of ["When to ask", "What to ask", "When it has understood", "Whether the new hire learned", "Trust"]) expect(html).toContain(`>${q}</h3>`);
-    expect(html).toContain("Off the record, whenever you say it.");
-    expect(html).toContain("Built in Zug, Switzerland");
-    expect(html).toContain('data-screen="landing"');
+describe("'/' opens the product", () => {
+  it("redirects a signed-in user to /agents", async () => {
+    state.ctx = { kind: "ok" };
+    expect(await target()).toBe("/agents");
   });
 
-  it("says it runs next to the apps you already use and never mentions the ERP sandbox", async () => {
-    const html = render();
-    expect(html).toContain("Runs next to Outlook, Excel, PowerPoint and any browser tab. Nothing to integrate.");
-    expect(html).not.toMatch(/\bERP\b|sandbox/i); // word match: the canvas copy names PowerPoint
-    const { default: ShellHeader } = await import("@/components/shell/ShellHeader");
-    const nav = renderToStaticMarkup(<ShellHeader user={null} />);
-    expect(nav).not.toMatch(/ERP|\/erp/);
+  it("redirects a signed-out user to /login", async () => {
+    expect(await target()).toBe("/login");
   });
 
-  it("CTA reads 'Sign in' in supabase mode", () => {
-    state.mode = "supabase";
-    const html = render();
-    expect(html).toMatch(/href="\/login"[^>]*>Sign in</);
-    expect(html).not.toContain("Open the app");
+  it("redirects to /agents in local mode (no sign-in there)", async () => {
+    state.mode = "local";
+    expect(await target()).toBe("/agents");
   });
 
-  it("CTA reads 'Open the app' in local mode", () => {
-    const html = render();
-    expect(html).toMatch(/href="\/capture"[^>]*>Open the app</);
-    expect(html).not.toContain("Sign in");
+  it("a user without a workspace still goes to /agents (the gallery handles it)", async () => {
+    state.ctx = { kind: "no_workspace" };
+    expect(await target()).toBe("/agents");
   });
 
-  it("shows the setup notice in misconfigured mode", () => {
+  it("a misconfigured context (Supabase client could not be built) goes to /login with the setup notice, not /agents", async () => {
+    state.ctx = { kind: "misconfigured" };
+    expect(await target()).toBe("/login?error=setup");
+  });
+
+  it("an error from the context lookup (e.g. Supabase failure) goes to /login with the error notice, not /agents", async () => {
+    state.ctx = new Error("supabase down");
+    expect(await target()).toBe("/login?error=unavailable");
+    state.ctx = { kind: "error" };
+    expect(await target()).toBe("/login?error=unavailable");
+  });
+
+  it("shows the setup notice in misconfigured mode", async () => {
     state.mode = "misconfigured";
-    const html = render();
+    const html = renderToStaticMarkup(await Home());
     expect(html).toContain("This deployment is not set up yet.");
     expect(html).toContain("docs/DEPLOY.md");
-    expect(html).not.toContain("Open the app");
-    expect(html).not.toContain("Sign in");
+  });
+
+  it("no marketing landing remains in the app", () => {
+    expect(readdirSync("src/components/landing").sort()).toEqual(["BrandMark.tsx", "Landing.tsx"]);
+    const src = readFileSync("src/components/landing/Landing.tsx", "utf8");
+    for (const copy of ["Keep the judgment when the expert retires.", "The Apprentice Test", 'data-screen="landing"']) expect(src).not.toContain(copy);
   });
 });

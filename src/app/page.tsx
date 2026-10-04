@@ -1,9 +1,14 @@
-import Landing from "@/components/landing/Landing";
+import { redirect } from "next/navigation";
+import { getRequestContext } from "@/lib/auth/context";
 import { appMode } from "@/lib/supabase/env";
 
 export const dynamic = "force-dynamic";
 
-export default function Home() {
+// The app opens straight into the product; the marketing site is its own project (marketing/, docs/DEPLOY.md).
+// Signed in (or local mode, which has no sign-in) goes to /agents, signed out to /login. A context that could not be
+// resolved goes to /login with a notice, never to /agents: misconfigured -> the setup notice, any other kind or a thrown
+// lookup (e.g. Supabase down) -> the 'unavailable' notice.
+export default async function Home() {
   const mode = appMode();
   if (mode === "misconfigured") {
     return (
@@ -17,5 +22,14 @@ export default function Home() {
       </main>
     );
   }
-  return <Landing mode={mode} />;
+  if (mode === "local") redirect("/agents");
+  let kind: string;
+  try {
+    kind = (await getRequestContext()).kind;
+  } catch {
+    kind = "error";
+  }
+  if (kind === "ok" || kind === "no_workspace") redirect("/agents");
+  if (kind === "signed_out") redirect("/login");
+  redirect(kind === "misconfigured" ? "/login?error=setup" : "/login?error=unavailable");
 }

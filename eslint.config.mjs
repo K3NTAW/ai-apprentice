@@ -13,6 +13,7 @@ export default defineConfig([
     "wt/**",
     "skills/**",
     "companion/**",
+    "marketing/**",
     ".orchestrator/**",
     ".claude/**",
   ]),

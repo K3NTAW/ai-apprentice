@@ -277,3 +277,54 @@ describe("Supabase errors map to plain messages", () => {
     for (const text of Object.values(AUTH_ERRORS)) expect(text).not.toContain("a@b.ch");
   });
 });
+
+describe("login shell: the way to the marketing site", () => {
+  it("shows 'What is AI Apprentice?' linking to NEXT_PUBLIC_MARKETING_URL, hidden when unset or not http(s)", async () => {
+    const { MarketingLink, marketingUrl } = await import("@/components/landing/Landing");
+    const { renderToStaticMarkup: html } = await import("react-dom/server");
+    expect(html(<MarketingLink href={marketingUrl(" https://aiapprentice.example ")} />)).toMatch(/href="https:\/\/aiapprentice\.example\/"[^>]*>What is AI Apprentice\?</);
+    for (const bad of [undefined, "", "  ", "javascript:alert(1)", "not a url"]) expect(marketingUrl(bad), String(bad)).toBeNull();
+    expect(html(<MarketingLink href={null} />)).toBe("");
+  });
+
+  const bridge = { on: () => () => {}, send: () => {}, window: () => {} };
+
+  it("hides the link inside the desktop app (window.apprentice present)", async () => {
+    const { MarketingLink, showMarketingLink } = await import("@/components/landing/Landing");
+    const { renderToStaticMarkup: html } = await import("react-dom/server");
+    expect(showMarketingLink({ apprentice: bridge })).toBe(false);
+    expect(html(<MarketingLink href="https://aiapprentice.example/" inApp />)).toBe("");
+  });
+
+  it("shows the link in the browser (no window.apprentice); the login shell's server render has none (mounted: marketing-link.test.tsx)", async () => {
+    const { MarketingLink, LoginMarketingLink, showMarketingLink } = await import("@/components/landing/Landing");
+    const { renderToStaticMarkup: html } = await import("react-dom/server");
+    for (const win of [{}, undefined, { apprentice: {} }]) expect(showMarketingLink(win), JSON.stringify(win)).toBe(true);
+    expect(html(<MarketingLink href="https://aiapprentice.example/" inApp={false} />)).toContain("What is AI Apprentice?");
+    expect(html(<LoginMarketingLink href="https://aiapprentice.example/" />)).toBe("");
+  });
+});
+
+describe("login page notices from '/'", () => {
+  const render = async (error: string) => {
+    const { default: LoginPage } = await import("./page");
+    return renderToStaticMarkup(await LoginPage({ searchParams: Promise.resolve({ error }) }));
+  };
+
+  it("error=unavailable shows the error notice above the form", async () => {
+    const out = await render("unavailable");
+    expect(out).toMatch(/role="alert"[^>]*>Sign-in is unavailable right now\. Try again in a moment\.</);
+    expect(out).toContain('type="password"');
+  });
+
+  it("error=setup shows the setup notice", async () => {
+    const out = await render("setup");
+    expect(out).toContain("Sign-in is not configured on this deployment. The steps are in docs/DEPLOY.md.");
+  });
+
+  it("unknown codes show nothing and are never echoed", async () => {
+    const out = await render("<b>x</b>");
+    expect(out).not.toContain('role="alert"');
+    expect(out).not.toContain("&lt;b&gt;");
+  });
+});

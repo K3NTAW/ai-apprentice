@@ -53,6 +53,15 @@ Until one of these is set, the main window shows the local setup screen ("Paste 
 URL", https only) and nothing remote is loaded. An invalid value shows a local error page; there is no
 silent fallback.
 
+The main window opens straight into the product, never the marketing site: `<APP_URL>/agents` when the
+window's session has a Supabase session cookie for the app origin, `<APP_URL>/login` otherwise (a failed
+cookie check counts as signed out). A sub-path in APP_URL is kept: `https://example.com/app` opens
+`https://example.com/app/login` or `https://example.com/app/agents`, for an app served under that path.
+Query and hash are dropped. Trust (the allowlist below) is still decided by the origin alone.
+The sub-path only changes this entry URL: the app's own post-login redirects (`/agents`, safe `next`
+paths) are root-relative and resolve against the origin, so after sign-in the window lands on
+`https://example.com/agents`, not `https://example.com/app/agents`.
+
 Setting it:
 
 - Dev against the local web app: `APP_URL=http://localhost:3000 npm run dev`.

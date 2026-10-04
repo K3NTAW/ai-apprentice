@@ -4,7 +4,7 @@
 // tabs. Browser: email + password and 'Email me a link' (the magic link). After the password step
 // /api/auth/bootstrap runs the workspace bootstrap and returns where to go (a safe next, default /agents).
 // 'Forgot password?' emails a reset link to /auth/reset. Look: Login.dc.html and LoginSent.dc.html.
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, useSyncExternalStore, type FormEvent } from "react";
 import { buttonClass, Tabs } from "@/components/ui";
 import { safeNext } from "@/lib/auth/redirect";
 import {
@@ -48,6 +48,8 @@ export type LoginFormProps = {
 
 const primaryWide = buttonClass("primary", "md", "h-12 w-full text-[15px]");
 
+const noSubscribe = () => () => {};
+
 export default function LoginForm({
   next,
   inApp: forced,
@@ -58,11 +60,8 @@ export default function LoginForm({
   initialTab,
   initialMethod,
 }: LoginFormProps) {
-  const [detected, setDetected] = useState(false);
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- window.apprentice only exists on the client.
-    if (forced === undefined) setDetected(getBridge() !== null);
-  }, [forced]);
+  // window.apprentice only exists on the client: the server and hydration renders use the browser view.
+  const detected = useSyncExternalStore(noSubscribe, () => getBridge() !== null, () => false);
   const inApp = forced ?? detected;
   const view = loginView(inApp);
 

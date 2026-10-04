@@ -10,6 +10,6 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["src/**/*.test.ts", "src/**/*.test.tsx", "e2e/*.guard.test.ts"],
-    exclude: ["spikes/**", "wt/**", "companion/**", "node_modules/**"],
+    exclude: ["spikes/**", "wt/**", "companion/**", "marketing/**", "node_modules/**"],
   },
 });

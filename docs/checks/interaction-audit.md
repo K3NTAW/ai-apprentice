@@ -72,12 +72,6 @@ dead (no action, fails the guard).
 
 | route | element | label | action | status |
 | --- | --- | --- | --- | --- |
-| / | a | AI Apprentice | Scrolls to #top | works |
-| / | a | How it works | Scrolls to #how | works |
-| / | a | Open the app | Opens /capture | works |
-| / | a | See how it works | Scrolls to #how | works |
-| / | a | The Apprentice Test | Scrolls to #test | works |
-| / | a | Trust | Scrolls to #trust | works |
 | /agents | a | Create your first agent | Opens /agents/new | works |
 | /agents | a | Install the companion | Opens https://github.com/K3NTAW/ai-apprentice/blob/main/companion/README.md | works |
 | /agents | a | Invite an expert | Opens /workspace | works |
@@ -280,8 +274,7 @@ dead (no action, fails the guard).
 | /agents/preview/[id]?tab=shortcuts | button | Browser 1 | Runs 'Browser 1' in place | works |
 | /agents/preview/[id]?tab=shortcuts | button | Excel 4 | Runs 'Excel 4' in place | works |
 | /agents/preview/[id]?tab=shortcuts | button | Outlook 1 | Runs 'Outlook 1' in place | works |
-| /auth/confirmed | a | AI Apprentice | Opens / | works |
-| /auth/confirmed | a | Back to the site | Opens / | works |
+| /auth/confirmed | a | AI Apprentice | Opens /login | works |
 | /capture | button | End task | Runs 'End task' in place | works |
 | /capture | button | Off the record | Runs 'Off the record' in place | works |
 | /capture | button | Pause | Runs 'Pause' in place | works |
@@ -307,8 +300,7 @@ dead (no action, fails the guard).
 | /learn/preview | a | Pip Senior AP Clerk · from Sabine Keller | Opens /learn | works |
 | /learn/preview | a | Release a payment run 3 steps · 0 judgment calls · 3 guardra | Opens /teach | works |
 | /learn/preview | a | Start | Opens /teach | works |
-| /login/preview | a | AI Apprentice | Opens / | works |
-| /login/preview | a | Back to the site | Opens / | works |
+| /login/preview | a | AI Apprentice | Opens /login | works |
 | /login/preview | button | Back to sign in | Runs 'Back to sign in' in place | works |
 | /login/preview | button | Create account | Runs 'Create account' in place | works |
 | /login/preview | button | Email me a link | Runs 'Email me a link' in place | works |

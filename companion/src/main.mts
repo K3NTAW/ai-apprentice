@@ -19,7 +19,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { appAllowlist, PRODUCT_NAME, resolveAppUrl, userDataDirName, wsEnabled, type AppUrlResult } from "./appConfig.mjs";
 import { ActivityAggregator, AppChangeTracker, WINDOW_MS, toInputKind, type InputKind } from "./activity.mjs";
-import { checkAppUrl, planMainLoad, serializeStoredAppUrl, STORED_APP_URL_FILE, validateSetupUrl } from "./appUrl.mjs";
+import { checkAppUrl, loadMainWindow, serializeStoredAppUrl, STORED_APP_URL_FILE, validateSetupUrl } from "./appUrl.mjs";
 import { avatarFor } from "./avatarUrl.mjs";
 import { blockedNavigationLog, isLoadErrorAction, loadErrorView, navigationAllowed, type LoadFailure } from "./loadError.mjs";
 import { BRIDGE_CHANNELS, createForwarder, exposeBridge, routeBridgeMessage, senderAllowed, type BridgeHandlers } from "./bridge.mjs";
@@ -878,12 +878,9 @@ function applyAppUrl(): void {
   for (const e of appList.errors) log(e);
 }
 
-/** Remote only with a valid APP_URL; otherwise a local page (setup screen or error page), nothing remote. */
+/** Straight into the product (/agents or /login) with a valid APP_URL, else the local setup or error page (appUrl.mts). */
 function loadMain(win: BrowserWindow): void {
-  const plan = planMainLoad(appUrl);
-  if (plan.kind === "remote") void win.loadURL(plan.url);
-  else if (plan.kind === "setup") void win.loadFile(SETUP_HTML);
-  else void win.loadFile(path.join(here, "..", "static", "app-error.html"), { query: { reason: plan.reason } });
+  void loadMainWindow(win, appUrl, { setup: SETUP_HTML, error: path.join(here, "..", "static", "app-error.html") });
 }
 
 /** Setup screen save: only the main window's main frame on the local setup page, and only while unset. */
