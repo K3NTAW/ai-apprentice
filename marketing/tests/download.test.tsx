@@ -20,10 +20,12 @@ describe("download page logic", () => {
 
   it("Apple silicon is the primary button, Intel secondary, Windows 'Coming soon' without a link", () => {
     const html = renderToStaticMarkup(<DownloadList items={downloads()} version="0.1.0" />);
-    expect(html).toMatch(new RegExp(`class="ui-btn ui-bp ui-bl" href="${esc(ARM)}">Download for macOS \\(Apple silicon\\)<`));
-    expect(html).toMatch(new RegExp(`class="ui-btn ui-bs ui-bl" href="${esc(X64)}">Download for macOS \\(Intel\\)<`));
-    expect(html).toContain("Version 0.1.0 · 130 MB");
-    expect(html).toContain("Version 0.1.0 · 134 MB");
+    expect(html).toMatch(new RegExp(`class="ui-btn ui-bp ui-bdl" href="${esc(ARM)}" aria-label="Download AI Apprentice for macOS, Apple Silicon"><svg[^>]*aria-hidden="true">.*?</svg>Download</a>`));
+    expect(html).toMatch(new RegExp(`class="ui-btn ui-bs ui-bdl" href="${esc(X64)}" aria-label="Download AI Apprentice for macOS, Intel"><svg[^>]*aria-hidden="true">.*?</svg>Download</a>`));
+    expect(html).not.toContain("Download for macOS");
+    expect(html).not.toContain("ui-bl");
+    expect(html).toContain("Version 0.1.0 · 145 MB");
+    expect(html).toContain("Version 0.1.0 · 153 MB");
     expect(html.match(/<a /g)).toHaveLength(2);
     const win = html.slice(html.indexOf('data-download="win"'));
     expect(win).toContain("Coming soon");
@@ -31,7 +33,16 @@ describe("download page logic", () => {
     expect(html).not.toContain("Download for Windows");
   });
 
-  it("the page renders all three builds, the release link and the unsigned-app install steps", async () => {
+  it("the download button class is compact and cannot overflow its card", async () => {
+    const { readFileSync } = await import("node:fs");
+    const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+    const rule = css.match(/\.ui-bdl \{([^}]*)\}/)?.[1] ?? "";
+    for (const d of ["width: fit-content", "max-width: 100%", "min-height: 40px", "padding: 10px 18px", "font-size: 15px", "white-space: normal"]) {
+      expect(rule, d).toContain(d);
+    }
+  });
+
+  it("the page renders all three builds, the release link, the which-build hint, the notarized note and the simplified install steps", async () => {
     const { default: DownloadPage } = await import("@/app/download/page");
     const html = renderToStaticMarkup(<DownloadPage />);
     expect(html).toContain('data-screen="download"');
@@ -40,9 +51,26 @@ describe("download page logic", () => {
     expect(html).toContain(`href="${X64}"`);
     expect(html).toContain(`href="${DESKTOP_RELEASE.page}"`);
     expect(html).toContain("data-install-steps");
-    for (const s of ["drag AI Apprentice to Applications", "right-click AI Apprentice in Applications and choose Open", "Privacy &amp; Security and click Open Anyway", "Sign in.", "Grant Screen Recording, Microphone and Accessibility, then restart the app once."]) {
-      expect(html).toContain(s);
+    const steps = html.slice(html.indexOf("data-install-steps"));
+    const order = [
+      "Open the .dmg and drag AI Apprentice to Applications.",
+      "Open it. macOS asks once whether to open an app downloaded from the internet: click Open.",
+      "Sign in.",
+      "Grant Screen Recording, Microphone and Accessibility, then restart the app once.",
+      "Still blocked? System Settings &gt; Privacy &amp; Security &gt; Open Anyway.",
+    ];
+    let at = -1;
+    for (const s of order) {
+      const i = steps.indexOf(s, at + 1);
+      expect(i, s).toBeGreaterThan(at);
+      at = i;
     }
+    expect(html).not.toContain("xattr");
+    expect(html).not.toContain("<code");
+    expect(html).not.toContain("not notarized");
+    expect(html.match(/Open Anyway/g)).toHaveLength(1);
+    expect(html).toContain('data-notarized="">Signed and notarized by Apple</span>');
+    expect(html).toContain("Which build: Apple menu &gt; About This Mac: Chip = Apple M… -&gt; Apple Silicon; Processor = Intel -&gt; Intel");
     expect(html.match(/<li>/g)).toHaveLength(INSTALL_STEPS.length);
     expect(html).not.toContain("Download for Windows");
   });
