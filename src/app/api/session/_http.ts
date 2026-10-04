@@ -18,6 +18,7 @@ import {
   SessionLinkedError,
   SessionNotFoundError,
   type SessionStore,
+  TeachUnavailableError,
 } from "@/lib/store";
 
 export const badRequest = (error: string, details?: unknown) =>
@@ -59,6 +60,8 @@ export async function handle(fn: () => Promise<Response>): Promise<Response> {
     if (err instanceof EmptyProcessPatchError) return badRequest(err.code);
     // Migration 20261004030000_processes not applied: a stable 503, never a 500. The UI falls back to sessions.
     if (err instanceof ProcessesUnavailableError) return Response.json({ error: err.code, message: err.message }, { status: 503 });
+    // Migration 20261004040000_session_teach not applied: 503, the Teach page shows a quiet notice.
+    if (err instanceof TeachUnavailableError) return Response.json({ error: err.code, message: err.message }, { status: 503 });
     // getStore errors: never fall back to the file store.
     if (err instanceof Error && err.message === "supabase_not_configured") {
       return Response.json({ error: "supabase_not_configured" }, { status: 503 });
