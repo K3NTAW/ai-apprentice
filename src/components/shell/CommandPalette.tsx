@@ -5,7 +5,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
 import type { SearchResponse } from "@/lib/search/palette";
-import { createPalette, type PaletteEntry, type PaletteState } from "./palette";
+import { createPalette, type PaletteState } from "./palette";
 
 const noSubscribe = () => () => {};
 const isMac = () => /Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent);
