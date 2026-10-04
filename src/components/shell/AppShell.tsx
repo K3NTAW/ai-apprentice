@@ -10,6 +10,7 @@ const toShellUser = (ctx: RequestContext): ShellUser => ({
   mode: ctx.mode,
   workspaceName: ctx.workspaceName,
   email: ctx.email,
+  fullName: ctx.fullName ?? null,
   role: ctx.role,
   workspaceId: ctx.workspaceId,
   memberships: ctx.memberships,

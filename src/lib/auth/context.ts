@@ -14,12 +14,15 @@ import { WS_COOKIE } from "./cookies";
 import { FORWARDED_USER_HEADER, verifyForwardedUser, type ForwardedUser } from "./forwardedUser";
 
 export type Role = "owner" | "expert" | "learner";
-export type Membership = { workspaceId: string; name: string; role: Role };
+/** city: optional, shown after the name (20261004020000_workspace_create); absent before that migration. */
+export type Membership = { workspaceId: string; name: string; role: Role; city?: string | null };
 
 export type RequestContext = {
   mode: "local" | "supabase";
   userId: string;
   email: string | null;
+  /** user_metadata.full_name when set (the user card display name); null otherwise. Unset in local mode. */
+  fullName?: string | null;
   /** When the user's address was confirmed (Supabase email_confirmed_at); null when never. Unset in local mode. */
   emailConfirmedAt?: string | null;
   workspaceId: string;
@@ -42,7 +45,7 @@ type MemberRow = {
   workspace_id: string;
   role: string;
   created_at: string;
-  workspaces: { name: string } | { name: string }[] | null;
+  workspaces: { name: string; city?: string | null } | { name: string; city?: string | null }[] | null;
 };
 type BootstrapRow = { workspace_id: string; name: string; role: string };
 
@@ -51,21 +54,25 @@ export async function readMemberships(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<{ ok: true; memberships: Membership[] } | { ok: false }> {
-  const { data, error } = await supabase
-    .from("workspace_members")
-    .select("workspace_id, role, created_at, workspaces(name)")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: true })
-    .order("workspace_id", { ascending: true });
+  const query = (columns: string) =>
+    supabase
+      .from("workspace_members")
+      .select(`workspace_id, role, created_at, workspaces(${columns})`)
+      .eq("user_id", userId)
+      .order("created_at", { ascending: true })
+      .order("workspace_id", { ascending: true });
+  let { data, error } = await query("name, city");
+  // 42703: workspaces.city does not exist yet (migration 20261004020000 not applied); read without it.
+  if (error?.code === "42703") ({ data, error } = await query("name"));
   if (error || !Array.isArray(data)) {
     if (error) console.error("readMemberships:", error.message);
     return { ok: false };
   }
   const memberships: Membership[] = [];
-  for (const row of data as MemberRow[]) {
+  for (const row of data as unknown as MemberRow[]) {
     if (!isRole(row.role)) continue;
     const ws = Array.isArray(row.workspaces) ? row.workspaces[0] : row.workspaces;
-    memberships.push({ workspaceId: row.workspace_id, name: ws?.name ?? "", role: row.role });
+    memberships.push({ workspaceId: row.workspace_id, name: ws?.name ?? "", role: row.role, city: ws?.city ?? null });
   }
   return { ok: true, memberships };
 }
@@ -83,6 +90,12 @@ export async function bootstrapMemberships(
     .filter((r) => isRole(r.role))
     .map((r) => ({ workspaceId: r.workspace_id, name: r.name, role: r.role as Role }));
   return { ok: true, memberships };
+}
+
+/** user_metadata.full_name, trimmed, when it is a non-empty string. */
+export function metadataFullName(meta: { full_name?: unknown } | null | undefined): string | null {
+  const v = meta?.full_name;
+  return typeof v === "string" && v.trim() ? v.trim().slice(0, 60) : null;
 }
 
 /** The ws cookie wins only when it names one of the memberships. */
@@ -141,7 +154,13 @@ async function resolveRequestContext(opts: ResolveOpts): Promise<ContextResult> 
   }
 
   // A thrown getUser counts as signed out.
-  let user: { id: string; email?: string | null; email_confirmed_at?: string | null } | null = opts.fresh
+  let user: {
+    id: string;
+    email?: string | null;
+    email_confirmed_at?: string | null;
+    full_name?: string | null;
+    user_metadata?: { full_name?: unknown } | null;
+  } | null = opts.fresh
     ? null
     : await forwardedUser();
   if (!user) {
@@ -178,6 +197,7 @@ async function resolveRequestContext(opts: ResolveOpts): Promise<ContextResult> 
       mode: "supabase",
       userId: user.id,
       email: user.email ?? null,
+      fullName: metadataFullName(user.user_metadata) ?? user.full_name ?? null,
       emailConfirmedAt: user.email_confirmed_at ?? null,
       workspaceId: active.workspaceId,
       workspaceName: active.name,

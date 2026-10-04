@@ -107,16 +107,20 @@ describe("shell sidebar (Sidebar.dc.html)", () => {
     expect(local).toContain("local mode");
   });
 
-  it("user card: initials, sign-out in supabase mode, 'desktop app connected' in the app and 'browser' otherwise", () => {
-    const html = renderToStaticMarkup(<ShellHeader user={user} />);
-    expect(html).toContain('aria-label="Open user menu"');
-    expect(html).toContain('action="/auth/signout"');
-    expect(html).toContain(">SA</span>");
-    expect(html).toMatch(/data-testid="viewer-status">.*browser<\/span>/);
-    expect(html).not.toMatch(/paired|pairing/i);
-    const app = renderToStaticMarkup(<ShellHeader user={user} inApp />);
-    expect(app).toMatch(/data-testid="viewer-status">.*desktop app connected<\/span>/);
-    expect(app).not.toMatch(/companion paired/i);
+  it("user card: initials and the name, no status line and no dot, sign-out in supabase mode", () => {
+    for (const inApp of [false, true]) {
+      const html = renderToStaticMarkup(<ShellHeader user={user} inApp={inApp} />);
+      expect(html).toContain('aria-label="Open user menu"');
+      expect(html).toContain('action="/auth/signout"');
+      expect(html).toContain(">SA</span>");
+      expect(html).toMatch(/data-testid="user-name"[^>]*>Sabine<\/span>/);
+      expect(html).not.toContain("viewer-status");
+      expect(html).not.toMatch(/desktop app connected|>browser<|paired|pairing/i);
+      expect(html).not.toContain("var(--gr)");
+    }
+    const named = renderToStaticMarkup(<ShellHeader user={{ ...user, fullName: "Sabine Keller" }} />);
+    expect(named).toMatch(/data-testid="user-name"[^>]*>Sabine Keller<\/span>/);
+    expect(named).toContain(">SK</span>");
   });
 
   it("search field with the ⌘K hint and the collapse toggle", () => {

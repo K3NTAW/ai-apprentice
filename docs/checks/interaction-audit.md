@@ -338,12 +338,19 @@ dead (no action, fails the guard).
 | /shell (signed in) | a | Training · Sabine live · 1 h 00 min | Opens /debrief/s-live | works |
 | /shell (signed in) | a | Work Map 11:00 | Opens /map/s-map | works |
 | /shell (signed in) | a | Workspace | Opens /workspace | works |
+| /shell (signed in) | a | Workspace settings | Opens /workspace | works |
+| /shell (signed in) | button | Change display name | Runs 'Change display name' in place | works |
 | /shell (signed in) | button | Collapse sidebar | Runs 'Collapse sidebar' in place | works |
+| /shell (signed in) | button | Create workspace | Runs 'Create workspace' in place | works |
+| /shell (signed in) | button | Dark | Runs 'Dark' in place | works |
 | /shell (signed in) | button | Finance owner | Runs 'Finance owner' in place | works |
-| /shell (signed in) | button | Light theme | Runs 'Light theme' in place | works |
+| /shell (signed in) | button | Light | Runs 'Light' in place | works |
+| /shell (signed in) | button | Open user menu | Runs 'Open user menu' in place | works |
 | /shell (signed in) | button | Ops learner | Runs 'Ops learner' in place | works |
 | /shell (signed in) | button | Search | Runs 'Search' in place | works |
 | /shell (signed in) | button | Sign out | Submits the form (Sign out) | works |
+| /shell (signed in) | button | Switch workspace | Runs 'Switch workspace' in place | works |
+| /shell (signed in) | button | System | Runs 'System' in place | works |
 | /shell | a | Account and workspace | Opens /workspace | works |
 | /shell | a | Agents | Opens /agents | works |
 | /shell | a | AI Apprentice home | Opens / | works |
@@ -352,8 +359,11 @@ dead (no action, fails the guard).
 | /shell | a | Start capture | Opens /capture | works |
 | /shell | a | Workspace | Opens /workspace | works |
 | /shell | button | Collapse sidebar | Runs 'Collapse sidebar' in place | works |
-| /shell | button | Light theme | Runs 'Light theme' in place | works |
+| /shell | button | Dark | Runs 'Dark' in place | works |
+| /shell | button | Light | Runs 'Light' in place | works |
+| /shell | button | Open user menu | Runs 'Open user menu' in place | works |
 | /shell | button | Search | Runs 'Search' in place | works |
+| /shell | button | System | Runs 'System' in place | works |
 | /teach | button | Finish | Runs 'Finish' in place | works |
 | /teach | button | Pause | Runs 'Pause' in place | works |
 | /teach | button | Share screen | Runs 'Share screen' in place | works |

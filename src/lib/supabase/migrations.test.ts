@@ -900,3 +900,57 @@ describe("agent settings migration", () => {
     expect(norm(commentText(rollback))).toContain("drops every stored agent setting");
   });
 });
+
+const WORKSPACE_CREATE = "20261004020000_workspace_create.sql";
+
+describe("workspace_create migration", () => {
+  const sql = readFileSync(path.join(MIGRATIONS, WORKSPACE_CREATE), "utf8");
+  const rollback = readFileSync(path.join(ROLLBACKS, WORKSPACE_CREATE.replace(/\.sql$/, ".down.sql")), "utf8");
+  const stmts = normStatements(sql);
+  const fn = parseFunctions(sql).find((f) => f.name === "create_workspace");
+  const body = norm(fn?.body ?? "");
+
+  it("adds an optional city column of at most 60 chars to public.workspaces", () => {
+    const alter = stmts.find((s) => s.startsWith("alter table public.workspaces"));
+    expect(alter).toMatch(/add column if not exists city text\b/);
+    expect(alter).not.toMatch(/city text not null/);
+    expect(compact(alter!)).toContain("char_length(city)between 1 and 60");
+  });
+
+  it("create_workspace(p_name, p_city) returns uuid, security definer with an empty search_path", () => {
+    expect(fn).toBeDefined();
+    expect(fn!.returns).toBe("uuid");
+    expect(fn!.header).toMatch(/\(p_name text, p_city text default null\)/);
+    expect(fn!.header).toMatch(/\bsecurity definer\b/);
+    expect(fn!.header).toMatch(/set search_path = ''/);
+    expect(check7SearchPath(sql)).toEqual([]);
+  });
+
+  it("revokes from public and anon and grants execute to authenticated only", () => {
+    expect(stmts).toContain("revoke all on function public.create_workspace(text, text) from public, anon");
+    expect(stmts).toContain("grant execute on function public.create_workspace(text, text) to authenticated");
+    expect(check8FunctionGrants(sql)).toEqual([]);
+  });
+
+  it("fully qualifies tables, trims and validates the name, owner membership in the same function, 10-workspace limit", () => {
+    expect(body).toContain("auth.uid()");
+    expect(body).toMatch(/btrim\(coalesce\(p_name, ''\)\)/);
+    expect(body).toMatch(/char_length\(v_name\) < 1 or char_length\(v_name\) > 60/);
+    expect(body).toContain("insert into public.workspaces as w (name, city, created_by) values (v_name, v_city, v_uid)");
+    expect(body).toContain("insert into public.workspace_members as wm (workspace_id, user_id, role) values (v_ws, v_uid, 'owner')");
+    expect(body).toMatch(/if v_owned >= 10 then/);
+    expect(body).toContain("pg_advisory_xact_lock");
+    expect(body).not.toMatch(/\b(?:from|join|into) (?:workspaces|workspace_members)\b/);
+  });
+
+  it("adds no insert policy on workspaces or workspace_members", () => {
+    expect(check13NoMemberInsert(sql)).toEqual([]);
+  });
+
+  it("rollback drops the function and the city column with if exists", () => {
+    const down = deepStatements(rollback).map(norm);
+    expect(down).toContain("drop function if exists public.create_workspace(text, text)");
+    expect(down).toContain("alter table public.workspaces drop column if exists city");
+    expect(check9Rollback(sql, rollback)).toEqual([]);
+  });
+});

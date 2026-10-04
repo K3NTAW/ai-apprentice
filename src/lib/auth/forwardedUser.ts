@@ -9,7 +9,7 @@ import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 export const FORWARDED_USER_HEADER = "x-aa-verified-user";
 export const FORWARDED_USER_TTL_MS = 30_000;
 
-export type ForwardedUser = { id: string; email: string | null; email_confirmed_at: string | null };
+export type ForwardedUser = { id: string; email: string | null; email_confirmed_at: string | null; full_name?: string | null };
 
 function key(): Buffer | null {
   const secret = process.env.FORWARDED_USER_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -32,7 +32,7 @@ export function warnIfNoForwardedUserKey(): void {
 const sign = (k: Buffer, payload: string) => createHmac("sha256", k).update(payload).digest("base64url");
 
 export function signForwardedUser(
-  user: { id: string; email?: string | null; email_confirmed_at?: string | null },
+  user: { id: string; email?: string | null; email_confirmed_at?: string | null; user_metadata?: { full_name?: unknown } | null },
   now = Date.now(),
 ): string | null {
   const k = key();
@@ -40,10 +40,12 @@ export function signForwardedUser(
     warnIfNoForwardedUserKey();
     return null;
   }
+  const fullName = user.user_metadata?.full_name;
   const body: ForwardedUser & { exp: number } = {
     id: user.id,
     email: user.email ?? null,
     email_confirmed_at: user.email_confirmed_at ?? null,
+    ...(typeof fullName === "string" && fullName.trim() ? { full_name: fullName.trim().slice(0, 60) } : {}),
     exp: now + FORWARDED_USER_TTL_MS,
   };
   const payload = Buffer.from(JSON.stringify(body)).toString("base64url");
@@ -62,7 +64,9 @@ export function verifyForwardedUser(value: string | null | undefined, now = Date
   try {
     const body = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as ForwardedUser & { exp: number };
     if (typeof body.id !== "string" || !body.id || typeof body.exp !== "number" || body.exp < now) return null;
-    return { id: body.id, email: body.email ?? null, email_confirmed_at: body.email_confirmed_at ?? null };
+    const user: ForwardedUser = { id: body.id, email: body.email ?? null, email_confirmed_at: body.email_confirmed_at ?? null };
+    if (typeof body.full_name === "string" && body.full_name) user.full_name = body.full_name;
+    return user;
   } catch {
     return null;
   }

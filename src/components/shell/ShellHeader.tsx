@@ -9,8 +9,7 @@ import CommandPalette from "./CommandPalette";
 import HideInApp from "./HideInApp";
 import NavLink from "./NavLink";
 import SidebarFrame from "./SidebarFrame";
-import ThemeToggle from "./ThemeToggle";
-import ViewerStatus from "./ViewerStatus";
+import UserCard from "./UserCard";
 import WorkspaceSwitcher from "./WorkspaceSwitcher";
 import type { RecentSessions } from "./recent";
 
@@ -72,6 +71,8 @@ export type ShellUser = {
   mode: "local" | "supabase";
   workspaceName: string | null;
   email: string | null;
+  /** user_metadata.full_name; the card falls back to the address local part. */
+  fullName?: string | null;
   role: Role | null;
   workspaceId?: string | null;
   memberships?: Membership[];
@@ -79,12 +80,6 @@ export type ShellUser = {
 
 /** Owners and experts capture; learners only learn. */
 export const canCapture = (role: Role | null): boolean => role === "owner" || role === "expert";
-
-const chevrons = (
-  <svg className="ui-ic" viewBox="0 0 24 24" style={{ width: 16, height: 16, color: "var(--fa)" }} aria-hidden="true">
-    <path d="m8 9 4-4 4 4M8 15l4 4 4-4" />
-  </svg>
-);
 
 function Logo() {
   return (
@@ -142,68 +137,6 @@ export function userInitials(email: string | null | undefined, fallback = "AA"):
   return (parts[0]?.slice(0, 2) || fallback).toUpperCase();
 }
 
-function UserMenu({ user, inApp }: { user: ShellUser | null; inApp?: boolean }) {
-  const name = user?.email ?? (user?.mode === "local" ? "Local user" : "Signed out");
-  const ini = userInitials(user?.email);
-  const status = <ViewerStatus inApp={inApp} />;
-  return (
-    <details className="relative md:w-full">
-      <summary
-        aria-label="Open user menu"
-        className="flex cursor-pointer list-none items-center gap-[10px] [&::-webkit-details-marker]:hidden md:w-full"
-        style={{ height: 52, padding: "0 10px", borderRadius: 999, border: "1px solid var(--ln)", background: "var(--s1)", color: "var(--tx)" }}
-      >
-        <span className="ui-av">{ini}</span>
-        <span className="hidden min-w-0 flex-1 flex-col md:flex md:group-data-[collapsed=true]:hidden">
-          <span className="truncate text-[13px] leading-[1.2]" style={{ fontWeight: 600 }}>
-            {name}
-          </span>
-          {status}
-        </span>
-        <span className="hidden md:inline-flex md:group-data-[collapsed=true]:hidden">{chevrons}</span>
-      </summary>
-      <div
-        role="menu"
-        aria-label="User menu"
-        className="ui-card absolute top-[calc(100%+8px)] right-0 z-20 md:top-auto md:right-auto md:bottom-0 md:left-[calc(100%+14px)]"
-        style={{ width: 260, padding: 8, boxShadow: "var(--sh)", background: "var(--s1)", borderColor: "var(--ln2)" }}
-      >
-        <div className="flex flex-col" style={{ padding: "8px 10px 10px" }}>
-          <span className="text-[13px]" style={{ fontWeight: 600 }}>
-            {user?.workspaceName ?? "AI Apprentice"}
-          </span>
-          {user?.email && <span className="text-xs break-all" style={{ color: "var(--mu)" }}>{user.email}</span>}
-          {user?.mode === "local" && <span className="text-xs" style={{ color: "var(--mu)" }}>local mode</span>}
-          {user?.role && <span className="text-xs" style={{ color: "var(--mu)" }}>{user.role}</span>}
-        </div>
-        <div style={{ height: 1, background: "var(--ln)", margin: "0 4px 6px" }} />
-        {user && (
-          <Link href="/workspace" role="menuitem" className="ui-mi" data-testid="menu-account">
-            <svg className="ui-ic" viewBox="0 0 24 24" aria-hidden="true">
-              <circle cx="12" cy="8" r="4" />
-              <path d="M4 20c0-3.5 3.6-6 8-6s8 2.5 8 6" />
-            </svg>
-            Account and workspace
-          </Link>
-        )}
-        <ThemeToggle />
-        {user?.mode === "supabase" && (
-          <>
-            <form action="/auth/signout" method="post">
-              <button type="submit" role="menuitem" className="ui-mi" style={{ color: "var(--mu)" }}>
-                <svg className="ui-ic" viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l5-5-5-5M15 12H4" />
-                </svg>
-                Sign out
-              </button>
-            </form>
-          </>
-        )}
-      </div>
-    </details>
-  );
-}
-
 export default function ShellHeader({
   user,
   recent = { kind: "ok", groups: [] },
@@ -211,9 +144,10 @@ export default function ShellHeader({
 }: {
   user: ShellUser | null;
   recent?: RecentSessions;
-  /** Tests only: forces the desktop-app detection. */
+  /** Tests only: forces the desktop-app detection (the user card no longer shows it). */
   inApp?: boolean;
 }) {
+  void inApp;
   return (
     <SidebarFrame viewer={user?.email ?? user?.mode ?? "anonymous"} logo={<Logo />}>
       {user && <CommandPalette />}
@@ -253,7 +187,7 @@ export default function ShellHeader({
       {user?.mode === "local" && <span className="ui-bdg ui-k-jc md:hidden">local mode</span>}
 
       <div className={user && canCapture(user.role) ? "" : "ml-auto md:ml-0"}>
-        <UserMenu user={user} inApp={inApp} />
+        <UserCard user={user} />
       </div>
     </SidebarFrame>
   );

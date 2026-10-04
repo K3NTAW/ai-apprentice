@@ -14,6 +14,8 @@ const state = vi.hoisted(() => ({
   cookie: undefined as string | undefined,
   results: {} as Record<string, Result>,
   queries: [] as { table: string; calls: Call[] }[],
+  rpc: {} as Record<string, Result>,
+  rpcCalls: [] as [string, unknown][],
 }));
 
 function fakeQuery(table: string) {
@@ -50,7 +52,10 @@ vi.mock("@/lib/supabase/server", () => ({
       },
     },
     from: (table: string) => fakeQuery(table),
-    rpc: async () => ({ data: [], error: null }),
+    rpc: async (fn: string, args?: unknown) => {
+      state.rpcCalls.push([fn, args]);
+      return state.rpc[fn] ?? { data: [], error: null };
+    },
   }),
 }));
 vi.mock("next/headers", () => ({
@@ -58,6 +63,7 @@ vi.mock("next/headers", () => ({
 }));
 
 import { POST as setActive } from "./active/route";
+import { POST as createWorkspace } from "./route";
 import { DELETE as revokeInvite, POST as createInvite } from "./invites/route";
 import { DELETE as removeMember } from "./members/route";
 
@@ -98,6 +104,8 @@ beforeEach(() => {
   state.cookie = undefined;
   state.results = {};
   state.queries = [];
+  state.rpc = {};
+  state.rpcCalls = [];
   asRole("owner");
 });
 
@@ -280,5 +288,63 @@ describe("POST /api/workspace/active", () => {
     expect(cookie).toMatch(/HttpOnly/i);
     expect(cookie).toMatch(/SameSite=lax/i);
     expect(cookie).toMatch(/Path=\//);
+  });
+});
+
+describe("POST /api/workspace", () => {
+  const NEW_WS = "55555555-5555-4555-8555-555555555555";
+
+  it("401 signed out, 400 local mode, without calling the RPC", async () => {
+    state.user = null;
+    expect(await read(await createWorkspace(jsonReq("POST", { name: "Treasury" })))).toEqual({ status: 401, body: { error: "unauthorized" } });
+    state.user = { id: USER, email: "owner@example.com" };
+    state.mode = "local";
+    expect(await read(await createWorkspace(jsonReq("POST", { name: "Treasury" })))).toEqual({ status: 400, body: { error: "local_mode" } });
+    expect(state.rpcCalls.filter(([fn]) => fn === "create_workspace")).toEqual([]);
+  });
+
+  it("400 invalid_input for a missing, blank or too long name, a too long city or bad JSON", async () => {
+    for (const body of [{}, { name: "" }, { name: "   " }, { name: "x".repeat(61) }, { name: "Ops", city: "x".repeat(61) }, { name: 5 }]) {
+      expect(await read(await createWorkspace(jsonReq("POST", body)))).toEqual({ status: 400, body: { error: "invalid_input" } });
+    }
+    expect(await read(await createWorkspace(jsonReq("POST", null, "{")))).toEqual({ status: 400, body: { error: "invalid_input" } });
+    expect(state.rpcCalls.filter(([fn]) => fn === "create_workspace")).toEqual([]);
+  });
+
+  it("creates via create_workspace with the trimmed name and city, 201, and makes it the active workspace", async () => {
+    asRole("learner");
+    state.rpc.create_workspace = { data: NEW_WS, error: null };
+    const res = await createWorkspace(jsonReq("POST", { name: "  Treasury ", city: " Zug " }));
+    expect(await read(res.clone())).toEqual({ status: 201, body: { id: NEW_WS } });
+    expect(state.rpcCalls).toContainEqual(["create_workspace", { p_name: "Treasury", p_city: "Zug" }]);
+    const cookie = res.headers.get("set-cookie") ?? "";
+    expect(cookie).toContain(`ws=${NEW_WS}`);
+    expect(cookie).toMatch(/HttpOnly/i);
+  });
+
+  it("an empty city is sent as null", async () => {
+    state.rpc.create_workspace = { data: NEW_WS, error: null };
+    await createWorkspace(jsonReq("POST", { name: "Treasury", city: "" }));
+    expect(state.rpcCalls).toContainEqual(["create_workspace", { p_name: "Treasury", p_city: null }]);
+  });
+
+  it("503 'workspace creation not available yet' while the RPC is missing, not a 500", async () => {
+    for (const code of ["PGRST202", "42883"]) {
+      state.rpc.create_workspace = { data: null, error: { code, message: "Could not find the function public.create_workspace" } };
+      const res = await createWorkspace(jsonReq("POST", { name: "Treasury" }));
+      expect(await read(res)).toEqual({ status: 503, body: { error: "unavailable", message: "workspace creation not available yet" } });
+      expect(res.headers.get("set-cookie")).toBeNull();
+    }
+  });
+
+  it("409 at the owned-workspace limit, 400 on the RPC's name check, 500 otherwise", async () => {
+    state.rpc.create_workspace = { data: null, error: { code: "53400", message: "limit" } };
+    expect(await read(await createWorkspace(jsonReq("POST", { name: "Treasury" })))).toEqual({ status: 409, body: { error: "workspace_limit" } });
+    state.rpc.create_workspace = { data: null, error: { code: "22023", message: "name" } };
+    expect((await createWorkspace(jsonReq("POST", { name: "Treasury" }))).status).toBe(400);
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    state.rpc.create_workspace = { data: null, error: { code: "XX000", message: "secret detail" } };
+    expect(await read(await createWorkspace(jsonReq("POST", { name: "Treasury" })))).toEqual({ status: 500, body: { error: "internal" } });
+    spy.mockRestore();
   });
 });
