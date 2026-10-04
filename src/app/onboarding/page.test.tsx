@@ -54,7 +54,7 @@ describe("/onboarding", () => {
   it("invite case: 'You joined <name> as <role>' instead of the created workspace", async () => {
     state.result = ctx({ role: "expert", workspaceId: "w2", workspaceName: "Finance", memberships: [{ workspaceId: "w2", name: "Finance", role: "expert" }] });
     const html = await render();
-    expect(html).toMatch(/You joined <strong>Finance<\/strong> as <!-- -->expert/);
+    expect(html.replace(/<!-- -->|<\/?strong>/g, "")).toContain("You joined Finance as expert");
     expect(html).not.toContain('data-testid="workspace-name"');
   });
 

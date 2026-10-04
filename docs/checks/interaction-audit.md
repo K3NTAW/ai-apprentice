@@ -354,6 +354,7 @@ dead (no action, fails the guard).
 | /shell | a | Account and workspace | Opens /workspace | works |
 | /shell | a | Agents | Opens /agents | works |
 | /shell | a | AI Apprentice home | Opens / | works |
+| /shell | a | Finish setup | Opens /onboarding | works |
 | /shell | a | Get the desktop app | Opens /capture#companion | works |
 | /shell | a | Learn | Opens /learn | works |
 | /shell | a | Start capture | Opens /capture | works |

@@ -179,7 +179,7 @@ describe("how training works", () => {
   it("the walkthrough starts at card 1 of 5", () => {
     const html = renderToStaticMarkup(<Walkthrough onStart={() => {}} onLater={() => {}} />);
     expect(html).toContain('data-card="1"');
-    expect(html).toContain("1<!-- --> of <!-- -->5");
+    expect(html.replace(/<!-- -->/g, "")).toContain("1 of 5");
   });
 
   it("'Start your first training' marks the walkthrough done and goes to Capture with the agent", async () => {

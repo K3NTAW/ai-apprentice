@@ -2,7 +2,7 @@
 // Step 2 Desktop permissions. In the desktop app: live rows from the bridge 'status' events, 'Grant' opens the System
 // Settings pane (window.apprentice.openPermissionSettings), 'Restart app' when the app accepts window('relaunch').
 // In the browser: 'Get the desktop app' with the download links (DesktopPanel GetDesktopApp).
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { GetDesktopApp } from "@/components/capture/DesktopPanel";
 import { Badge, buttonClass } from "@/components/ui";
 import {
@@ -18,6 +18,7 @@ import {
 } from "@/lib/onboarding/permissions";
 
 const muted = { color: "var(--mu)" } as const;
+const noSubscribe = () => () => {};
 
 export function PermissionsView({
   rows,
@@ -72,14 +73,11 @@ export function PermissionsView({
 }
 
 export default function PermissionsStep({ bridge: injected }: { bridge?: DesktopBridge | null }) {
-  // undefined until mounted: the server render cannot know whether this is the desktop app.
-  const [bridge, setBridge] = useState<DesktopBridge | null | undefined>(injected);
+  // undefined on the server: it cannot know whether this is the desktop app. window.apprentice never changes.
+  const detected = useSyncExternalStore(noSubscribe, () => desktopBridge(), () => undefined);
+  const bridge = injected !== undefined ? injected : detected;
   const [status, setStatus] = useState<unknown>(null);
-  useEffect(() => {
-    const b = injected === undefined ? desktopBridge() : injected;
-    setBridge(b);
-    return b ? b.on("status", setStatus) : undefined;
-  }, [injected]);
+  useEffect(() => (bridge ? bridge.on("status", setStatus) : undefined), [bridge]);
 
   if (bridge === undefined) return <p style={muted}>Checking for the desktop app…</p>;
   if (!bridge)
