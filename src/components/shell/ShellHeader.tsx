@@ -86,7 +86,7 @@ export const canCapture = (role: Role | null): boolean => role === "owner" || ro
 
 function Logo() {
   return (
-    <Link href="/" aria-label="AI Apprentice home" className="flex items-center gap-[10px] no-underline" style={{ color: "var(--tx)", fontWeight: 600, fontSize: 15, letterSpacing: "-0.01em" }}>
+    <Link href="/agents" aria-label="AI Apprentice home" className="flex items-center gap-[10px] no-underline" style={{ color: "var(--tx)", fontWeight: 600, fontSize: 15, letterSpacing: "-0.01em" }}>
       <svg width="26" height="26" viewBox="0 0 28 28" aria-hidden="true" style={{ color: "var(--tx)" }}>
         <rect width="28" height="28" rx="9" fill="currentColor" />
         <circle cx="11" cy="14" r="5" style={{ fill: "var(--bg)" }} />

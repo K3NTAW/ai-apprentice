@@ -42,6 +42,8 @@ function bringBack(w: WindowSnapshot): WindowOp[] {
 }
 
 export const MAIN_WINDOW = { width: 1280, height: 820, minWidth: 960, minHeight: 640 } as const;
+/** The main window's session: on disk ('persist:'), so the sign-in cookies survive a relaunch (T-0255). */
+export const MAIN_PARTITION = "persist:apprentice";
 export type Bounds = { x: number; y: number; width: number; height: number };
 export type SavedBounds = { width: number; height: number; x?: number; y?: number };
 /** Part of the window's top edge that must sit on a display, so it can be grabbed. */

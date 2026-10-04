@@ -5,7 +5,7 @@
 // Key: FORWARDED_USER_SECRET, else derived from SUPABASE_SERVICE_ROLE_KEY (set on Vercel anyway). With neither, one
 // warning on the first request and nothing is forwarded: the render calls getUser itself (two getUser per page request).
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
-import { finishSetupVisible, stateFromUser, type OnboardingState } from "@/lib/onboarding/state";
+import { parseState, stateFromUser, type OnboardingState } from "@/lib/onboarding/state";
 
 export const FORWARDED_USER_HEADER = "x-aa-verified-user";
 export const FORWARDED_USER_TTL_MS = 30_000;
@@ -15,7 +15,7 @@ export type ForwardedUser = {
   email: string | null;
   email_confirmed_at: string | null;
   full_name?: string | null;
-  /** Onboarding state (T-0211), only while 'Finish setup' is shown; absent means completed. */
+  /** Onboarding state (T-0211) from user_metadata, always forwarded (T-0255) so the render sees a finished user as finished. */
   onboarding?: OnboardingState;
 };
 
@@ -61,7 +61,7 @@ export function signForwardedUser(
     email: user.email ?? null,
     email_confirmed_at: user.email_confirmed_at ?? null,
     ...(typeof fullName === "string" && fullName.trim() ? { full_name: fullName.trim().slice(0, 60) } : {}),
-    ...(finishSetupVisible(onboarding) ? { onboarding } : {}),
+    onboarding,
     exp: now + FORWARDED_USER_TTL_MS,
   };
   const payload = Buffer.from(JSON.stringify(body)).toString("base64url");
@@ -82,6 +82,7 @@ export function verifyForwardedUser(value: string | null | undefined, now = Date
     if (typeof body.id !== "string" || !body.id || typeof body.exp !== "number" || body.exp < now) return null;
     const user: ForwardedUser = { id: body.id, email: body.email ?? null, email_confirmed_at: body.email_confirmed_at ?? null };
     if (typeof body.full_name === "string" && body.full_name) user.full_name = body.full_name;
+    if (body.onboarding && typeof body.onboarding === "object") user.onboarding = parseState(body.onboarding);
     return user;
   } catch {
     return null;

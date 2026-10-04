@@ -5,6 +5,7 @@
 // name edited inline and saved to user_metadata.full_name), Theme (dark / light / system), Sign out.
 import Link from "next/link";
 import { useId, useState, type FormEvent } from "react";
+import { finishSetupHref } from "@/lib/onboarding/state";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { DISPLAY_NAME_MAX, displayName, nameInitials, saveDisplayName } from "./menuActions";
 import { Layer } from "@/components/ui/Layer";
@@ -153,7 +154,7 @@ export default function UserCard({ user }: { user: UserCardUser | null }) {
             </Link>
           )}
           {user?.onboardingOpen && (
-            <Link href="/onboarding" role="menuitem" className="ui-mi" data-testid="menu-finish-setup">
+            <Link href={finishSetupHref} role="menuitem" className="ui-mi" data-testid="menu-finish-setup">
               <svg className="ui-ic" viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M5 12l4 4L19 6" />
               </svg>

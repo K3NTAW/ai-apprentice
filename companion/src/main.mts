@@ -79,7 +79,7 @@ import {
 import { startServer, type CompanionServer } from "./server.mjs";
 import { installLifecycle, mainCloseAction } from "./lifecycle.mjs";
 import { MAC_SETTINGS_URLS } from "./permissionSettings.mjs";
-import { isWindowAction, MAIN_WINDOW, planWindowAction, restoreWindowBounds, serializeWindowBounds, type WindowAction } from "./windowActions.mjs";
+import { isWindowAction, MAIN_PARTITION, MAIN_WINDOW, planWindowAction, restoreWindowBounds, serializeWindowBounds, type WindowAction } from "./windowActions.mjs";
 
 const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -983,6 +983,8 @@ function createMainWindow(): BrowserWindow {
     backgroundColor: "#0b0b0c",
     webPreferences: {
       preload: path.join(here, "preloadApp.cjs"),
+      // Persistent session: the sign-in cookies survive quitting the app.
+      partition: MAIN_PARTITION,
       contextIsolation: true,
       sandbox: true,
       nodeIntegration: false,
@@ -1067,7 +1069,11 @@ const mainVisible = () => !!mainWin && !mainWin.isDestroyed() && mainWin.isVisib
 
 /** Microphone and display-capture only for the main window's allowlisted page; screen frames without a picker. */
 function installSessionGuards(): void {
-  const ses = electronSession.defaultSession;
+  // The main window lives in its own persistent partition; the other windows use the default session.
+  for (const ses of [electronSession.defaultSession, electronSession.fromPartition(MAIN_PARTITION)]) installGuards(ses);
+}
+
+function installGuards(ses: Electron.Session): void {
   ses.setPermissionRequestHandler((wc, permission, callback, details) => {
     const d = details as { requestingUrl?: string; isMainFrame?: boolean; mediaTypes?: string[] };
     callback(

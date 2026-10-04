@@ -11,6 +11,8 @@
 // not call getUser again.
 // Server-Timing on pages: ctx-auth (the proxy getUser, the only one per page), db (store time in the proxy: none,
 // so 0; the render's memberships read is logged with PERF_LOG=1) and total (proxy start to response).
+// Refreshed session cookies go onto every page response, the /login redirect included, always with a max-age
+// (lib/supabase/cookieOptions), so the session survives a browser restart.
 // An Auth outage is not distinguished from a missing session: getUser throwing or returning an error fails closed
 // (redirect to /login).
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
@@ -18,6 +20,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { FORWARDED_USER_HEADER, signForwardedUser } from "@/lib/auth/forwardedUser";
 import { safeNext } from "@/lib/auth/redirect";
 
+import { persistentCookie, sessionCookieOptions } from "@/lib/supabase/cookieOptions";
 import { appMode, publicSupabaseEnv } from "@/lib/supabase/env";
 
 function segments(pathname: string): string[] {
@@ -75,6 +78,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   let pendingCookies: PendingCookie[] = [];
   let pendingHeaders: Record<string, string> = {};
   const supabase = createServerClient(env.url, env.anonKey, {
+    cookieOptions: sessionCookieOptions(),
     cookies: {
       getAll() {
         return request.cookies.getAll();
@@ -104,7 +108,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     signedIn || isPublic
       ? pass()
       : NextResponse.redirect(new URL(`/login?next=${encodeURIComponent(safeNext(pathname + search))}`, url.origin));
-  for (const { name, value, options } of pendingCookies) out.cookies.set(name, value, options);
+  for (const { name, value, options } of pendingCookies) out.cookies.set(name, value, persistentCookie(value, options));
   for (const [k, v] of Object.entries(pendingHeaders)) out.headers.set(k, v);
   out.headers.append("Server-Timing", serverTiming({ "ctx-auth": ctxAuth, db: 0, total: performance.now() - start }));
   return out;

@@ -38,4 +38,13 @@ describe("ShellHeader", () => {
     expect(local).toContain("local mode");
     expect(local).not.toContain("Sign out");
   });
+
+  it("the logo links to the dashboard (/agents), never '/' (T-0255)", () => {
+    for (const user of [base, { ...base, mode: "local" as const }, null]) {
+      const html = render(user);
+      const logo = html.match(/<a [^>]*aria-label="AI Apprentice home"[^>]*>/)?.[0] ?? "";
+      expect(logo).toContain('href="/agents"');
+      expect(html).not.toContain('href="/"');
+    }
+  });
 });

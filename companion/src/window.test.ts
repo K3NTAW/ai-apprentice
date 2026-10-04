@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { appAllowlist, resolveAppUrl, validateAppUrl, wsEnabled } from "./appConfig.mjs";
 import { panelBounds, PANEL_SIZE } from "./panel.mjs";
-import { isWindowAction, MAIN_WINDOW, planWindowAction, restoreWindowBounds, serializeWindowBounds, type WindowSnapshot } from "./windowActions.mjs";
+import { isWindowAction, MAIN_PARTITION, MAIN_WINDOW, planWindowAction, restoreWindowBounds, serializeWindowBounds, type WindowSnapshot } from "./windowActions.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const open: WindowSnapshot = { visible: true, minimized: false, fullscreen: false };
@@ -135,5 +135,15 @@ describe("app config and the WebSocket switch", () => {
       const body = src.slice(start, src.indexOf("\n}\n", start));
       expect(body, fn).toContain("setContentProtection(true)");
     }
+  });
+});
+
+describe("main window session (T-0255)", () => {
+  it("uses a persistent partition so the sign-in survives a relaunch, with the permission guards on it", () => {
+    expect(MAIN_PARTITION).toMatch(/^persist:/);
+    const src = fs.readFileSync(path.join(here, "main.mts"), "utf8");
+    const main = src.slice(src.indexOf('preload: path.join(here, "preloadApp.cjs")'));
+    expect(main.slice(0, 300)).toContain("partition: MAIN_PARTITION");
+    expect(src).toContain("electronSession.fromPartition(MAIN_PARTITION)");
   });
 });

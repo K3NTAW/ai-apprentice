@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { persistentCookie, sessionCookieOptions } from "./cookieOptions";
 import { publicSupabaseEnv } from "./env";
 
 // Server client per https://supabase.com/docs/guides/auth/server-side/nextjs
@@ -10,6 +11,7 @@ export async function createSupabaseServerClient() {
   if (!env) throw new Error("supabase_not_configured");
   const cookieStore = await cookies();
   return createServerClient(env.url, env.anonKey, {
+    cookieOptions: sessionCookieOptions(),
     cookies: {
       getAll() {
         return cookieStore.getAll();
@@ -17,7 +19,7 @@ export async function createSupabaseServerClient() {
       setAll(cookiesToSet) {
         try {
           for (const { name, value, options } of cookiesToSet) {
-            cookieStore.set(name, value, options);
+            cookieStore.set(name, value, persistentCookie(value, options));
           }
         } catch {
           // Server Components cannot set cookies; proxy.ts refreshes the session instead.

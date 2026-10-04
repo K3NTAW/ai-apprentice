@@ -341,7 +341,7 @@ dead (no action, fails the guard).
 | /processes/preview | button | Save step | Runs 'Save step' in place | works |
 | /shell (signed in) | a | Account and workspace | Opens /workspace | works |
 | /shell (signed in) | a | Agents | Opens /agents | works |
-| /shell (signed in) | a | AI Apprentice home | Opens / | works |
+| /shell (signed in) | a | AI Apprentice home | Opens /agents | works |
 | /shell (signed in) | a | Get the desktop app | Opens /capture#companion | works |
 | /shell (signed in) | a | Learn | Opens /learn | works |
 | /shell (signed in) | a | Start capture | Opens /capture | works |
@@ -364,7 +364,7 @@ dead (no action, fails the guard).
 | /shell (signed in) | button | System | Runs 'System' in place | works |
 | /shell | a | Account and workspace | Opens /workspace | works |
 | /shell | a | Agents | Opens /agents | works |
-| /shell | a | AI Apprentice home | Opens / | works |
+| /shell | a | AI Apprentice home | Opens /agents | works |
 | /shell | a | Finish setup | Opens /onboarding | works |
 | /shell | a | Get the desktop app | Opens /capture#companion | works |
 | /shell | a | Learn | Opens /learn | works |

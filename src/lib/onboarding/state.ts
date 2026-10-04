@@ -82,8 +82,26 @@ export function resumeStep(s: OnboardingState): OnboardingStep {
 export const onboardingHref = (next?: string | null) =>
   next && next !== "/" ? `${ONBOARDING_PATH}?next=${encodeURIComponent(next)}` : ONBOARDING_PATH;
 
+/** Where a finished user goes instead of /onboarding: the next path, or /agents when that is onboarding itself. */
+const leaveOnboarding = (next: string) => (next.startsWith(ONBOARDING_PATH) ? "/agents" : next);
+
 /** After sign-in (magic-link callback, password bootstrap): /onboarding while not completed, else the safe next. */
 export function afterSignIn(user: MetaUser | null | undefined, next: string, enabled = onboardingEnabled()): string {
-  if (!enabled || !user || next.startsWith(ONBOARDING_PATH)) return next;
-  return isComplete(stateFromUser(user)) ? next : onboardingHref(next);
+  if (!enabled || !user) return next;
+  if (isComplete(stateFromUser(user))) return leaveOnboarding(next);
+  return next.startsWith(ONBOARDING_PATH) ? next : onboardingHref(next);
+}
+
+/** 'Finish setup' in the user menu opens /onboarding with this flag; without it a finished user never sees the flow. */
+export const RESUME_PARAM = "resume";
+export const finishSetupHref = `${ONBOARDING_PATH}?${RESUME_PARAM}=1`;
+
+/**
+ * /onboarding for a user whose stored (server side) state is complete (T-0255): where to send them instead, or null
+ * to show the flow. Only an explicit resume ('Finish setup', or a ?step= link) with a step still skipped shows it again.
+ */
+export function finishedRedirect(s: OnboardingState, next: string, explicit: boolean): string | null {
+  if (!isComplete(s)) return null;
+  if (explicit && finishSetupVisible(s)) return null;
+  return leaveOnboarding(next);
 }
