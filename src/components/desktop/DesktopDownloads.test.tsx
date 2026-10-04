@@ -15,8 +15,8 @@ describe("Get the desktop app", () => {
     expect(html).toContain(`href="${X64}" rel="noreferrer" class="ui-btn ui-bs ui-bsm mt-auto self-start"><svg class="ui-ic"`);
     expect(html).toContain("</svg>Download for macOS (Apple silicon)<");
     expect(html).toContain("</svg>Download for macOS (Intel)<");
-    expect(html).toContain("Version 0.1.0 · 130 MB");
-    expect(html).toContain("Version 0.1.0 · 134 MB");
+    expect(html).toContain("Version 0.1.0 · 145 MB");
+    expect(html).toContain("Version 0.1.0 · 153 MB");
     expect(html).toContain(`href="${DESKTOP_RELEASE.page}"`);
   });
 
@@ -39,11 +39,25 @@ describe("Get the desktop app", () => {
     expect(html).not.toContain("Download for Windows");
   });
 
-  it("shows the unsigned-app install steps", () => {
+  it("shows the Gatekeeper install steps in order with the copyable xattr line, and the which-build hint", () => {
     const html = renderToStaticMarkup(<DesktopDownloads />);
-    for (const s of ["drag AI Apprentice to Applications", "right-click AI Apprentice in Applications and choose Open", "Open Anyway", "Sign in.", "Grant Screen Recording, Microphone and Accessibility, then restart the app once."]) {
-      expect(html).toContain(s);
+    const steps = html.slice(html.indexOf("data-install-steps"));
+    const order = [
+      "drag AI Apprentice to Applications",
+      "macOS says it cannot verify the app. Click Done, open System Settings &gt; Privacy &amp; Security and click Open Anyway. Or right-click the app and choose Open.",
+      "If macOS says the app is damaged, run this once in Terminal:",
+      'select-all',
+      "xattr -cr &quot;/Applications/AI Apprentice.app&quot;</code>",
+      "Sign in.",
+      "Grant Screen Recording, Microphone and Accessibility, then restart the app once.",
+    ];
+    let at = -1;
+    for (const s of order) {
+      const i = steps.indexOf(s, at + 1);
+      expect(i, s).toBeGreaterThan(at);
+      at = i;
     }
+    expect(html).toContain("Which build: Apple menu &gt; About This Mac: Chip = Apple M… -&gt; Apple Silicon; Processor = Intel -&gt; Intel");
   });
 
   it("the sidebar 'Get the desktop app' opens this page", () => {

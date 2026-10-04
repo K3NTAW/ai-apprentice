@@ -22,8 +22,8 @@ describe("download page logic", () => {
     const html = renderToStaticMarkup(<DownloadList items={downloads()} version="0.1.0" />);
     expect(html).toMatch(new RegExp(`class="ui-btn ui-bp ui-bl" href="${esc(ARM)}">Download for macOS \\(Apple silicon\\)<`));
     expect(html).toMatch(new RegExp(`class="ui-btn ui-bs ui-bl" href="${esc(X64)}">Download for macOS \\(Intel\\)<`));
-    expect(html).toContain("Version 0.1.0 · 130 MB");
-    expect(html).toContain("Version 0.1.0 · 134 MB");
+    expect(html).toContain("Version 0.1.0 · 145 MB");
+    expect(html).toContain("Version 0.1.0 · 153 MB");
     expect(html.match(/<a /g)).toHaveLength(2);
     const win = html.slice(html.indexOf('data-download="win"'));
     expect(win).toContain("Coming soon");
@@ -31,7 +31,7 @@ describe("download page logic", () => {
     expect(html).not.toContain("Download for Windows");
   });
 
-  it("the page renders all three builds, the release link and the unsigned-app install steps", async () => {
+  it("the page renders all three builds, the release link, the which-build hint and the Gatekeeper install steps", async () => {
     const { default: DownloadPage } = await import("@/app/download/page");
     const html = renderToStaticMarkup(<DownloadPage />);
     expect(html).toContain('data-screen="download"');
@@ -40,9 +40,23 @@ describe("download page logic", () => {
     expect(html).toContain(`href="${X64}"`);
     expect(html).toContain(`href="${DESKTOP_RELEASE.page}"`);
     expect(html).toContain("data-install-steps");
-    for (const s of ["drag AI Apprentice to Applications", "right-click AI Apprentice in Applications and choose Open", "Privacy &amp; Security and click Open Anyway", "Sign in.", "Grant Screen Recording, Microphone and Accessibility, then restart the app once."]) {
-      expect(html).toContain(s);
+    const steps = html.slice(html.indexOf("data-install-steps"));
+    const order = [
+      "drag AI Apprentice to Applications",
+      "macOS says it cannot verify the app. Click Done, open System Settings &gt; Privacy &amp; Security and click Open Anyway. Or right-click the app and choose Open.",
+      "If macOS says the app is damaged, run this once in Terminal:",
+      'select-all',
+      "xattr -cr &quot;/Applications/AI Apprentice.app&quot;</code>",
+      "Sign in.",
+      "Grant Screen Recording, Microphone and Accessibility, then restart the app once.",
+    ];
+    let at = -1;
+    for (const s of order) {
+      const i = steps.indexOf(s, at + 1);
+      expect(i, s).toBeGreaterThan(at);
+      at = i;
     }
+    expect(html).toContain("Which build: Apple menu &gt; About This Mac: Chip = Apple M… -&gt; Apple Silicon; Processor = Intel -&gt; Intel");
     expect(html.match(/<li>/g)).toHaveLength(INSTALL_STEPS.length);
     expect(html).not.toContain("Download for Windows");
   });

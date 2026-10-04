@@ -1,7 +1,7 @@
 // The app's 'Get the desktop app' page body: the macOS builds from the GitHub release (src/lib/downloads.ts),
-// Windows 'Coming soon' without a link, and the first-launch steps for the unsigned build.
+// Windows 'Coming soon' without a link, a which-build hint and the first-launch steps for the non-notarized build.
 // Download buttons are small and self-start so the flex-col card does not stretch them to its width.
-import { DESKTOP_RELEASE, INSTALL_STEPS } from "@/lib/downloads";
+import { DESKTOP_RELEASE, INSTALL_STEPS, WHICH_BUILD } from "@/lib/downloads";
 
 const BUILDS = [
   { id: "mac-arm64", label: "Apple silicon", detail: "M1 and later · Recommended", build: DESKTOP_RELEASE.macArm64, cls: "ui-bp" },
@@ -18,6 +18,9 @@ export default function DesktopDownloads() {
           Training and teaching run in the AI Apprentice desktop app: it sees your real apps, docks the agent at the side of
           the screen and shares the screen without a picker. Version {DESKTOP_RELEASE.version},{" "}
           <a className="underline" href={DESKTOP_RELEASE.page} rel="noreferrer">release notes</a>.
+        </p>
+        <p className="text-[13px]" style={{ color: "var(--mu)" }} data-which-build="">
+          Which build: {WHICH_BUILD}
         </p>
       </div>
       <div className="grid [grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr))]" style={{ gap: 12 }}>
@@ -50,10 +53,17 @@ export default function DesktopDownloads() {
       </div>
       <section className="ui-card flex flex-col" style={{ padding: 22, gap: 10 }} data-install-steps="">
         <h2 className="ui-t3">Install</h2>
-        <p className="text-[13px]" style={{ color: "var(--mu)" }}>The build is not signed by Apple yet, so macOS asks once before the first launch.</p>
+        <p className="text-[13px]" style={{ color: "var(--mu)" }}>The build is not notarized by Apple yet, so macOS asks once before the first launch.</p>
         <ol className="flex list-decimal flex-col pl-5 text-[13px]" style={{ gap: 6 }}>
           {INSTALL_STEPS.map((s) => (
-            <li key={s}>{s}</li>
+            <li key={s.text}>
+              {s.text}
+              {s.code && (
+                <code className="mt-1 block select-all rounded px-2 py-1 font-mono text-[12px]" style={{ background: "var(--s2)" }}>
+                  {s.code}
+                </code>
+              )}
+            </li>
           ))}
         </ol>
       </section>
