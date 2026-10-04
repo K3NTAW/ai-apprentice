@@ -58,7 +58,7 @@ describe("openPermissionSettings", () => {
   it("Windows: ms-settings:privacy-microphone, 'not needed' for the rest", async () => {
     const mic = apis("win32");
     expect(await openPermissionSettings("microphone", mic.a)).toEqual({ ok: true, opened: "ms-settings:privacy-microphone" });
-    expect(mic.calls).toEqual(["open:ms-settings:privacy-microphone"]);
+    expect(mic.calls).toEqual(["open:ms-settings:privacy-microphone", "refresh"]);
     for (const kind of ["screen", "accessibility", "input-monitoring"]) {
       const { a, calls } = apis("win32");
       expect(await openPermissionSettings(kind, a)).toEqual({ ok: false, reason: "not_needed" });

@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { Badge, buttonClass, Input } from "@/components/ui";
 import type { WorkspaceView } from "@/lib/auth/context";
+import { renameWorkspace } from "@/components/shell/menuActions";
+import { WORKSPACE_CITY_MAX, WORKSPACE_NAME_MAX } from "@/lib/workspace/create";
 import { confirmThen, REMOVE_MEMBER_CONFIRM, REVOKE_INVITE_CONFIRM } from "@/lib/confirm";
 
 const ERRORS: Record<string, string> = {
@@ -48,6 +50,9 @@ export default function WorkspaceClient({ view }: { view: WorkspaceView }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
+  const activeCity = view.memberships.find((m) => m.workspaceId === view.workspaceId)?.city ?? "";
+  const [wsName, setWsName] = useState(view.workspaceName);
+  const [wsCity, setWsCity] = useState(activeCity);
   const [inviteRole, setInviteRole] = useState<"expert" | "learner">("learner");
 
   async function run(path: string, method: string, body: unknown): Promise<boolean> {
@@ -63,6 +68,16 @@ export default function WorkspaceClient({ view }: { view: WorkspaceView }) {
   async function onInvite(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (await run("/api/workspace/invites", "POST", { email: inviteEmail, role: inviteRole })) setInviteEmail("");
+  }
+
+  async function onRename(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    const r = await renameWorkspace({ name: wsName, city: wsCity }, { fetch: (u, i) => window.fetch(u, i) });
+    setBusy(false);
+    setError(r.ok ? null : r.error);
+    if (r.ok) router.refresh();
   }
 
   // Workspace.dc.html: header, members table on the left, invite and pending cards on the right.
@@ -105,6 +120,25 @@ export default function WorkspaceClient({ view }: { view: WorkspaceView }) {
         <p role="alert" className="text-sm" style={{ color: "var(--rd)" }}>
           {error}
         </p>
+      )}
+
+      {view.isOwner && (
+        <form className="ui-card flex flex-col gap-3 p-5" onSubmit={(e) => void onRename(e)} noValidate data-testid="rename-workspace">
+          <h2 className="ui-t3">Workspace settings</h2>
+          <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
+            <div>
+              <label className="ui-lbl" htmlFor="ws-name">Name</label>
+              <input id="ws-name" className="ui-inp" required maxLength={WORKSPACE_NAME_MAX} value={wsName} onChange={(e) => setWsName(e.target.value)} />
+            </div>
+            <div>
+              <label className="ui-lbl" htmlFor="ws-city">City (optional)</label>
+              <input id="ws-city" className="ui-inp" maxLength={WORKSPACE_CITY_MAX} value={wsCity} onChange={(e) => setWsCity(e.target.value)} />
+            </div>
+          </div>
+          <div>
+            <button type="submit" disabled={busy} className={buttonClass("secondary", "sm")}>Save</button>
+          </div>
+        </form>
       )}
 
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.75fr)_minmax(0,1fr)]">

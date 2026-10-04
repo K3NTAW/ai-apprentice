@@ -41,8 +41,12 @@ export async function openPermissionSettings(kind: unknown, apis: PermissionSett
   if (apis.platform === "win32") {
     const url = WIN_SETTINGS_URLS[kind];
     if (!url) return { ok: false, reason: "not_needed" };
-    await apis.openExternal(url);
-    return { ok: true, opened: url };
+    try {
+      await apis.openExternal(url);
+      return { ok: true, opened: url };
+    } finally {
+      apis.refresh();
+    }
   }
   if (apis.platform !== "darwin") return { ok: false, reason: "unsupported_platform" };
   try {

@@ -188,7 +188,7 @@ let inputEventSeen = false;
 const permissionApis = {
   platform: process.platform,
   isTrustedAccessibilityClient: (prompt: boolean) => systemPreferences.isTrustedAccessibilityClient(prompt),
-  getMediaAccessStatus: (type: "screen") => systemPreferences.getMediaAccessStatus(type),
+  getMediaAccessStatus: (type: "screen" | "microphone") => systemPreferences.getMediaAccessStatus(type),
   hookEventSeen: () => inputEventSeen,
 };
 function permissions(): Permissions {

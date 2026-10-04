@@ -7,13 +7,23 @@ export type PermissionApis = {
   platform: NodeJS.Platform;
   /** systemPreferences.isTrustedAccessibilityClient(false): never prompts. */
   isTrustedAccessibilityClient(prompt: boolean): boolean;
-  /** systemPreferences.getMediaAccessStatus('screen'). */
-  getMediaAccessStatus(type: "screen"): string;
+  /** systemPreferences.getMediaAccessStatus('screen' | 'microphone'). */
+  getMediaAccessStatus(type: "screen" | "microphone"): string;
   /** Input Monitoring status where a query is available (IOHIDCheckAccess). Electron has none today. */
   inputMonitoringStatus?: () => InputMonitoringStatus;
   /** True once the input hook has delivered at least one event since launch. */
   hookEventSeen?: () => boolean;
 };
+
+/** Windows: true unless the OS reports denied. Other platforms cannot be queried. */
+function otherMicrophone(api: PermissionApis): boolean | "unknown" {
+  if (api.platform !== "win32") return "unknown";
+  try {
+    return api.getMediaAccessStatus("microphone") !== "denied";
+  } catch {
+    return true;
+  }
+}
 
 /**
  * input: Accessibility is trusted and Input Monitoring is granted. Where Input Monitoring cannot be
@@ -21,14 +31,15 @@ export type PermissionApis = {
  * launch. inputVerified: the input value is backed by a query result or an observed event.
  */
 export function readPermissions(api: PermissionApis): Permissions {
-  if (api.platform !== "darwin") return { input: true, screen: true, accessibility: true, inputVerified: true };
+  if (api.platform !== "darwin") return { input: true, screen: true, accessibility: true, inputVerified: true, microphone: otherMicrophone(api) };
   const accessibility = api.isTrustedAccessibilityClient(false) === true;
   const screen = api.getMediaAccessStatus("screen") === "granted";
+  const microphone = api.getMediaAccessStatus("microphone") === "granted";
   const monitoring = api.inputMonitoringStatus?.() ?? "unknown";
   const seen = api.hookEventSeen?.() === true;
   const inputVerified = monitoring !== "unknown" || seen;
   const monitoringOk = monitoring === "granted" || (monitoring === "unknown" && seen);
-  return { input: accessibility && monitoringOk, screen, accessibility, inputVerified };
+  return { input: accessibility && monitoringOk, screen, accessibility, inputVerified, microphone };
 }
 
 /** The hook needs Accessibility; it is started without a known Input Monitoring grant so the first event can verify it. */

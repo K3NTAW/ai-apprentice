@@ -1,6 +1,6 @@
 // Desktop permission rows for the onboarding step, from the bridge 'status' event (window.apprentice).
-// The status payload reports screen, accessibility and input (Input Monitoring). It has no microphone field: the
-// row reads permissions.microphone when a newer app sends it and shows 'unknown' otherwise (never a false check).
+// The status payload reports microphone (boolean or 'unknown'), screen, accessibility and input (Input Monitoring).
+// An older app sends no microphone field: the row shows 'unknown' then (never a false check).
 export const PERMISSION_KINDS = ["microphone", "screen", "accessibility", "input-monitoring"] as const;
 export type PermissionKind = (typeof PERMISSION_KINDS)[number];
 export type PermissionValue = "granted" | "missing" | "unknown";

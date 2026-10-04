@@ -30,6 +30,25 @@ export async function createWorkspace(input: { name: string; city: string }, dep
   return { ok: true };
 }
 
+/** PATCH /api/workspace (owner only). Validates first; the caller refreshes the page on ok. */
+export async function renameWorkspace(input: { name: string; city: string }, deps: Pick<MenuDeps, "fetch">): Promise<{ ok: true } | { ok: false; error: string }> {
+  const invalid = workspaceInputError(input);
+  if (invalid) return { ok: false, error: invalid };
+  const res = await deps
+    .fetch("/api/workspace", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: input.name.trim(), city: input.city.trim() || null }),
+    })
+    .catch(() => null);
+  if (!res) return { ok: false, error: "Could not reach the server." };
+  if (res.status === 403) return { ok: false, error: "Only owners can rename the workspace." };
+  if (res.status === 400) return { ok: false, error: "Check the name and city." };
+  if (res.status === 503) return { ok: false, error: "City is not available yet." };
+  if (!res.ok) return { ok: false, error: "Could not save the workspace." };
+  return { ok: true };
+}
+
 export const DISPLAY_NAME_MAX = WORKSPACE_NAME_MAX;
 
 type Auth = { updateUser(attrs: { data: { full_name: string } }): Promise<{ error: { message: string } | null }> };

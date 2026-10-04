@@ -19,7 +19,8 @@ const MAX_TITLE = 500;
 
 /** "not responding": the desktop app bridge sent no status event within 3 s (bridge transport only). */
 export type CompanionStatus = "not connected" | "connecting" | "pair" | "paired" | "origin blocked" | "not responding";
-export type CompanionPermissions = { input: boolean; screen: boolean; accessibility: boolean };
+/** microphone: optional, sent by newer apps; 'unknown' where the OS cannot say. Older apps omit it. */
+export type CompanionPermissions = { input: boolean; screen: boolean; accessibility: boolean; microphone?: boolean | "unknown" };
 export type CompanionStatusMsg = { type: "status"; version: string; permissions: CompanionPermissions };
 export type CompanionActivityMsg = {
   type: "activity";
@@ -166,7 +167,12 @@ export function parseCompanionMessage(raw: unknown): CompanionMessage | null {
       return {
         type: "status",
         version: m.version.slice(0, 32),
-        permissions: { input: p.input, screen: p.screen, accessibility: p.accessibility },
+        permissions: {
+          input: p.input,
+          screen: p.screen,
+          accessibility: p.accessibility,
+          ...(isBool(p.microphone) || p.microphone === "unknown" ? { microphone: p.microphone } : {}),
+        },
       };
     }
     case "activity":

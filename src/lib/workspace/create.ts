@@ -17,6 +17,18 @@ export const CreateWorkspaceInput = z.object({
 });
 export type CreateWorkspaceInput = z.infer<typeof CreateWorkspaceInput>;
 
+/** PATCH /api/workspace: the name is required, the city is left alone when absent and cleared when empty or null. */
+export const RenameWorkspaceInput = z.object({
+  name: z.string().trim().min(1).max(WORKSPACE_NAME_MAX),
+  city: z
+    .string()
+    .trim()
+    .max(WORKSPACE_CITY_MAX)
+    .nullish()
+    .transform((c) => (c === undefined ? undefined : c || null)),
+});
+export type RenameWorkspaceInput = z.infer<typeof RenameWorkspaceInput>;
+
 /** The dialog's field message, or null when the input is valid. */
 export function workspaceInputError(input: { name: string; city?: string | null }): string | null {
   const name = input.name.trim();

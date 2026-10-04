@@ -23,6 +23,7 @@ const LABEL: Record<CompanionStatus, string> = {
 };
 
 const PERMISSION_NAMES: Record<keyof CompanionPermissions, string> = {
+  microphone: "Microphone",
   input: "Input Monitoring",
   screen: "Screen Recording",
   accessibility: "Accessibility",
@@ -30,7 +31,7 @@ const PERMISSION_NAMES: Record<keyof CompanionPermissions, string> = {
 
 export function missingPermissions(p: CompanionPermissions | null): string[] {
   if (!p) return [];
-  return (Object.keys(PERMISSION_NAMES) as (keyof CompanionPermissions)[]).filter((k) => !p[k]).map((k) => PERMISSION_NAMES[k]);
+  return (Object.keys(PERMISSION_NAMES) as (keyof CompanionPermissions)[]).filter((k) => (k === "microphone" ? p[k] === false : !p[k])).map((k) => PERMISSION_NAMES[k]);
 }
 
 export default function CompanionCard({ status, permissions, onPair }: CompanionCardProps) {

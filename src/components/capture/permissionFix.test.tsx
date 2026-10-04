@@ -52,3 +52,21 @@ describe("permission Fix buttons", () => {
     expect(readFileSync(join(process.cwd(), "src/components/capture/DesktopPanel.tsx"), "utf8")).not.toMatch(/x-apple|ms-settings|location\s*=/);
   });
 });
+
+describe("microphone row in the desktop app card", () => {
+  const html = (microphone?: boolean | "unknown") =>
+    renderToStaticMarkup(<AppStatus companion={{ status: "paired", permissions: { screen: true, accessibility: true, input: true, ...(microphone === undefined ? {} : { microphone }) } } as never} />);
+
+  it("shows Allowed, Missing with Fix, or Unknown from the status", () => {
+    expect(html(true)).toMatch(/data-testid="permission-microphone"[\s\S]*Allowed/);
+    expect(html(false)).toMatch(/data-testid="permission-microphone"[\s\S]*Missing[\s\S]*Missing permissions: Microphone/);
+    const unknown = html("unknown");
+    expect(unknown).toMatch(/data-testid="permission-microphone"[\s\S]*Unknown/);
+    expect(unknown).not.toMatch(/Missing permissions/);
+  });
+
+  it("an older app without the field shows no microphone row and no missing warning", () => {
+    expect(html()).not.toMatch(/permission-microphone/);
+    expect(html()).toMatch(/All permissions granted/);
+  });
+});

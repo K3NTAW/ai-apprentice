@@ -18,14 +18,14 @@ describe("permission status from macOS permission APIs", () => {
     const monitor = new PermissionMonitor(() => readPermissions(api), (p) => sent.push(statusMessage("0.1.0", p)));
     monitor.start();
     expect(sent).toHaveLength(1);
-    expect(sent[0].permissions).toEqual({ input: true, screen: true, accessibility: true, inputVerified: true });
+    expect(sent[0].permissions).toEqual({ input: true, screen: true, accessibility: true, inputVerified: true, microphone: true });
     expect(api.isTrustedAccessibilityClient).toHaveBeenCalledWith(false);
     expect(api.getMediaAccessStatus).toHaveBeenCalledWith("screen");
   });
 
   it("input is false when Accessibility is not trusted", () => {
     const p = readPermissions(apis({ isTrustedAccessibilityClient: () => false, getMediaAccessStatus: () => "denied" }));
-    expect(p).toEqual({ input: false, screen: false, accessibility: false, inputVerified: false });
+    expect(p).toEqual({ input: false, screen: false, accessibility: false, inputVerified: false, microphone: false });
   });
 
   it("uses the Input Monitoring status where available", () => {
@@ -124,5 +124,44 @@ describe("permission re-check", () => {
       mode = next;
     }
     expect(r.changes.map((p) => p.screen)).toEqual([true, false]);
+  });
+});
+
+describe("microphone status", () => {
+  it("macOS: granted only when the OS says granted, read from the 'microphone' media type", () => {
+    const api = apis({ getMediaAccessStatus: vi.fn((t: string) => (t === "microphone" ? "not-determined" : "granted")) });
+    expect(readPermissions(api).microphone).toBe(false);
+    expect(api.getMediaAccessStatus).toHaveBeenCalledWith("microphone");
+    expect(readPermissions(apis()).microphone).toBe(true);
+  });
+
+  it("Windows: true unless the OS reports denied; other platforms are unknown", () => {
+    expect(readPermissions(apis({ platform: "win32", getMediaAccessStatus: () => "granted" })).microphone).toBe(true);
+    expect(readPermissions(apis({ platform: "win32", getMediaAccessStatus: () => "unknown" })).microphone).toBe(true);
+    expect(readPermissions(apis({ platform: "win32", getMediaAccessStatus: () => "denied" })).microphone).toBe(false);
+    expect(readPermissions(apis({ platform: "linux" })).microphone).toBe("unknown");
+  });
+
+  it("a change is emitted on the next check (activate, session start or after the settings action)", () => {
+    let mic = "denied";
+    const api = apis({ getMediaAccessStatus: (t: string) => (t === "microphone" ? mic : "granted") });
+    const sent: ReturnType<typeof statusMessage>[] = [];
+    const monitor = new PermissionMonitor(() => readPermissions(api), (p) => sent.push(statusMessage("0.1.0", p)));
+    monitor.start();
+    monitor.check();
+    expect(sent).toHaveLength(1);
+    expect(sent[0].permissions.microphone).toBe(false);
+    mic = "granted";
+    monitor.check();
+    expect(sent).toHaveLength(2);
+    expect(sent[1].permissions.microphone).toBe(true);
+  });
+
+  it("status carries microphone only when boolean or 'unknown'", () => {
+    const base = { input: true, screen: true, accessibility: true };
+    expect(statusMessage("1", { ...base, microphone: "unknown" }).permissions.microphone).toBe("unknown");
+    expect(statusMessage("1", { ...base, microphone: true }).permissions.microphone).toBe(true);
+    expect("microphone" in statusMessage("1", base).permissions).toBe(false);
+    expect("microphone" in statusMessage("1", { ...base, microphone: "yes" as never }).permissions).toBe(false);
   });
 });

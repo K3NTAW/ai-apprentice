@@ -42,6 +42,11 @@ function fakeQuery(table: string) {
   return q;
 }
 
+const revalidated = vi.hoisted(() => [] as string[]);
+vi.mock("next/cache", () => ({
+  revalidateTag: (tag: string) => void revalidated.push(tag),
+  unstable_cache: <T,>(fn: T) => fn,
+}));
 vi.mock("@/lib/supabase/env", () => ({ appMode: () => state.mode }));
 vi.mock("@/lib/supabase/server", () => ({
   createSupabaseServerClient: async () => ({
@@ -63,7 +68,7 @@ vi.mock("next/headers", () => ({
 }));
 
 import { POST as setActive } from "./active/route";
-import { POST as createWorkspace } from "./route";
+import { PATCH as renameWorkspace, POST as createWorkspace } from "./route";
 import { DELETE as revokeInvite, POST as createInvite } from "./invites/route";
 import { DELETE as removeMember } from "./members/route";
 
@@ -106,6 +111,7 @@ beforeEach(() => {
   state.queries = [];
   state.rpc = {};
   state.rpcCalls = [];
+  revalidated.length = 0;
   asRole("owner");
 });
 
@@ -346,5 +352,58 @@ describe("POST /api/workspace", () => {
     state.rpc.create_workspace = { data: null, error: { code: "XX000", message: "secret detail" } };
     expect(await read(await createWorkspace(jsonReq("POST", { name: "Treasury" })))).toEqual({ status: 500, body: { error: "internal" } });
     spy.mockRestore();
+  });
+});
+
+describe("PATCH /api/workspace", () => {
+  const update = () => state.queries.find((q) => q.table === "workspaces" && q.calls.some(([m]) => m === "update"));
+
+  it("owner renames name and city on the active workspace and revalidates the memberships cache", async () => {
+    state.results.workspaces = { data: [{ id: WS_A, name: "Finance Ops", city: "Zug" }], error: null };
+    const res = await renameWorkspace(jsonReq("PATCH", { name: "  Finance Ops ", city: " Zug ", id: WS_X }));
+    expect(await read(res)).toEqual({ status: 200, body: { id: WS_A, name: "Finance Ops", city: "Zug" } });
+    const q = update()!;
+    expect(q.calls).toContainEqual(["update", [{ name: "Finance Ops", city: "Zug" }]]);
+    expect(q.calls).toContainEqual(["eq", ["id", WS_A]]);
+    expect(revalidated).toContain(`user:${USER}:memberships`);
+  });
+
+  it("an empty city clears it, an absent city is left alone", async () => {
+    state.results.workspaces = { data: [{ id: WS_A }], error: null };
+    await renameWorkspace(jsonReq("PATCH", { name: "A", city: "" }));
+    expect(update()!.calls).toContainEqual(["update", [{ name: "A", city: null }]]);
+    state.queries = [];
+    await renameWorkspace(jsonReq("PATCH", { name: "A" }));
+    expect(update()!.calls).toContainEqual(["update", [{ name: "A" }]]);
+  });
+
+  it("403 for an expert and a learner, nothing updated or revalidated", async () => {
+    for (const role of ["expert", "learner"] as const) {
+      asRole(role);
+      expect(await read(await renameWorkspace(jsonReq("PATCH", { name: "A" })))).toEqual({ status: 403, body: { error: "forbidden" } });
+    }
+    expect(update()).toBeUndefined();
+    expect(revalidated).toEqual([]);
+  });
+
+  it("400 for an empty, blank or too long name, a too long city or invalid JSON", async () => {
+    for (const body of [{ name: "" }, { name: "   " }, { name: "a".repeat(61) }, { name: "A", city: "c".repeat(61) }, {}, { name: 5 }]) {
+      expect(await read(await renameWorkspace(jsonReq("PATCH", body)))).toEqual({ status: 400, body: { error: "invalid_input" } });
+    }
+    expect(await read(await renameWorkspace(jsonReq("PATCH", null, "{")))).toEqual({ status: 400, body: { error: "invalid_input" } });
+    expect(update()).toBeUndefined();
+    expect(revalidated).toEqual([]);
+  });
+
+  it("401 signed out, 400 local_mode, 404 when the policy updates no row", async () => {
+    state.user = null;
+    expect((await renameWorkspace(jsonReq("PATCH", { name: "A" }))).status).toBe(401);
+    state.user = { id: USER, email: "o@example.com" };
+    state.mode = "local";
+    expect(await read(await renameWorkspace(jsonReq("PATCH", { name: "A" })))).toEqual({ status: 400, body: { error: "local_mode" } });
+    state.mode = "supabase";
+    state.results.workspaces = { data: [], error: null };
+    expect((await renameWorkspace(jsonReq("PATCH", { name: "A" }))).status).toBe(404);
+    expect(revalidated).toEqual([]);
   });
 });

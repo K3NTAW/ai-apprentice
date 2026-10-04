@@ -28,6 +28,7 @@ export function appStatusLabel(status: CompanionCardProps["status"]): string {
 }
 
 const PERMISSION_ROWS: [keyof NonNullable<CompanionCardProps["permissions"]>, string, string?][] = [
+  ["microphone", "Microphone", "Without it the agent cannot hear your answers"],
   ["screen", "Screen Recording"],
   ["accessibility", "Accessibility", "Without it the agent cannot tell which field you typed in"],
   ["input", "Input Monitoring", "Without it shortcuts and typing pauses are not seen"],
@@ -96,7 +97,11 @@ export function AppStatus({ companion }: { companion: CompanionCardProps }) {
       {companion.permissions && (
         <div className="flex flex-col" style={{ borderTop: "1px solid var(--ln)" }}>
           {PERMISSION_ROWS.map(([key, name, why], i) => {
-            const ok = companion.permissions![key];
+            const value = companion.permissions![key];
+            // An older app sends no microphone field and the OS may not say: neither is shown as a grant or a miss.
+            if (key === "microphone" && value === undefined) return null;
+            const unknown = value === "unknown";
+            const ok = value === true;
             return (
               <div
                 key={key}
@@ -106,7 +111,7 @@ export function AppStatus({ companion }: { companion: CompanionCardProps }) {
               >
                 <span className="text-[13px]">
                   {name}
-                  {!ok && why && (
+                  {!ok && !unknown && why && (
                     <span className="block text-xs" style={{ color: "var(--fa)" }}>
                       {why}
                     </span>
@@ -114,6 +119,8 @@ export function AppStatus({ companion }: { companion: CompanionCardProps }) {
                 </span>
                 {ok ? (
                   <span className="ui-bdg ui-k-ok">Allowed</span>
+                ) : unknown ? (
+                  <span className="ui-bdg ui-k-pend">Unknown</span>
                 ) : (
                   <span className="flex items-center" style={{ gap: 8 }}>
                     <span className="ui-bdg ui-k-rd">Missing</span>

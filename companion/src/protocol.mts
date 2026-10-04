@@ -38,6 +38,8 @@ export type Permissions = {
   accessibility: boolean;
   /** Optional extension: true when 'input' is backed by an Input Monitoring query or an observed hook event. */
   inputVerified?: boolean;
+  /** Optional extension: microphone access from the OS; 'unknown' where it cannot be read. Older pages ignore it. */
+  microphone?: boolean | "unknown";
 };
 
 export type StatusMessage = {
@@ -284,6 +286,7 @@ export function statusMessage(version: string, permissions: Permissions, paused?
     },
   };
   if (permissions.inputVerified !== undefined) msg.permissions.inputVerified = permissions.inputVerified === true;
+  if (typeof permissions.microphone === "boolean" || permissions.microphone === "unknown") msg.permissions.microphone = permissions.microphone;
   if (paused !== undefined) msg.paused = paused;
   return msg;
 }

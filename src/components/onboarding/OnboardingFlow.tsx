@@ -5,7 +5,7 @@
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import NewAgentFlow, { type ExpertOption } from "@/components/agents/NewAgentFlow";
-import { createWorkspace } from "@/components/shell/menuActions";
+import { createWorkspace, renameWorkspace } from "@/components/shell/menuActions";
 import { buttonClass } from "@/components/ui";
 import type { Role } from "@/lib/auth/context";
 import { saveStep, startFirstTraining } from "@/lib/onboarding/client";
@@ -54,6 +54,18 @@ function WorkspaceStep({ workspace, joined, mode }: { workspace: OnboardingWorks
   const [name, setName] = useState("");
   const [city, setCity] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [shown, setShown] = useState({ name: workspace.name, city: workspace.city });
+  const [rename, setRename] = useState({ name: workspace.name, city: workspace.city ?? "" });
+  const canRename = mode === "supabase" && !joined && workspace.role === "owner";
+  const saveRename = async (e: FormEvent) => {
+    e.preventDefault();
+    const r = await renameWorkspace(rename, { fetch: (u, i) => window.fetch(u, i) });
+    if (!r.ok) return setMsg(r.error);
+    setMsg(null);
+    setShown({ name: rename.name.trim(), city: rename.city.trim() || null });
+    setEditing(false);
+  };
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     const r = await createWorkspace({ name, city }, { fetch: (u, i) => window.fetch(u, i), reload: () => window.location.reload() });
@@ -67,12 +79,36 @@ function WorkspaceStep({ workspace, joined, mode }: { workspace: OnboardingWorks
         </p>
       ) : (
         <div className="flex items-center gap-3 rounded-[12px] p-4" style={{ background: "var(--s2)" }}>
-          <span className="ui-av">{(workspace.name || "W").slice(0, 1).toUpperCase()}</span>
+          <span className="ui-av">{(shown.name || "W").slice(0, 1).toUpperCase()}</span>
           <span className="flex flex-col">
-            <span style={{ fontWeight: 600 }} data-testid="workspace-name">{workspaceLabel(workspace.name, workspace.city)}</span>
+            <span style={{ fontWeight: 600 }} data-testid="workspace-name">{workspaceLabel(shown.name, shown.city)}</span>
             <span className="text-xs" style={muted}>Your workspace, you are its {workspace.role}</span>
           </span>
+          {canRename && !editing && (
+            <button type="button" className={`${buttonClass("ghost", "sm")} ml-auto`} onClick={() => setEditing(true)} data-testid="rename-open">
+              Edit
+            </button>
+          )}
         </div>
+      )}
+      {canRename && editing && (
+        <form className="flex flex-col gap-3" onSubmit={(e) => void saveRename(e)} noValidate data-testid="rename-workspace">
+          <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
+            <div>
+              <label className="ui-lbl" htmlFor="ob-ws-rename">Workspace name</label>
+              <input id="ob-ws-rename" className="ui-inp" required maxLength={WORKSPACE_NAME_MAX} value={rename.name} onChange={(e) => setRename({ ...rename, name: e.target.value })} />
+            </div>
+            <div>
+              <label className="ui-lbl" htmlFor="ob-ws-rename-city">City (optional)</label>
+              <input id="ob-ws-rename-city" className="ui-inp" maxLength={WORKSPACE_CITY_MAX} value={rename.city} onChange={(e) => setRename({ ...rename, city: e.target.value })} />
+            </div>
+          </div>
+          {msg && <p role="alert" className="text-sm" style={{ color: "var(--rd)" }}>{msg}</p>}
+          <div className="flex gap-3">
+            <button type="button" className={buttonClass("ghost", "sm")} onClick={() => setEditing(false)}>Cancel</button>
+            <button type="submit" className={buttonClass("secondary", "sm")}>Save</button>
+          </div>
+        </form>
       )}
       {mode === "local" ? (
         <p className="text-xs" style={muted}>Local mode has one file-backed workspace.</p>
