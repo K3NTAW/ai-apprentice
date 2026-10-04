@@ -13,7 +13,8 @@ export async function GET(_req: Request, ctx: IdContext) {
   });
 }
 
-// Owner or expert: rename, edit the Work Map (new version), confirm, archive or restore.
+// Owner or expert: rename or edit the Work Map (new version; 409 on a stale expected_version). Owner only: archive
+// or restore (experts 403).
 export async function PATCH(req: Request, ctx: IdContext) {
   return withMutation(["agents", "sessions"], async ({ ctx: rc, store }) => {
     const denied = requireRole(rc, ["owner", "expert"]);
@@ -21,6 +22,10 @@ export async function PATCH(req: Request, ctx: IdContext) {
     const { id } = await ctx.params;
     const body = await parseBody(req, PatchProcessBody);
     if (!body.ok) return body.res;
+    if (body.data.archived !== undefined) {
+      const ownerOnly = requireRole(rc, ["owner"]);
+      if (ownerOnly) return ownerOnly;
+    }
     return Response.json(await store.updateProcess(id, body.data));
   });
 }

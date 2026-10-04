@@ -14,6 +14,7 @@ export {
   isValidSessionId,
   ProcessesUnavailableError,
   ProcessNotFoundError,
+  ProcessVersionConflictError,
   PROCESS_CHANGE_KINDS,
   PROCESS_TITLE_MAX,
   SessionNotFoundError,

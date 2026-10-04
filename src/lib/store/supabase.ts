@@ -41,6 +41,7 @@ import {
   processPatchValues,
   ProcessesUnavailableError,
   ProcessNotFoundError,
+  ProcessVersionConflictError,
   RECENT_SESSIONS_DEFAULT,
   recognizersFromSettings,
   redactOpts,
@@ -150,7 +151,20 @@ export function isProcessesMissing(error: unknown): boolean {
   const mentions = typeof e.message === "string" && /process/i.test(e.message);
   if (e.code === "42P01" || e.code === "PGRST205") return mentions;
   if (e.code === "42703" || e.code === "PGRST204") return mentions;
+  // public.update_process missing (42883 undefined function, PostgREST PGRST202).
+  if (e.code === "42883" || e.code === "PGRST202") return mentions;
   return false;
+}
+
+/** update_process raises PT409 (PostgREST answers 409) when the process is no longer at the expected version. */
+function isVersionConflict(error: unknown): boolean {
+  const e = (error ?? {}) as { code?: unknown; message?: unknown };
+  return e.code === "PT409" || (typeof e.message === "string" && e.message.includes("process_version_conflict"));
+}
+
+/** update_process raises no_data_found (P0002) for a missing process or source session. */
+function isNoDataFound(error: unknown): boolean {
+  return ((error ?? {}) as { code?: unknown }).code === "P0002";
 }
 
 function toProcess(r: ProcessRow): Process {
@@ -489,15 +503,23 @@ export function createSupabaseStore(
       );
     },
 
+    // sessions.process_id is read when migration 20261004030000_processes is applied; without it the digests
+    // are read without the column (every session then counts as not linked to a process).
     async listSessionDigests() {
-      const rows = await selectAll<Omit<SessionRow, "workspace_id">>("select session digests", () =>
-        client
-          .from("sessions")
-          .select("id,kind,expert,agent_id,started_at,ended_at,workmap,off_record_ranges,created_by")
-          .eq("workspace_id", workspaceId)
-          .order("started_at", { ascending: false })
-          .order("id", { ascending: false }),
-      );
+      const cols = "id,kind,expert,agent_id,started_at,ended_at,workmap,off_record_ranges,created_by";
+      const read = (c: string) =>
+        selectAll<Omit<SessionRow, "workspace_id">>("select session digests", () =>
+          client
+            .from("sessions")
+            .select(c)
+            .eq("workspace_id", workspaceId)
+            .order("started_at", { ascending: false })
+            .order("id", { ascending: false }),
+        );
+      const rows = await read(`${cols},process_id`).catch((err: unknown) => {
+        if (isProcessesMissing((err as { cause?: unknown }).cause)) return read(cols);
+        throw err;
+      });
       return rows.map(
         (r): SessionDigest => ({
           id: r.id,
@@ -508,6 +530,7 @@ export function createSupabaseStore(
           ...(r.workmap !== null ? { workmap: r.workmap } : {}),
           off_record_ranges: r.off_record_ranges ?? [],
           ...(r.agent_id ? { agent_id: r.agent_id } : {}),
+          ...(r.process_id ? { process_id: r.process_id } : {}),
           created_by: r.created_by,
         }),
       );
@@ -756,7 +779,7 @@ export function createSupabaseStore(
           title: input.title,
           workmap: input.workmap,
           version: 1,
-          confirmed: input.confirmed ?? input.workmap.confirmed_by_expert,
+          confirmed: input.workmap.confirmed_by_expert === true,
         })
         .select("*")
         .single();
@@ -767,20 +790,45 @@ export function createSupabaseStore(
       return p;
     },
 
-    // updated_at is also set by processes_touch_updated_at_trg. Two concurrent Work Map edits compute the same
-    // version; the second version insert then fails on process_versions_process_version_key.
+    // A Work Map change goes through public.update_process: the version check (where version = expected), the
+    // update and its process_versions row are one transaction. Title and archive are plain column updates (the
+    // only columns authenticated may update directly); updated_at is set by processes_touch_updated_at_trg.
     async updateProcess(id, patch) {
       const cur = await store.getProcess(id);
       if (!cur) throw new ProcessNotFoundError(id);
       if (patch.source_session_id !== undefined) await requireRow(patch.source_session_id);
-      const values = processPatchValues(cur, patch, new Date().toISOString());
-      const res = await client.from("processes").update(values).eq("id", id).eq("workspace_id", workspaceId).select("*");
+      let next = cur;
+      if (patch.workmap !== undefined) {
+        const expected = patch.expected_version ?? cur.version;
+        const res = await client.rpc("update_process", {
+          p_id: id,
+          p_expected_version: expected,
+          p_workmap: patch.workmap,
+          p_change_kind: patch.change_kind ?? "edited",
+          p_source_session: patch.source_session_id ?? null,
+        });
+        if (isVersionConflict(res.error)) throw new ProcessVersionConflictError(id, expected);
+        if (isNoDataFound(res.error)) {
+          if (patch.source_session_id && /session/i.test(String((res.error as { message?: unknown }).message)))
+            throw new SessionNotFoundError(patch.source_session_id);
+          throw new ProcessNotFoundError(id);
+        }
+        const row = checkP("rpc update_process", res) as ProcessRow | ProcessRow[] | null;
+        const one = Array.isArray(row) ? row[0] : row;
+        if (!one) throw new ProcessNotFoundError(id);
+        next = toProcess(one);
+      } else {
+        await linkSession(patch.source_session_id, id);
+      }
+      const direct = {
+        ...(patch.title !== undefined ? { title: patch.title } : {}),
+        ...(patch.archived !== undefined ? { archived_at: patch.archived ? (next.archived_at ?? new Date().toISOString()) : null } : {}),
+      };
+      if (Object.keys(direct).length === 0) return next;
+      const res = await client.from("processes").update(direct).eq("id", id).eq("workspace_id", workspaceId).select("*");
       const rows = checkP("update processes", res) as ProcessRow[] | null;
       if (!rows || rows.length === 0) throw new ProcessNotFoundError(id);
-      const next = toProcess(rows[0]);
-      if (patch.workmap !== undefined) await insertVersion(next, patch.change_kind ?? "edited", patch.source_session_id);
-      await linkSession(patch.source_session_id, id);
-      return next;
+      return toProcess(rows[0]);
     },
 
     // process_versions_process_fkey cascades the versions; sessions_process_fkey clears sessions.process_id.

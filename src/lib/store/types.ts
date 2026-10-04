@@ -60,23 +60,28 @@ export type ProcessVersion = {
   created_at: string;
 };
 
-/** source_session_id links the session to the new process (sessions.process_id) and is kept on version 1. */
+/**
+ * source_session_id links the session to the new process (sessions.process_id) and is kept on version 1.
+ * confirmed is derived from workmap.confirmed_by_expert, never given.
+ */
 export type ProcessInput = {
   agent_id: string;
   title: string;
   workmap: WorkMap;
-  confirmed?: boolean;
   source_session_id?: string;
 };
 
 /**
  * PATCH semantics. A new workmap bumps version and adds a process_versions row with change_kind (default 'edited')
- * and source_session_id (which is also linked to the process). archived true archives now, false restores.
+ * and source_session_id (which is also linked to the process), in one transaction. The Work Map change is
+ * conditional on expected_version (default: the version read just before); a mismatch throws
+ * ProcessVersionConflictError and writes nothing. confirmed follows workmap.confirmed_by_expert.
+ * archived true archives now, false restores.
  */
 export type ProcessPatch = {
   title?: string;
   workmap?: WorkMap;
-  confirmed?: boolean;
+  expected_version?: number;
   archived?: boolean;
   change_kind?: ProcessChangeKind;
   source_session_id?: string;
@@ -165,6 +170,15 @@ export class ProcessNotFoundError extends Error {
   }
 }
 
+/** A Work Map edit based on a stale version: another edit landed first. The API answers 409. */
+export class ProcessVersionConflictError extends Error {
+  readonly code = "process_version_conflict";
+  constructor(id: string, expected: number) {
+    super(`process ${id} is no longer at version ${expected}`);
+    this.name = "ProcessVersionConflictError";
+  }
+}
+
 /** The processes tables are missing (migration not applied). The API answers 503, the UI falls back to sessions. */
 export class ProcessesUnavailableError extends Error {
   readonly code = "processes_unavailable";
@@ -186,8 +200,9 @@ export function processPatchValues(
 ): Partial<Pick<Process, "title" | "workmap" | "version" | "confirmed" | "archived_at" | "updated_at">> {
   return {
     ...(patch.title !== undefined ? { title: patch.title } : {}),
-    ...(patch.workmap !== undefined ? { workmap: patch.workmap, version: cur.version + 1 } : {}),
-    ...(patch.confirmed !== undefined ? { confirmed: patch.confirmed } : {}),
+    ...(patch.workmap !== undefined
+      ? { workmap: patch.workmap, version: cur.version + 1, confirmed: patch.workmap.confirmed_by_expert === true }
+      : {}),
     ...(patch.archived !== undefined ? { archived_at: patch.archived ? (cur.archived_at ?? now) : null } : {}),
     updated_at: now,
   };

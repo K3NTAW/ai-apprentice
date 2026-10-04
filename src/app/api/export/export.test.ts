@@ -94,17 +94,29 @@ beforeEach(() => {
 });
 
 describe("GET /api/export?agent_id with processes", () => {
-  it("exports the confirmed, non-archived processes of the agent, titled by the process, when it has any", async () => {
+  it("exports the confirmed, non-archived processes of the agent, titled by the process, never a linked session twice", async () => {
     const id = await seed(WS_A, USER, [map("Session map", "Session rule")]);
     const store = createSupabaseStore(state.fake.client as never, { workspaceId: WS_A, userId: USER });
-    await store.createProcess({ agent_id: id, title: "Pay invoices", workmap: map("old task", "Process rule") });
+    const [linked] = await store.listSessionDigests();
+    await store.createProcess({ agent_id: id, title: "Pay invoices", workmap: map("old task", "Process rule"), source_session_id: linked.id });
     const archived = await store.createProcess({ agent_id: id, title: "Old", workmap: map("x", "Archived rule") });
     await store.updateProcess(archived.id, { archived: true });
-    await store.createProcess({ agent_id: id, title: "Draft", workmap: map("y", "Draft rule", false), confirmed: false });
+    await store.createProcess({ agent_id: id, title: "Draft", workmap: map("y", "Draft rule", false) });
     const md = await (await get(`agent_id=${id}`)).text();
     expect(md).toContain("## Agent instructions: Pay invoices");
     expect(md).toContain("Process rule");
     for (const gone of ["Session rule", "Archived rule", "Draft rule"]) expect(md).not.toContain(gone);
+  });
+
+  it("still exports legacy confirmed sessions that no process holds, next to the processes", async () => {
+    const id = await seed(WS_A, USER, [map("Legacy map", "Legacy rule"), map("Draft map", "Draft rule", false)]);
+    const store = createSupabaseStore(state.fake.client as never, { workspaceId: WS_A, userId: USER });
+    await store.createProcess({ agent_id: id, title: "Pay invoices", workmap: map("t", "Process rule") });
+    const md = await (await get(`agent_id=${id}`)).text();
+    expect(md).toContain("Process rule");
+    expect(md).toContain("## Agent instructions: Legacy map");
+    expect(md).toContain("Legacy rule");
+    expect(md).not.toContain("Draft rule");
   });
 
   it("falls back to the confirmed sessions while the processes table is missing", async () => {

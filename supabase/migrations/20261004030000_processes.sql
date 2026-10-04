@@ -8,8 +8,15 @@
 -- references processes (workspace_id, id). A process goes with its agent (on delete cascade), versions go with
 -- their process, and a session keeps its history when its process is deleted (process_id becomes null).
 --
--- process_versions is append-only: every change of a process Work Map adds a row. Only the on delete set null
--- paths (changed_by when an auth user is deleted, source_session_id when a session is deleted) may update it.
+-- process_versions is append-only: every change of a process Work Map adds a row. No update or delete grant or
+-- policy for anyone; rows go only with their process (on delete cascade). Only the on delete set null paths
+-- (changed_by when an auth user is deleted, source_session_id when a session is deleted) may update it.
+--
+-- Writes through PostgREST: insert (version 1 only), update of title and archived_at (archive and restore are
+-- owner only, enforced by processes_guard_update), delete (owners). workmap, version and confirmed change only
+-- through public.update_process, which checks the expected version (optimistic concurrency, PT409 = HTTP 409) and
+-- writes the update and its process_versions row in one transaction. confirmed always equals the Work Map's
+-- confirmed_by_expert (processes_confirmed_derived).
 --
 -- Until this migration is applied the API answers 503 'processes not available yet', never 500.
 
@@ -26,6 +33,7 @@ create table public.processes (
   version int not null default 1 check (version >= 1),
   confirmed boolean not null default false,
   archived_at timestamptz,
+  constraint processes_confirmed_derived check (confirmed = coalesce(workmap -> 'confirmed_by_expert' = 'true'::jsonb, false)),
   created_by uuid references auth.users on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -66,8 +74,9 @@ create index sessions_workspace_process_idx on public.sessions (workspace_id, pr
 
 revoke all on table public.processes from public, anon;
 revoke all on table public.process_versions from public, anon;
-grant select, insert, update, delete on table public.processes to authenticated;
-grant select, insert, delete on table public.process_versions to authenticated;
+grant select, insert, delete on table public.processes to authenticated;
+grant update (title, archived_at) on table public.processes to authenticated;
+grant select, insert on table public.process_versions to authenticated;
 
 -- ---------------------------------------------------------------------------
 -- Trigger functions and triggers
@@ -96,6 +105,12 @@ begin
   end if;
   if new.created_at is distinct from old.created_at then
     raise exception 'processes.created_at cannot change' using errcode = '42501';
+  end if;
+  -- Archive and restore are owner actions. Without a user JWT (service role) it is allowed.
+  if new.archived_at is distinct from old.archived_at
+     and auth.uid() is not null
+     and public.workspace_role(old.workspace_id) is distinct from 'owner' then
+    raise exception 'only owners archive or restore a process' using errcode = '42501';
   end if;
   return new;
 end
@@ -151,17 +166,75 @@ create trigger process_versions_guard_update_trg
   for each row execute function public.process_versions_guard_update();
 
 -- ---------------------------------------------------------------------------
+-- update_process: the only way to change a process Work Map.
+-- Security definer so it can write workmap, version and confirmed (not granted to authenticated) and the
+-- version row (no direct insert beyond version 1). It checks the caller's role itself.
+-- ---------------------------------------------------------------------------
+
+create function public.update_process(
+  p_id uuid,
+  p_expected_version int,
+  p_workmap jsonb,
+  p_change_kind text,
+  p_source_session text
+)
+returns public.processes
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  cur public.processes;
+  nxt public.processes;
+begin
+  if auth.uid() is null then
+    raise exception 'not authenticated' using errcode = '42501';
+  end if;
+  select * into cur from public.processes where id = p_id;
+  if not found or not public.is_workspace_member(cur.workspace_id) then
+    raise exception 'process not found' using errcode = 'P0002';
+  end if;
+  if public.workspace_role(cur.workspace_id) is distinct from 'owner'
+     and public.workspace_role(cur.workspace_id) is distinct from 'expert' then
+    raise exception 'forbidden' using errcode = '42501';
+  end if;
+  if p_source_session is not null and not exists (
+    select 1 from public.sessions s where s.id = p_source_session and s.workspace_id = cur.workspace_id
+  ) then
+    raise exception 'session not found' using errcode = 'P0002';
+  end if;
+  update public.processes
+     set workmap = p_workmap,
+         version = version + 1,
+         confirmed = coalesce(p_workmap -> 'confirmed_by_expert' = 'true'::jsonb, false)
+   where id = p_id and version = p_expected_version
+  returning * into nxt;
+  if not found then
+    raise exception 'process_version_conflict' using errcode = 'PT409';
+  end if;
+  insert into public.process_versions (workspace_id, process_id, version, workmap, source_session_id, change_kind, changed_by)
+  values (nxt.workspace_id, nxt.id, nxt.version, nxt.workmap, p_source_session, coalesce(p_change_kind, 'edited'), auth.uid());
+  if p_source_session is not null then
+    update public.sessions set process_id = nxt.id where id = p_source_session and workspace_id = nxt.workspace_id;
+  end if;
+  return nxt;
+end
+$$;
+
+-- ---------------------------------------------------------------------------
 -- Function grants
 -- ---------------------------------------------------------------------------
 
 revoke all on function public.processes_guard_update() from public, anon, authenticated;
 revoke all on function public.processes_touch_updated_at() from public, anon, authenticated;
 revoke all on function public.process_versions_guard_update() from public, anon, authenticated;
+revoke all on function public.update_process(uuid, int, jsonb, text, text) from public, anon;
+grant execute on function public.update_process(uuid, int, jsonb, text, text) to authenticated;
 
 -- ---------------------------------------------------------------------------
 -- Row level security
 -- Every policy is to authenticated. Every update policy has with check equal to using.
--- Members read; owners and experts write; only owners delete.
+-- Members read; owners and experts write; only owners delete processes; nobody updates or deletes versions.
 -- ---------------------------------------------------------------------------
 
 alter table public.processes enable row level security;
@@ -175,6 +248,7 @@ create policy processes_insert on public.processes
   for insert to authenticated
   with check (
     created_by = auth.uid()
+    and version = 1
     and public.workspace_role(workspace_id) in ('owner', 'expert')
   );
 
@@ -195,9 +269,6 @@ create policy process_versions_insert on public.process_versions
   for insert to authenticated
   with check (
     changed_by = auth.uid()
+    and version = 1
     and public.workspace_role(workspace_id) in ('owner', 'expert')
   );
-
-create policy process_versions_delete on public.process_versions
-  for delete to authenticated
-  using (public.workspace_role(workspace_id) = 'owner');

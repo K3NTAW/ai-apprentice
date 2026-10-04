@@ -39,6 +39,35 @@ runStoreContract("file", () => fileStore);
 runStoreContract("supabase (fake client)", () => supabaseFixture().store);
 
 describe("supabase store only", () => {
+  it("changes a Work Map in one update_process call, never by direct writes to workmap, version or process_versions", async () => {
+    const { fake, store } = supabaseFixture();
+    const a = await store.createAgent({ name: "A", role: "R", avatar: { shape: "blob", face: "smile", color: "#3366FF", accent: "#FFCC00" } });
+    const wm = { task: "t", expert: "S", confirmed_by_expert: true, steps: [], open_questions: [] };
+    const p = await store.createProcess({ agent_id: a.id, title: "T", workmap: wm });
+    const before = fake.calls.length;
+    await store.updateProcess(p.id, { workmap: { ...wm, task: "t2" }, title: "T2", archived: true });
+    const writes = fake.calls.slice(before).filter((c) => c.op !== "select");
+    expect(writes).toEqual([expect.objectContaining({ table: "processes", op: "update" })]);
+    expect(fake.rpcCalls.map((c) => [c.fn, c.args.p_expected_version])).toEqual([["update_process", 1]]);
+    expect(fake.tables.process_versions.filter((v) => v.process_id === p.id)).toHaveLength(2);
+
+    // Title or archive alone: no rpc call.
+    const spy = vi.spyOn(fake as unknown as { rpc: (...x: unknown[]) => unknown }, "rpc");
+    await store.updateProcess(p.id, { title: "T3" });
+    expect(spy).not.toHaveBeenCalled();
+    const conflict = store.updateProcess(p.id, { workmap: wm, expected_version: 1 });
+    await expect(conflict).rejects.toThrow(/no longer at version 1/);
+  });
+
+  it("reads digests without sessions.process_id while the processes migration is missing", async () => {
+    const { fake, store } = supabaseFixture();
+    await store.createSession({ kind: "capture" });
+    fake.missingTables.add("processes");
+    const digests = await store.listSessionDigests();
+    expect(digests).toHaveLength(1);
+    expect(digests[0].process_id).toBeUndefined();
+  });
+
   it("pages past the row cap and returns every row in order", async () => {
     const { fake, client, store } = supabaseFixture({ maxRows: 5, pageSize: 5 });
     const s = await store.createSession({ kind: "capture" });

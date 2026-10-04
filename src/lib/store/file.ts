@@ -32,6 +32,7 @@ import {
   processNewestFirst,
   processPatchValues,
   ProcessNotFoundError,
+  ProcessVersionConflictError,
   recognizersFromSettings,
   redactOpts,
   SessionNotFoundError,
@@ -272,6 +273,7 @@ async function listSessionDigests(): Promise<SessionDigest[]> {
       off_record_ranges: s.off_record_ranges,
       ...(s.teach ? { teach: s.teach } : {}),
       ...(sum.agent_id ? { agent_id: sum.agent_id } : {}),
+      ...(s.process_id ? { process_id: s.process_id } : {}),
       created_by: null,
     });
   }
@@ -507,7 +509,7 @@ async function createProcess(input: ProcessInput): Promise<Process> {
     title: input.title,
     workmap,
     version: 1,
-    confirmed: input.confirmed ?? workmap.confirmed_by_expert,
+    confirmed: workmap.confirmed_by_expert === true,
     archived_at: null,
     created_by: null,
     created_at: now,
@@ -528,6 +530,9 @@ async function updateProcess(id: string, patch: ProcessPatch): Promise<Process> 
   const next = await mutateProcesses((d) => {
     const i = d.processes.findIndex((p) => p.id === id);
     if (i < 0) throw new ProcessNotFoundError(id);
+    // Optimistic concurrency, checked inside the write queue so the check and both writes are one step.
+    if (workmap && patch.expected_version !== undefined && d.processes[i].version !== patch.expected_version)
+      throw new ProcessVersionConflictError(id, patch.expected_version);
     const p: Process = { ...d.processes[i], ...processPatchValues(d.processes[i], { ...patch, workmap }, new Date().toISOString()) };
     d.processes[i] = p;
     if (workmap) d.versions.push(versionRow(p, patch.change_kind ?? "edited", patch.source_session_id));

@@ -5,8 +5,9 @@
 -- is deleted. Sessions themselves stay, so the app falls back to the session-based process list.
 -- The policies of both tables go with their tables. Safe to run twice: every drop uses if exists.
 --
--- Order: the sessions foreign key, index and column, the process_versions table, the processes table,
--- then the trigger functions.
+-- Order: the sessions foreign key, index and column,
+-- update_process (it returns the processes row type), the process_versions table, the processes table, then the
+-- trigger functions.
 --
 -- When the migration was applied with supabase db push, also run
 --   supabase migration repair --status reverted 20261004030000
@@ -15,6 +16,8 @@ alter table if exists public.sessions drop constraint if exists sessions_process
 drop index if exists public.sessions_workspace_process_idx;
 alter table if exists public.sessions drop column if exists process_id;
 drop index if exists public.processes_workspace_agent_idx;
+-- update_process returns the processes row type, so it goes before the table.
+drop function if exists public.update_process(uuid, int, jsonb, text, text);
 drop table if exists public.process_versions;
 drop table if exists public.processes;
 drop function if exists public.process_versions_guard_update();

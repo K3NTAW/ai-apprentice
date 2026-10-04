@@ -9,18 +9,23 @@
 // - shortcuts: distinct chords across those confirmed Work Maps (WorkMap.shortcuts), deduped by the chord
 //   (spaces dropped, case-insensitive); null when there are none, which the cards show as "none yet".
 //
-// Processes (T-0212): when the agent has rows in public.processes, processes, guardrails and shortcuts come from
-// its confirmed, non-archived processes instead of the confirmed capture sessions. Learners and last_trained stay
-// session based. Without processes for the agent (or without the table: pass none) the session rule above applies.
-import type { Session, WorkMap } from "@/lib/types";
+// Processes (T-0212, T-0219): processes, guardrails and shortcuts come from the agent's confirmed, non-archived
+// processes plus its confirmed capture sessions that are not linked to any process (legacy Work Maps, see
+// agentWorkMaps). Learners and last_trained stay session based. Without the processes table pass none: every
+// session is unlinked then, so the session rule above applies.
+import { agentWorkMaps } from "@/lib/processes/merge";
+import type { Process } from "@/lib/store/types";
+import type { Session } from "@/lib/types";
 
 /** A session plus its creator, which Session itself does not carry. */
-export type AgentStatsSession = Pick<Session, "kind" | "started_at" | "ended_at" | "workmap" | "agent_id"> & {
+export type AgentStatsSession = Pick<Session, "kind" | "started_at" | "ended_at" | "workmap" | "agent_id" | "process_id"> & {
+  id?: string;
   created_by?: string | null;
 };
 
 /** The process fields the stats read (a Process from the store fits). */
-export type AgentStatsProcess = { agent_id: string; workmap: WorkMap; confirmed: boolean; archived_at: string | null };
+export type AgentStatsProcess = Pick<Process, "agent_id" | "workmap" | "confirmed" | "archived_at"> &
+  Partial<Pick<Process, "id" | "title" | "created_at">>;
 
 export type AgentStats = {
   processes: number;
@@ -41,11 +46,11 @@ export function agentStats(
 ): AgentStats {
   const mine = sessions.filter((s) => s.agent_id === agentId);
   const captures = mine.filter((s) => s.kind === "capture");
-  const own = processes.filter((p) => p.agent_id === agentId);
-  const maps: WorkMap[] =
-    own.length > 0
-      ? own.filter((p) => p.confirmed && !p.archived_at).map((p) => p.workmap)
-      : captures.filter((s) => s.workmap?.confirmed_by_expert === true).map((s) => s.workmap!);
+  const maps = agentWorkMaps(
+    agentId,
+    processes.map((p, i) => ({ id: p.id ?? `p${i}`, title: p.title ?? p.workmap.task, created_at: p.created_at ?? "", ...p })),
+    mine.map((s, i) => ({ id: s.id ?? `s${i}`, ...s })),
+  ).map((m) => m.workmap);
 
   const rules = new Set<string>();
   for (const m of maps) for (const step of m.steps) for (const g of step.guardrails) if (ruleKey(g.rule)) rules.add(ruleKey(g.rule));

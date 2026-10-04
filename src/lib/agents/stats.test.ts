@@ -94,7 +94,9 @@ describe("agentStats with processes", () => {
   });
 
   it("counts confirmed, non-archived processes instead of sessions when the agent has processes", () => {
-    const sessions = [s({ workmap: workmap(true, [["session rule"]]) }), s({ workmap: workmap(true, [["session rule 2"]]) })];
+    // Both sessions are linked to a process, so only the processes count.
+    const linked = { process_id: "p1" };
+    const sessions = [s({ workmap: workmap(true, [["session rule"]]), ...linked }), s({ workmap: workmap(true, [["session rule 2"]]), ...linked })];
     const processes = [
       p({ workmap: workmap(true, [["Never above 5000", "never above 5000 "]], [sc("Cmd+S")]) }),
       p({ workmap: workmap(true, [["Archived rule"]]), archived_at: "2026-10-04T08:00:00.000Z" }),
@@ -105,6 +107,16 @@ describe("agentStats with processes", () => {
     expect(st).toMatchObject({ processes: 1, guardrails: 1, shortcuts: 1 });
     // Last trained still comes from the capture sessions.
     expect(st.last_trained).toBe("2026-10-01T08:00:00.000Z");
+  });
+
+  it("merges legacy confirmed sessions without a process with the processes", () => {
+    const sessions = [
+      s({ workmap: workmap(true, [["legacy rule"]]) }),
+      s({ workmap: workmap(true, [["linked rule"]]), process_id: "p1" }),
+      s({ workmap: workmap(false, [["draft rule"]]) }),
+    ];
+    const processes = [p({ workmap: workmap(true, [["process rule"]]) })];
+    expect(agentStats(A, sessions, processes)).toMatchObject({ processes: 2, guardrails: 2 });
   });
 
   it("falls back to sessions when the agent has no process (or the table is missing)", () => {

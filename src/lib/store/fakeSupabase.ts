@@ -8,7 +8,10 @@
 // Embedded counts on sessions (select "*,session_events(count)"): [{ count }] of the visible child rows.
 // Processes: RLS by workspace, the insert policies (created_by / changed_by = auth.uid()), processes_agent_fkey
 // (23503), the cascades (agent -> processes -> versions) and sessions.process_id on delete set null.
-// missingTables answers every query on those tables with PostgREST PGRST205 (migration not applied).
+// missingTables answers every query on those tables with PostgREST PGRST205 (migration not applied); with
+// 'processes' missing, selecting sessions.process_id answers 42703 and rpc update_process PGRST202.
+// rpc('update_process'): the version check (PT409), the update, its process_versions row and the session link,
+// all or nothing, like the security definer function. Roles are not modelled.
 // Not modelled: workspace roles (owner/expert/learner), column projection on count queries.
 
 type Row = Record<string, unknown>;
@@ -105,7 +108,42 @@ export class FakeSupabase {
       },
       "storage",
     );
-    this.client = strict({ from: (table: string) => this.query(table), storage }, "client");
+    this.client = strict(
+      { from: (table: string) => this.query(table), rpc: async (fn: string, args: Row) => this.rpc(fn, args), storage },
+      "client",
+    );
+  }
+
+  /** Calls made through client.rpc, in order. */
+  rpcCalls: { fn: string; args: Row }[] = [];
+
+  rpc(fn: string, args: Row): { data: Row | null; error: FakeError | null } {
+    if (fn !== "update_process") unsupported(`rpc ${fn}`);
+    this.rpcCalls.push({ fn, args: structuredClone(args) });
+    const fail = (message: string, code: string) => ({ data: null, error: { message, code } });
+    if (this.missingTables.has("processes"))
+      return fail("Could not find the function public.update_process(p_change_kind, p_expected_version, p_id, p_source_session, p_workmap) in the schema cache", "PGRST202");
+    const p = this.tables.processes.find((r) => r.id === args.p_id && this.rowVisible("processes", r));
+    if (!p) return fail("process not found", "P0002");
+    if (p.version !== args.p_expected_version) return fail("process_version_conflict", "PT409");
+    const session = args.p_source_session == null ? null : this.tables.sessions.find((r) => r.id === args.p_source_session && r.workspace_id === p.workspace_id);
+    if (args.p_source_session != null && !session) return fail("session not found", "P0002");
+    const workmap = structuredClone(args.p_workmap) as Row;
+    const now = pgTs(new Date().toISOString());
+    Object.assign(p, { workmap, version: (p.version as number) + 1, confirmed: workmap.confirmed_by_expert === true, updated_at: now });
+    this.tables.process_versions.push({
+      id: crypto.randomUUID(),
+      workspace_id: p.workspace_id,
+      process_id: p.id,
+      version: p.version,
+      workmap: structuredClone(workmap),
+      source_session_id: args.p_source_session ?? null,
+      change_kind: args.p_change_kind,
+      changed_by: this.uid,
+      created_at: now,
+    });
+    if (session) session.process_id = p.id;
+    return { data: structuredClone(p), error: null };
   }
 
   /** Makes the next call on a table (or on storage, target 'storage') return this error. */
@@ -416,6 +454,8 @@ class FakeQuery {
     this.fake.calls.push({ table: this.table, op: this.op ?? "none", limit: this.limitN, countHead: this.countHead });
     if (this.fake.missingTables.has(this.table))
       return { data: null, error: { message: `Could not find the table 'public.${this.table}' in the schema cache`, code: "PGRST205" }, count: null, status: 404 };
+    if (this.table === "sessions" && this.fake.missingTables.has("processes") && this.columns?.includes("process_id"))
+      return { data: null, error: { message: "column sessions.process_id does not exist", code: "42703" }, count: null, status: 400 };
     const failure = this.fake.takeFailure(this.table);
     if (failure) return { data: null, error: failure as FakeError, count: null, status: 400 };
     const all = this.fake.tables[this.table];

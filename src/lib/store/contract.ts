@@ -9,9 +9,11 @@ import {
   InvalidOffRecordRangeError,
   InvalidSessionIdError,
   ProcessNotFoundError,
+  ProcessVersionConflictError,
   SessionNotFoundError,
   type SessionStore,
 } from "./types";
+import { backfillProcesses } from "@/lib/processes/server";
 
 export const entry = (t: number, text: string): TranscriptEntry => ({
   id: `tr_${t}`,
@@ -234,7 +236,7 @@ export function runStoreContract(name: string, makeStore: () => SessionStore | P
       expect((await store.getSession(s.id))?.process_id).toBe(p.id);
 
       await new Promise((r) => setTimeout(r, 3));
-      const q = await store.createProcess({ agent_id: a.id, title: "Draft", workmap, confirmed: false });
+      const q = await store.createProcess({ agent_id: a.id, title: "Draft", workmap });
       expect(q.confirmed).toBe(false);
       const o = await store.createProcess({ agent_id: other.id, title: "Theirs", workmap });
       expect((await store.listProcesses({ agent_id: a.id })).map((x) => x.id)).toEqual([q.id, p.id]);
@@ -282,6 +284,50 @@ export function runStoreContract(name: string, makeStore: () => SessionStore | P
       expect(await store.getProcess(q.id)).toBeNull();
       expect(await store.listProcessVersions(q.id)).toEqual([]);
       expect(await store.getProcess(o.id)).toMatchObject({ id: o.id });
+    });
+
+    it("updates a Work Map only from the expected version; a stale one writes nothing", async () => {
+      const a = await store.createAgent({ name: "Conflict Agent", role: "AP", avatar });
+      const p = await store.createProcess({ agent_id: a.id, title: "T", workmap });
+      const mine = { ...workmap, task: "mine", confirmed_by_expert: true };
+      const v2 = await store.updateProcess(p.id, { workmap: mine, expected_version: 1 });
+      expect(v2).toMatchObject({ version: 2, confirmed: true });
+      // A second editor still on version 1 loses: no process change, no version row, no session link.
+      const s = await store.createSession({ kind: "capture", expert: "Sabine", agent_id: a.id });
+      await expect(
+        store.updateProcess(p.id, { workmap: { ...workmap, task: "theirs" }, expected_version: 1, source_session_id: s.id }),
+      ).rejects.toBeInstanceOf(ProcessVersionConflictError);
+      expect(await store.getProcess(p.id)).toMatchObject({ version: 2, workmap: mine, confirmed: true });
+      expect((await store.listProcessVersions(p.id)).map((v) => v.version)).toEqual([2, 1]);
+      expect((await store.getSession(s.id))?.process_id).toBeUndefined();
+      // confirmed follows the Work Map: an unconfirmed edit unconfirms the process.
+      const v3 = await store.updateProcess(p.id, { workmap: { ...mine, confirmed_by_expert: false }, expected_version: 2 });
+      expect(v3).toMatchObject({ version: 3, confirmed: false });
+      const [latest] = await store.listProcessVersions(p.id);
+      expect(latest).toMatchObject({ version: 3, change_kind: "edited" });
+      expect(latest.workmap.confirmed_by_expert).toBe(false);
+    });
+
+    it("backfills one process per legacy confirmed session, idempotently, and lists the link on digests", async () => {
+      const a = await store.createAgent({ name: "Legacy Agent", role: "AP", avatar });
+      const legacy = await store.createSession({ kind: "capture", expert: "Sabine", agent_id: a.id });
+      await store.saveWorkMap(legacy.id, { ...workmap, task: "  Book   invoices ", confirmed_by_expert: true });
+      const draft = await store.createSession({ kind: "capture", expert: "Sabine", agent_id: a.id });
+      await store.saveWorkMap(draft.id, workmap);
+      const held = await store.createSession({ kind: "capture", expert: "Sabine", agent_id: a.id });
+      await store.saveWorkMap(held.id, { ...workmap, confirmed_by_expert: true });
+      const existing = await store.createProcess({ agent_id: a.id, title: "Held", workmap: { ...workmap, confirmed_by_expert: true }, source_session_id: held.id });
+
+      const created = await backfillProcesses(store, { agent_id: a.id });
+      expect(created.map((p) => [p.title, p.confirmed, p.version])).toEqual([["Book invoices", true, 1]]);
+      expect((await store.listProcessVersions(created[0].id))[0]).toMatchObject({ change_kind: "trained", source_session_id: legacy.id });
+      const digests = await store.listSessionDigests();
+      expect(digests.find((d) => d.id === legacy.id)?.process_id).toBe(created[0].id);
+      expect(digests.find((d) => d.id === held.id)?.process_id).toBe(existing.id);
+      expect(digests.find((d) => d.id === draft.id)?.process_id).toBeUndefined();
+
+      expect(await backfillProcesses(store, { agent_id: a.id })).toEqual([]);
+      expect((await store.listProcesses({ agent_id: a.id })).map((p) => p.id).sort()).toEqual([created[0].id, existing.id].sort());
     });
 
     it("rejects a process for a missing agent or source session", async () => {

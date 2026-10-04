@@ -1006,11 +1006,46 @@ describe("processes migration", () => {
     );
   });
 
-  it("revokes from public and anon, grants authenticated, process_versions without update", () => {
+  it("revokes from public and anon; authenticated updates only title and archived_at, never process_versions", () => {
     expect(stmts).toContain("revoke all on table public.processes from public, anon");
     expect(stmts).toContain("revoke all on table public.process_versions from public, anon");
-    expect(stmts).toContain("grant select, insert, update, delete on table public.processes to authenticated");
-    expect(stmts).toContain("grant select, insert, delete on table public.process_versions to authenticated");
+    expect(stmts).toContain("grant select, insert, delete on table public.processes to authenticated");
+    expect(stmts).toContain("grant update (title, archived_at) on table public.processes to authenticated");
+    expect(stmts).toContain("grant select, insert on table public.process_versions to authenticated");
+    const grants = stmts.filter((x) => /^grant .* on table public\.process(es|_versions) /.test(x));
+    expect(grants).toHaveLength(3);
+    for (const g of grants) expect(g).not.toMatch(/\b(update|delete)\b.* public\.process_versions /);
+    expect(stmts.filter((x) => /^grant (?!update \(title, archived_at\))[^;]*\bupdate\b.* public\.processes /.test(x))).toEqual([]);
+  });
+
+  it("confirmed is derived from the Work Map, inserts start at version 1", () => {
+    expect(table("processes")).toContain(
+      "constraint processes_confirmed_derived check (confirmed = coalesce(workmap -> 'confirmed_by_expert' = 'true'::jsonb, false))",
+    );
+    expect(compact(policy("processes_insert")!.withCheck!)).toContain("version = 1");
+    expect(compact(policy("process_versions_insert")!.withCheck!)).toContain("version = 1");
+  });
+
+  it("update_process is the only Work Map write: security definer, search_path '', version check, version row in one call", () => {
+    const fn = parseFunctions(sql).find((f) => f.name === "update_process")!;
+    expect(fn.header).toContain("security definer");
+    expect(check7SearchPath(sql)).toEqual([]);
+    expect(check8FunctionGrants(sql)).toEqual([]);
+    expect(stmts).toContain("revoke all on function public.update_process(uuid, int, jsonb, text, text) from public, anon");
+    expect(stmts).toContain("grant execute on function public.update_process(uuid, int, jsonb, text, text) to authenticated");
+    const body = fnBody("update_process");
+    expect(body).toContain("where id = p_id and version = p_expected_version");
+    expect(body).toContain("raise exception 'process_version_conflict' using errcode = 'pt409'");
+    expect(body).toContain("insert into public.process_versions");
+    expect(body).toContain("confirmed = coalesce(p_workmap -> 'confirmed_by_expert' = 'true'::jsonb, false)");
+    expect(body).toContain("public.workspace_role(cur.workspace_id)");
+    expect(body).toContain("auth.uid() is null");
+  });
+
+  it("archive and restore are owner only", () => {
+    const guard = fnBody("processes_guard_update");
+    expect(guard).toContain("new.archived_at is distinct from old.archived_at");
+    expect(guard).toContain("public.workspace_role(old.workspace_id) is distinct from 'owner'");
   });
 
   it("RLS to authenticated: members read, owner or expert write, owner-only delete", () => {
@@ -1020,18 +1055,17 @@ describe("processes migration", () => {
     expect(compact(policy("processes_select")!.using!)).toBe("public.is_workspace_member(workspace_id)");
     expect(compact(policy("process_versions_select")!.using!)).toBe("public.is_workspace_member(workspace_id)");
     expect(compact(policy("processes_insert")!.withCheck!)).toBe(
-      "created_by = auth.uid()and public.workspace_role(workspace_id)in('owner','expert')",
+      "created_by = auth.uid()and version = 1 and public.workspace_role(workspace_id)in('owner','expert')",
     );
     expect(compact(policy("process_versions_insert")!.withCheck!)).toBe(
-      "changed_by = auth.uid()and public.workspace_role(workspace_id)in('owner','expert')",
+      "changed_by = auth.uid()and version = 1 and public.workspace_role(workspace_id)in('owner','expert')",
     );
     expect(compact(policy("processes_update")!.using!)).toBe("public.workspace_role(workspace_id)in('owner','expert')");
     expect(compact(policy("processes_delete")!.using!)).toBe("public.workspace_role(workspace_id)= 'owner'");
-    expect(compact(policy("process_versions_delete")!.using!)).toBe("public.workspace_role(workspace_id)= 'owner'");
+    // Append-only: no update or delete policy on process_versions for anyone.
     expect(parsePolicies(sql).filter((p) => p.table === "public.process_versions").map((p) => p.command)).toEqual([
       "select",
       "insert",
-      "delete",
     ]);
   });
 
@@ -1058,6 +1092,7 @@ describe("processes migration", () => {
     const order = [
       at(/drop constraint if exists sessions_process_fkey/),
       at(/drop column if exists process_id/),
+      at(/^drop function if exists public\.update_process\(/),
       at(/^drop table if exists public\.process_versions$/),
       at(/^drop table if exists public\.processes$/),
       at(/^drop function if exists public\.processes_guard_update/),
