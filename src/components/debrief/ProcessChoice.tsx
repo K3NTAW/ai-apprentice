@@ -4,8 +4,11 @@
 // already, the match decision suggests one: 'Add to it' (merge, shows what changed for confirmation), 'Replace it'
 // (the old version stays in the history) or 'Save as a new process', defaulting to the suggestion.
 // 503 (migration missing): nothing is shown, the session stays a legacy Work Map.
+// intent (slice d, from 'Add to this process' / 'Retrain from scratch'): the Work Map goes into that process without
+// asking (extend adds, replace replaces).
 import { useEffect, useState } from "react";
 import { buttonClass } from "@/components/ui";
+import { intentChoice, type TrainIntent } from "@/lib/processes/train";
 
 type Brief = { id: string; title: string; version: number };
 type Suggestion = { linked: Brief | null; match: { choice: string; confidence: number; title: string | null }; candidates: Brief[] };
@@ -24,7 +27,7 @@ async function send(body: Record<string, unknown>): Promise<Saved> {
 
 const percent = (n: number) => `${Math.round(n * 100)}%`;
 
-export default function ProcessChoice({ sessionId }: { sessionId: string }) {
+export default function ProcessChoice({ sessionId, intent = null }: { sessionId: string; intent?: TrainIntent | null }) {
   const [suggestion, setSuggestion] = useState<Suggestion | null>(null);
   const [hidden, setHidden] = useState(false);
   const [target, setTarget] = useState<string>("");
@@ -64,6 +67,22 @@ export default function ProcessChoice({ sessionId }: { sessionId: string }) {
       live = false;
     };
   }, [firstProcess, sessionId]);
+
+  // Started from a process page: save into it right away (an unknown process falls back to the choice).
+  const direct = suggestion !== null && !suggestion.linked && intent !== null && suggestion.candidates.some((c) => c.id === intent.processId);
+  const intentId = intent?.processId ?? null;
+  const intentMode = intent?.mode ?? null;
+  useEffect(() => {
+    if (!direct || !intentId || !intentMode) return;
+    let live = true;
+    send({ session_id: sessionId, choice: intentChoice(intentMode), process_id: intentId }).then(
+      (r) => live && setSaved(r),
+      (err: unknown) => live && setError(err instanceof Error ? err.message : String(err)),
+    );
+    return () => {
+      live = false;
+    };
+  }, [direct, intentId, intentMode, sessionId]);
 
   if (hidden || !suggestion) return null;
 
@@ -112,7 +131,7 @@ export default function ProcessChoice({ sessionId }: { sessionId: string }) {
       </section>
     );
 
-  if (firstProcess)
+  if (firstProcess || direct)
     return error ? <p role="alert" className="text-[13px]" style={{ color: "var(--rd)" }}>{error}</p> : null;
 
   const current = suggestion.candidates.find((c) => c.id === target) ?? null;

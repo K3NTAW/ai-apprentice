@@ -5,6 +5,7 @@ import AppShell from "@/components/shell/AppShell";
 import { agentStats } from "@/lib/agents/stats";
 import { previewAgents, previewCreatedBy, previewMembers } from "@/lib/fixtures/agents";
 import { previewSessionsFull as previewSessions } from "@/lib/fixtures/preview";
+import { previewProcess } from "@/lib/fixtures/processes";
 import type { Process } from "@/lib/store/types";
 import { appMode } from "@/lib/supabase/env";
 
@@ -18,9 +19,10 @@ export default async function AgentPreviewPage({ params, searchParams }: Props) 
   const { id } = await params;
   const agent = previewAgents.find((a) => a.id === id);
   if (!agent) notFound();
-  const sessions = previewSessions;
-  // The fixtures predate processes: every confirmed Work Map is a legacy session (agentWorkMaps).
-  const processes: Process[] = [];
+  // Pip's invoice Work Map is a process (its session linked), so the Processes tab shows the process actions; the
+  // other confirmed Work Maps stay legacy sessions (agentWorkMaps).
+  const sessions = previewSessions.map((s) => (s.id === "pip-1" ? { ...s, process_id: previewProcess.id } : s));
+  const processes: Process[] = [previewProcess];
   return (
     <AppShell>
       <AgentDetail

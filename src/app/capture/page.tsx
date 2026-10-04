@@ -1,11 +1,12 @@
 import CaptureApp from "@/components/capture/CaptureApp";
 import { canCapture } from "@/components/shell/ShellHeader";
 import { getRequestContext } from "@/lib/auth/context";
+import { parseTrainIntent } from "@/lib/processes/train";
 
 export const dynamic = "force-dynamic";
 
-export default async function CapturePage({ searchParams }: { searchParams: Promise<{ agent?: string | string[] }> }) {
-  const { agent } = await searchParams;
+export default async function CapturePage({ searchParams }: { searchParams: Promise<{ agent?: string | string[]; process?: string | string[]; mode?: string | string[] }> }) {
+  const { agent, process, mode } = await searchParams;
   const result = await getRequestContext();
   if (result.kind === "ok" && !canCapture(result.ctx.role)) {
     return (
@@ -15,5 +16,5 @@ export default async function CapturePage({ searchParams }: { searchParams: Prom
       </main>
     );
   }
-  return <CaptureApp agentParam={typeof agent === "string" ? agent : null} />;
+  return <CaptureApp agentParam={typeof agent === "string" ? agent : null} intent={parseTrainIntent(process, mode)} />;
 }

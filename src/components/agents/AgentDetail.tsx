@@ -12,6 +12,7 @@ import { Badge, Card, ScoreBar, buttonClass, type BadgeKind } from "@/components
 import AgentTabs from "./AgentTabs";
 import AgentSettings from "./AgentSettings";
 import ShortcutsTab from "./ShortcutsTab";
+import ProcessActions from "./ProcessActions";
 import {
   captureHref,
   expertLine,
@@ -94,9 +95,12 @@ function Processes({ rows, agentId, role }: { rows: ProcessRow[]; agentId: strin
                 {p.date}
               </span>
             </div>
-            <Link href={p.href} className={buttonClass("secondary", "sm")}>
-              Open map
-            </Link>
+            <div className="flex flex-col items-end" style={{ gap: 6 }}>
+              <Link href={p.href} className={buttonClass("secondary", "sm")}>
+                Open map
+              </Link>
+              {p.processId && <ProcessActions agentId={agentId} processId={p.processId} role={role} />}
+            </div>
           </div>
         ))}
       </Card>

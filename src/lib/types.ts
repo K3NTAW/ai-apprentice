@@ -159,6 +159,8 @@ export const GuardrailSchema = z.object({
   quote_ref: z.number(),
   kind: z.enum(["limit", "exception", "stop_and_ask"]),
   quote: z.string().optional(),
+  // Set when a person edited the quote on the process page; the original stays in process_versions.
+  edited_by: z.string().optional(),
 });
 export type Guardrail = z.infer<typeof GuardrailSchema>;
 
@@ -179,6 +181,8 @@ export const WorkMapStepSchema = z.object({
       quote: z.string(),
       t: z.number(),
       source: z.enum(["live_question", "debrief", "narration"]),
+      // Set when a person edited the quote on the process page; the original stays in process_versions.
+      edited_by: z.string().optional(),
     })
     .nullable(),
   guardrails: z.array(GuardrailSchema),

@@ -6,6 +6,7 @@
 // the controls. One-app D2: the companion is a transport (desktop app bridge, opt-in WebSocket or none); in the
 // app Start also shares the screen without a picker and the window steps aside until End. Start order: the voice
 // agent first (mic prompt, start error visible), then the share, then the step-aside only when voice runs. Voice is optional: when it cannot start, the loop runs in text mode and questions show in the panel.
+import { intentQuery, type TrainIntent } from "@/lib/processes/train";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createActivityTracker } from "@/lib/perception/activity";
@@ -87,17 +88,18 @@ function viewOf(c: CaptureController): View {
 }
 
 /** transport: injected for tests; otherwise selected on mount (bridge, opt-in WebSocket or none). */
-export type CaptureAppProps = { agentParam?: string | null; transport?: CompanionTransport };
+// intent: ?process&mode from a process page (Add to this process, Retrain from scratch), passed on to the debrief.
+export type CaptureAppProps = { agentParam?: string | null; transport?: CompanionTransport; intent?: TrainIntent | null };
 
-export default function CaptureApp({ agentParam = null, transport }: CaptureAppProps) {
+export default function CaptureApp({ agentParam = null, transport, intent = null }: CaptureAppProps) {
   return (
     <VoiceProvider>
-      <CaptureInner agentParam={agentParam} transport={transport} />
+      <CaptureInner agentParam={agentParam} transport={transport} intent={intent} />
     </VoiceProvider>
   );
 }
 
-function CaptureInner({ agentParam, transport }: { agentParam: string | null; transport?: CompanionTransport }) {
+function CaptureInner({ agentParam, transport, intent }: { agentParam: string | null; transport?: CompanionTransport; intent: TrainIntent | null }) {
   const router = useRouter();
   const agentLoad = useAgent(agentParam);
   const [expert, setExpert] = useState("Sabine");
@@ -362,7 +364,7 @@ function CaptureInner({ agentParam, transport }: { agentParam: string | null; tr
     setSharing(false);
     setShareWarning(null);
     if (voiceModeRef.current) void agentRef.current.stop();
-    router.push(`/debrief/${loop.sessionId}`);
+    router.push(`/debrief/${loop.sessionId}${intentQuery(intent)}`);
   }
 
   // Companion shortcuts call the same controls as the buttons: pause_toggle holds questions, off_record_toggle stops capture.

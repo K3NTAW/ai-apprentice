@@ -11,6 +11,7 @@ const SEGMENTS: Record<string, boolean> = {
   "agents/[id]": true,
   "agents/[id]/studio": true,
   "agents/new": true,
+  "processes/[id]": true,
   learn: true,
   workspace: true,
   map: false,

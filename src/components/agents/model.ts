@@ -140,7 +140,19 @@ const mapHref = (agentId: string, m: AgentWorkMap, hash = "") =>
   m.sessionId ? `/map/${encodeURIComponent(m.sessionId)}${hash}` : agentHref(agentId);
 
 /** understood: the shared understanding score as 0-100 (the 'Understood' bar); ready: startable in Learn. */
-export type ProcessRow = { sessionId: string; task: string; counts: string; understood: number; ready: boolean; date: string; href: string };
+export type ProcessRow = {
+  sessionId: string;
+  task: string;
+  counts: string;
+  understood: number;
+  ready: boolean;
+  date: string;
+  href: string;
+  /** The process id when the entry is a process (editable on /processes/<id>), null for a legacy session. */
+  processId: string | null;
+};
+/** The process page: rename, edit steps and guardrails, archive, delete, versions, training entry points. */
+export const processHref = (id: string) => `/processes/${encodeURIComponent(id)}`;
 
 /** The agent's confirmed Work Maps, newest first. sessionId: the entry's session, else the process id. */
 export function agentProcesses(agentId: string, sessions: readonly SessionDigest[], processes: readonly ModelProcess[] = []): ProcessRow[] {
@@ -152,6 +164,7 @@ export function agentProcesses(agentId: string, sessions: readonly SessionDigest
     ready: isReadyProcess({ workmap: m.workmap, archived_at: null }),
     date: formatZurich(m.at),
     href: mapHref(agentId, m),
+    processId: m.source === "process" ? m.id : null,
   }));
 }
 

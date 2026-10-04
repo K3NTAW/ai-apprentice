@@ -2,6 +2,7 @@
 
 // Module 2 debrief: gap-driven follow-ups, rising scores, spoken teach-back with expert confirm.
 // Voice is optional: when it cannot start, the question shows on screen and the expert types the answer.
+import type { TrainIntent } from "@/lib/processes/train";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { voiceStartNotice } from "@/components/capture/dailyLimit";
@@ -26,15 +27,15 @@ const snapshot = (s: Readonly<DebriefState>): DebriefState => ({ ...s, history: 
 /** Local preview routes only (design compare): a fixed session and debrief state, nothing is fetched. */
 export type DebriefPreview = { session: Session; view: DebriefState; liveAnswer?: { speaker: string; text: string } | null; avatar?: unknown };
 
-export default function DebriefApp({ sessionId, preview }: { sessionId: string; preview?: DebriefPreview }) {
+export default function DebriefApp({ sessionId, preview, intent = null }: { sessionId: string; preview?: DebriefPreview; intent?: TrainIntent | null }) {
   return (
     <VoiceProvider>
-      <DebriefInner sessionId={sessionId} preview={preview} />
+      <DebriefInner sessionId={sessionId} preview={preview} intent={intent} />
     </VoiceProvider>
   );
 }
 
-function DebriefInner({ sessionId, preview }: { sessionId: string; preview?: DebriefPreview }) {
+function DebriefInner({ sessionId, preview, intent }: { sessionId: string; preview?: DebriefPreview; intent: TrainIntent | null }) {
   const [session, setSession] = useState<Session | null>(preview?.session ?? null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -302,7 +303,7 @@ function DebriefInner({ sessionId, preview }: { sessionId: string; preview?: Deb
               Open the Work Map
             </Link>
           </div>
-          {!preview && session?.agent_id && <ProcessChoice sessionId={sessionId} />}
+          {!preview && session?.agent_id && <ProcessChoice sessionId={sessionId} intent={intent} />}
           <WorkMapViewer sessionId={sessionId} workmap={view.workmap} />
         </section>
       )}
