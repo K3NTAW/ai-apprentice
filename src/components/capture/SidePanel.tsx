@@ -3,7 +3,7 @@
 // Narrow capture side panel (BUILD_SPEC D1): no avatar, just a small voice presence and controls.
 import { useState, type FormEvent } from "react";
 import type { ScreenEvent } from "@/lib/types";
-import { describeEvent } from "@/lib/voice/prompts";
+import { eventText } from "@/lib/capture/eventText";
 
 export type PresenceStatus = "idle" | "listening" | "thinking" | "speaking" | "paused";
 
@@ -170,7 +170,7 @@ export default function SidePanel(p: SidePanelProps) {
           {p.feed.length === 0 && <li className="text-muted">No events yet</li>}
           {p.feed.map((e) => (
             <li key={e.id} className="border-b border-line pb-1">
-              {mmss(e.t)} {describeEvent(e)}
+              {mmss(e.t)} {eventText(e, p.feed).text}{e.chord && ` · ${e.chord}`}
             </li>
           ))}
         </ol>

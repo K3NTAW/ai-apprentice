@@ -17,6 +17,7 @@ import {
   expertLine,
   learnHref,
   masteryText,
+  statText,
   TAB_LABELS,
   type AgentTab,
   type GuardrailRow,
@@ -233,7 +234,7 @@ export default function AgentDetail(props: AgentDetailProps) {
   const stat = (n: number | null, label: string) => (
     <span>
       <span className="ui-mono" style={{ color: "var(--tx)" }}>
-        {n ?? "-"}
+        {statText(n)}
       </span>{" "}
       {label}
     </span>

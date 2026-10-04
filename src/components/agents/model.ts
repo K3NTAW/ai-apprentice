@@ -1,7 +1,7 @@
 // Pure view models for the agent gallery (/agents), the agent page (/agents/[id]) and Learn (/learn). No I/O.
 //
 // Display rules (amendment A5):
-// - stats.shortcuts null (no chords recorded yet) shows "none yet"; a number shows as is.
+// - stats.shortcuts null (no chords on confirmed Work Maps, count 0) shows "none yet"; a number shows as is.
 // - Learners are named by the member label (own address for the signed-in user, else the first 8 chars of the
 //   user id); a teach session without a known creator shows "unknown learner".
 // - Repeat learners: the latest teach session per learner and process counts (same rule as the Work Map page);

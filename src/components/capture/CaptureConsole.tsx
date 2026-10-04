@@ -7,7 +7,7 @@
 // Canvas data the session does not have (task, answer, chips, next-question timer) is hidden, never invented.
 import type { ReactNode } from "react";
 import type { ScreenEvent } from "@/lib/types";
-import { describeEvent } from "@/lib/voice/prompts";
+import { eventText } from "@/lib/capture/eventText";
 import type { TransportHost } from "@/lib/companion/transport";
 import type { CompanionCardProps } from "./CompanionCard";
 import CompanionSlot from "./DesktopPanel";
@@ -269,15 +269,16 @@ export default function CaptureConsole(p: CaptureConsoleProps) {
             <ol className="m-0 list-none p-0" data-testid="live-events">
               {p.feed.map((e) => {
                 const app = e.app ?? e.source;
+                const words = eventText(e, p.feed);
                 return (
                   <li key={e.id}>
                     <FeedRow
                       time={mmss(e.t)}
                       app={appTag(app)}
                       color={appColor(app)}
-                      trailing={e.type === "shortcut_used" && e.chord ? <Chord keys={chordKeys(e.chord)} /> : undefined}
+                      trailing={words.chord ? <Chord keys={chordKeys(words.chord)} /> : undefined}
                     >
-                      <EventText text={describeEvent(e)} />
+                      <EventText text={words.text} />
                     </FeedRow>
                   </li>
                 );

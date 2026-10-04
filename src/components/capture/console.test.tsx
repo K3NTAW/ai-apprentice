@@ -55,7 +55,7 @@ describe("capture console", () => {
     expect(html).toContain("Why this step?");
     // presentational (design V3): the feed row puts the time and the text in separate columns
     expect(html).toContain(">01:05<");
-    expect(html).toContain("switched to Microsoft Outlook");
+    expect(html).toContain("Switched to Microsoft Outlook");
     expect(html).toContain("whole screen");
     expect(html).toContain('data-testid="screen-preview"');
     // presentational (design V3): no pairing card, the app status shows instead
@@ -97,7 +97,8 @@ describe("capture console", () => {
     // live events: newest first, coloured app tag, keycaps for shortcuts
     const rows = html.split('class="ui-ev"').slice(1);
     expect(rows).toHaveLength(f.feed.length);
-    expect(rows[0]).toContain("supplier 20418 opened in Google Chrome");
+    expect(rows[0]).toContain("Opened supplier 20418");
+    expect(rows[1]).toContain("Microsoft Outlook: shortcut");
     expect(html).toContain('<i style="background:#3FCF8E"></i>Excel<');
     expect(html).toMatch(/<span class="ui-kc">⌘<\/span><span class="ui-kc">⇧<\/span><span class="ui-kc">L<\/span>/);
     // right: questions so far with the three tiles and the next-question line
@@ -136,9 +137,9 @@ describe("capture console fix round (T-0152)", () => {
     const feed = [at("e3", 30, "Google Chrome"), at("e2", 20, "Microsoft Excel"), at("e1", 10, "Microsoft Outlook")];
     const rows = rowsOf(renderToStaticMarkup(<CaptureConsole {...props({ feed })} />));
     expect(rows).toHaveLength(3);
-    expect(rows[0]).toContain("switched to Google Chrome");
-    expect(rows[1]).toContain("switched to Microsoft Excel");
-    expect(rows[2]).toContain("switched to Microsoft Outlook");
+    expect(rows[0]).toContain("Switched to Google Chrome");
+    expect(rows[1]).toContain("Switched to Microsoft Excel");
+    expect(rows[2]).toContain("Switched to Microsoft Outlook");
   });
 
   it("Pause holds questions while capture continues: 'Resume questions', still capturing, events still listed", () => {
