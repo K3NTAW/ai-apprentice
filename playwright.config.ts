@@ -19,7 +19,14 @@ export default defineConfig({
   reporter: [["list"], ["json", { outputFile: path.join(os.tmpdir(), "ai-apprentice-e2e-report.json") }]],
   outputDir: path.join(os.tmpdir(), "ai-apprentice-e2e-artifacts"),
   globalTeardown: "./e2e/global-teardown.ts",
-  use: { baseURL: `http://localhost:${PORT}`, channel: "chrome", headless: true, acceptDownloads: true },
+  use: {
+    baseURL: `http://localhost:${PORT}`,
+    channel: "chrome",
+    headless: true,
+    acceptDownloads: true,
+    permissions: ["microphone"],
+    launchOptions: { args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--auto-select-desktop-capture-source=Entire screen"] },
+  },
   webServer: {
     command: `node e2e/seed.mjs && npx next dev --port ${PORT}`,
     url: `http://localhost:${PORT}/agents`,
