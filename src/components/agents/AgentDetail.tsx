@@ -132,9 +132,9 @@ function Guardrails({ rows }: { rows: GuardrailRow[] }) {
             <div className="flex min-w-0 flex-col" style={{ gap: 8 }}>
               <span className="ui-t3">{g.rule}</span>
               {g.quote && (
-                <span data-testid="guardrail-quote" style={{ ...quoteStyle, color: "var(--mu)" }}>
-                  &ldquo;{g.quote}&rdquo;
-                </span>
+                <q data-testid="guardrail-quote" style={{ ...quoteStyle, color: "var(--mu)" }}>
+                  {g.quote}
+                </q>
               )}
               <span className="text-xs" style={{ color: "var(--fa)" }}>
                 {g.task} · step {g.step}

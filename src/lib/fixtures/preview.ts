@@ -74,7 +74,7 @@ export function previewDebriefState(state: "asking" | "teach_back"): DebriefStat
     understood: state === "teach_back",
     endReason: state === "teach_back" ? "all steps above threshold" : null,
     history: state === "asking" ? [snap(0, -0.1), snap(1, 0)] : [snap(0, 0), snap(1, 0.15)],
-    workmap: previewDebriefSession.workmap,
+    workmap: previewDebriefSession.workmap ?? null,
     gaps: [],
     teachBack: state === "teach_back" ? TEACH_BACK : null,
     awaitingCorrection: false,

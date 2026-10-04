@@ -6,7 +6,7 @@ vi.mock("next/navigation", () => ({ usePathname: () => "/", useRouter: () => ({ 
 
 import { previewAgents } from "@/lib/fixtures/agents";
 import { previewSessionsFull } from "@/lib/fixtures/preview";
-import AgentDetail from "./AgentDetail";
+import AgentDetail, { type AgentDetailProps } from "./AgentDetail";
 import LearnView from "./LearnView";
 import { agentGuardrails, agentShortcuts, captureHref, learnAgents, learnProcesses, learnTraining, type ShortcutRow } from "./model";
 import NewAgentFlow, { expertInitials, memberName } from "./NewAgentFlow";
@@ -50,7 +50,7 @@ const detail = (tab: "guardrails" | "shortcuts", shortcuts: ShortcutRow[] = []) 
         guardrails: agentGuardrails("pip", previewSessionsFull),
         learners: [],
         stats: { processes: 2, shortcuts: shortcuts.length, guardrails: 9, learners: 0, mastered: null },
-      } as never)}
+      } as unknown as AgentDetailProps)}
     />,
   );
 
