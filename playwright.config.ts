@@ -10,6 +10,8 @@ const DATA_DIR = path.join(os.tmpdir(), "ai-apprentice-e2e");
 export default defineConfig({
   testDir: "e2e",
   testMatch: "**/*.spec.ts",
+  // Live specs need real keys and run only through e2e/live/playwright.live.config.ts (npm run e2e:live).
+  testIgnore: "live/**",
   fullyParallel: false,
   workers: 1,
   retries: 0,
