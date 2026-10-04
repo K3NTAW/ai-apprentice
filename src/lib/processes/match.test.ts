@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Process } from "@/lib/store/types";
 import type { WorkMap, WorkMapStep } from "@/lib/types";
-import { heuristicMatch, matchProcess, matchState } from "./match";
+import { heuristicMatch, matchProcess, matchState, type MatchDecide } from "./match";
 
 const step = (n: number, title: string, entity: string): WorkMapStep => ({
   n,
@@ -23,7 +23,7 @@ const next = map("Approve supplier invoices", [step(1, "Open invoice", "invoice"
 
 describe("matchProcess", () => {
   it("passes titles and step summaries of non-archived processes to decide and picks its best match", async () => {
-    const decide = vi.fn(async () => ({ answer: "p-inv", confidence: 0.9 }));
+    const decide = vi.fn<MatchDecide>(async () => ({ answer: "p-inv", confidence: 0.9 }));
     const r = await matchProcess(next, [invoices, travel, proc("p-old", "Old", [], "2026-10-01T00:00:00Z")], decide);
     expect(r).toEqual({ choice: "p-inv", confidence: 0.9, title: "Approve supplier invoices" });
     const state = decide.mock.calls[0]![0];
