@@ -59,7 +59,9 @@ describe("agents home", () => {
     expect(homeAction("start a session", index, "agent-a")).toEqual({ kind: "start", href: "/capture?agent=agent-a" });
     const html = render();
     // Presentational: Start is the '+' button in the box (aria-label), no longer a text button.
-    expect(html).toMatch(/<a[^>]*href="\/capture\?agent=agent-b"[^>]*aria-label="Start a session"[^>]*data-testid="home-start"/);
+    const start = html.match(/<a[^>]*data-testid="home-start"[^>]*>/)![0];
+    expect(start).toContain('href="/capture?agent=agent-b"');
+    expect(start).toContain('aria-label="Start a session"');
     expect(cards[0].id).toBe("agent-b");
   });
 
@@ -151,8 +153,8 @@ describe("agents home F2 (Gallery.dc.html 1:1)", () => {
 
   it("'+ New agent' button and dashed card for creators only", () => {
     const html = render();
-    expect(html).toMatch(/href="\/agents\/new"[^>]*data-testid="new-agent-button"/);
-    expect(html).toMatch(/data-testid="new-agent-card"[^>]*ui-card-dashed/);
+    expect(html.match(/<a[^>]*data-testid="new-agent-button"[^>]*>/)![0]).toContain('href="/agents/new"');
+    expect(html.match(/<a[^>]*data-testid="new-agent-card"[^>]*>/)![0]).toContain("ui-card-dashed");
     const viewer = render({ canCreate: false });
     expect(viewer).not.toContain("new-agent-button");
     expect(viewer).not.toContain("new-agent-card");
