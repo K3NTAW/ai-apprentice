@@ -60,3 +60,16 @@ export class PermissionMonitor {
     return p;
   }
 }
+
+/** App events after which permissions are re-checked, so one revoked while the app ran is noticed without relaunch. */
+export const RECHECK_EVENTS = ["activate", "did-become-active", "browser-window-focus"] as const;
+
+/** Re-check on every RECHECK_EVENTS event. main.mts passes Electron's app. */
+export function recheckOnActivate(app: { on(event: (typeof RECHECK_EVENTS)[number], fn: () => void): unknown }, check: () => void): void {
+  for (const ev of RECHECK_EVENTS) app.on(ev, () => check());
+}
+
+/** A session starts when session.state goes from no mode to capture or teach (also re-checks permissions). */
+export function sessionStarted(prev: "capture" | "teach" | null | undefined, next: "capture" | "teach" | null | undefined): boolean {
+  return !prev && (next === "capture" || next === "teach");
+}

@@ -41,11 +41,26 @@ import {
   type DockAction,
 } from "./dock.mjs";
 import { overlayViewModel, type DisplayInfo } from "./overlay.mjs";
+import {
+  appPollMs,
+  CursorPoller,
+  formatMetrics,
+  PERF_LOG_MS,
+  perfEnabled,
+  permissionPollMs,
+  SendGate,
+  sessionActive,
+  syncOverlayWindows,
+  ThrottleGate,
+  voiceSessionActive,
+  TimerSet,
+  type TimerApi,
+} from "./perf.mjs";
 import type { Allowlist } from "./origin.mjs";
 import { createWsPairing } from "./pairing.mjs";
 import { isPanelAction, materialOptions, panelBounds, panelMaterial, panelViewModel, surfaceMaterial } from "./panel.mjs";
 import { isPermissionKey } from "./pairingWindow.mjs";
-import { canStartHook, PermissionMonitor, readPermissions } from "./permissions.mjs";
+import { canStartHook, PermissionMonitor, readPermissions, recheckOnActivate, sessionStarted } from "./permissions.mjs";
 import { allowDisplayMedia, checkPermission, DISPLAY_MEDIA_OPTIONS, grantPermission, isUrlAllowed, pickPrimarySource } from "./permissionsGrant.mjs";
 import { appMessage, chordMessage, parsePort, shortcutMessage, statusMessage, type Permissions, type ServerMessage, type SessionStateMessage } from "./protocol.mjs";
 import {
@@ -66,9 +81,6 @@ import { isWindowAction, MAIN_WINDOW, planWindowAction, restoreWindowBounds, ser
 
 const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
-const APP_POLL_MS = 500;
-const CURSOR_POLL_MS = 16;
-const PERMISSION_POLL_MS = 2_000;
 const HOOK_EVENTS = ["keydown", "mousedown", "mousemove", "wheel"] as const;
 
 const SETTINGS = {
@@ -78,6 +90,12 @@ const SETTINGS = {
 } as const;
 
 const log = (line: string) => console.log(`[companion] ${line}`);
+
+const timerApi: TimerApi = { setInterval: (fn, ms) => setInterval(fn, ms), clearInterval: (h) => clearInterval(h as NodeJS.Timeout) };
+/** Every repeating timer (cleared on quit); periods follow session and permission state (perf.mts). */
+const timers = new TimerSet(timerApi);
+/** Last value sent per window channel: unchanged views, cursors, dock and panel states are not re-sent. */
+const sent = new SendGate();
 
 let tray: Tray | null = null;
 /** One transparent, click-through overlay per display, keyed by display id. */
@@ -198,6 +216,7 @@ function startHook(): void {
         hook.on(name, () => {
           const kind: InputKind | null = toInputKind(name);
           if (!kind) return;
+          if (name === "mousemove") cursorPoller.moved();
           if (!inputEventSeen) {
             inputEventSeen = true;
             permissionMonitor.check();
@@ -245,7 +264,25 @@ async function pollApp(): Promise<void> {
   }
 }
 
-const permissionMonitor = new PermissionMonitor(permissions, () => {
+const appTimer = timers.add(() => void pollApp());
+const permissionTimer = timers.add(() => permissionMonitor.check());
+let mainThrottled: boolean | null = null;
+/** Main window throttling: off during a session or voice, back on 30 s after the last activity (perf.mts). */
+const throttle = new ThrottleGate({ setTimeout: (fn, ms) => setTimeout(fn, ms), clearTimeout: (h) => clearTimeout(h as NodeJS.Timeout) }, (allow) => {
+  if (mainWin && !mainWin.isDestroyed() && mainThrottled !== allow) {
+    mainWin.webContents.setBackgroundThrottling(allow);
+    mainThrottled = allow;
+  }
+});
+
+/** Frontmost-app poll rate and main window throttling follow the session and voice activity (perf.mts). */
+function syncSessionTimers(): void {
+  appTimer.set(appPollMs(sessionActive({ paired, mode: session?.mode })));
+  throttle.update(voiceSessionActive({ paired, mode: session?.mode, buddyMode: buddy.mode, voiceActive: session?.voice_active === true }));
+}
+
+const permissionMonitor = new PermissionMonitor(permissions, (p) => {
+  permissionTimer.set(permissionPollMs(p));
   startHook();
   emit(status());
   rebuildMenu();
@@ -328,7 +365,10 @@ function createDock(material = surfaceMaterial("dock", process.platform, process
   win.setContentProtection(true);
   win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   win.webContents.on("will-navigate", (e) => e.preventDefault());
-  win.webContents.on("did-finish-load", pushDock);
+  win.webContents.on("did-finish-load", () => {
+    sent.forget("dock");
+    pushDock();
+  });
   win.on("closed", () => {
     if (dockWin === win) dockWin = null;
   });
@@ -361,10 +401,8 @@ function pushDock(): void {
   const now = Date.now();
   const live = expireBuddy(buddy, now);
   const view = buddyView(buddy, now, { enabled: true, paused });
-  dockWin.webContents.send(
-    "dock-state",
-    dockViewModel({ state: dock, session, mode: view.mode, target: view.target?.style ?? null, say: live.say?.text ?? null, paused }),
-  );
+  const model = dockViewModel({ state: dock, session, mode: view.mode, target: view.target?.style ?? null, say: live.say?.text ?? null, paused });
+  if (sent.changed("dock", model)) dockWin.webContents.send("dock-state", model);
 }
 
 function dispatch(action: BuddyAction): void {
@@ -386,35 +424,34 @@ function pushView(): void {
   const avatar = agent ? avatarFor(agent.avatar, avatarState(view.mode, view.target?.style ?? null)) : null;
   const primary = screen.getPrimaryDisplay();
   const display = primaryDisplay();
-  for (const [id, win] of overlays) {
-    if (win.isDestroyed()) continue;
+  const live = expireBuddy(buddy, now);
+  // Cursor poll only while the buddy is shown (perf.mts CursorPoller: 30 Hz, pauses when the cursor rests).
+  const wantCursor = cursorPollNeeded({ enabled: buddyOn() && surf.buddy, visible: overlays.size > 0, paused, paired, sayActive: live.say !== null });
+  syncOverlayWindows({
+    overlays,
+    ready: (win) => readyOverlays.has(win as BrowserWindow),
+    mode: session?.mode,
+    wantCursor,
     // Same session.state / pause source as the dock: off the record clears the flight path and the halos.
-    win.webContents.send("buddy-view", overlayViewModel({ view, avatar, isPrimary: id === primary.id, display, offRecord: session?.off_record === true }));
-  }
-  updateCursorLoop();
+    model: (id) => overlayViewModel({ view, avatar, isPrimary: id === primary.id, display, offRecord: session?.off_record === true }),
+    cursor: cursorPoller,
+    sent,
+  });
   syncDock();
   pushPanel();
 }
 
-let cursorTimer: NodeJS.Timeout | null = null;
-function updateCursorLoop(): void {
-  const live = expireBuddy(buddy, Date.now());
-  const need = cursorPollNeeded({ enabled: buddyOn() && currentSurfaces().buddy, visible: overlays.size > 0, paused, paired, sayActive: live.say !== null });
-  if (need && !cursorTimer) cursorTimer = setInterval(pushCursor, CURSOR_POLL_MS);
-  if (!need && cursorTimer) {
-    clearInterval(cursorTimer);
-    cursorTimer = null;
-    for (const win of overlays.values()) if (!win.isDestroyed()) win.webContents.send("cursor", null);
-  }
-}
+/** Overlays that reached ready-to-show; pushView shows them only when they draw something. */
+const readyOverlays = new WeakSet<BrowserWindow>();
+const cursorPoller = new CursorPoller(timerApi, { now: Date.now, read: () => screen.getCursorScreenPoint(), push: pushCursor, canResume: () => hookRunning });
 
-function pushCursor(): void {
-  const p = screen.getCursorScreenPoint();
-  for (const win of overlays.values()) {
+function pushCursor(p: { x: number; y: number }): void {
+  for (const [id, win] of overlays) {
     if (win.isDestroyed()) continue;
     const b = win.getBounds();
     const inside = p.x >= b.x && p.x < b.x + b.width && p.y >= b.y && p.y < b.y + b.height;
-    win.webContents.send("cursor", inside ? { x: p.x - b.x, y: p.y - b.y } : null);
+    const local = inside ? { x: p.x - b.x, y: p.y - b.y } : null;
+    if (sent.changed(`cursor:${id}`, local)) win.webContents.send("cursor", local);
   }
 }
 
@@ -445,9 +482,16 @@ function createOverlay(display: Electron.Display): BrowserWindow {
   win.setContentProtection(true);
   win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   win.webContents.on("will-navigate", (e) => e.preventDefault());
-  win.webContents.on("did-finish-load", pushView);
+  win.webContents.on("did-finish-load", () => {
+    sent.forget(`view:${display.id}`);
+    sent.forget(`cursor:${display.id}`);
+    pushView();
+  });
   void win.loadFile(path.join(here, "..", "static", "overlay.html"));
-  win.once("ready-to-show", () => win.showInactive());
+  win.once("ready-to-show", () => {
+    readyOverlays.add(win);
+    pushView();
+  });
   return win;
 }
 
@@ -459,6 +503,8 @@ function syncOverlays(): void {
     if (!ids.has(id) || win.isDestroyed()) {
       if (!win.isDestroyed()) win.destroy();
       overlays.delete(id);
+      sent.forget(`view:${id}`);
+      sent.forget(`cursor:${id}`);
     }
   }
   for (const d of displays) {
@@ -546,7 +592,8 @@ function panelView() {
 
 function pushPanel(): void {
   if (!panel || panel.isDestroyed()) return;
-  panel.webContents.send("panel-state", panelView());
+  const model = panelView();
+  if (sent.changed("panel", model)) panel.webContents.send("panel-state", model);
 }
 
 function hidePanel(): void {
@@ -604,7 +651,10 @@ function showPanel(): void {
   win.setContentProtection(true);
   win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   win.webContents.on("will-navigate", (e) => e.preventDefault());
-  win.webContents.on("did-finish-load", pushPanel);
+  win.webContents.on("did-finish-load", () => {
+    sent.forget("panel");
+    pushPanel();
+  });
   win.once("ready-to-show", () => win.show());
   win.on("closed", () => {
     if (panel === win) panel = null;
@@ -706,6 +756,7 @@ function setConnection(source: "ws" | "page", on: boolean): void {
   }
   const changed = next !== paired;
   paired = next;
+  syncSessionTimers();
   if (changed || !on) {
     pushView();
     rebuildMenu();
@@ -718,11 +769,17 @@ const bridgeHandlers: BridgeHandlers = {
     // While paused nothing new is drawn; clear is always honoured.
     if (paused && action.type !== "clear") return;
     dispatch(action);
+    // buddy.state listening/thinking/speaking is voice activity: keep the main window unthrottled.
+    if (action.type === "state") syncSessionTimers();
   },
   onSession(next) {
+    // A session start re-checks permissions, so one revoked since launch is noticed.
+    const started = sessionStarted(session?.mode, next.mode);
     session = next;
+    if (started) permissionMonitor.check();
     // A new session (agent, mode or title change) clears the feed and the page's dock override.
     dock = reduceDock(dock, { type: "session", key: sessionKey(next) });
+    syncSessionTimers();
     pushView();
   },
   onDock(msg) {
@@ -905,11 +962,13 @@ function createMainWindow(): BrowserWindow {
       sandbox: true,
       nodeIntegration: false,
       webSecurity: true,
-      // Voice and frame timers keep running while the window is minimised or hidden.
-      backgroundThrottling: false,
+      // Throttled outside a session; syncSessionTimers turns throttling off while one is active (voice and frames).
+      backgroundThrottling: true,
     },
   });
   mainWin = win;
+  mainThrottled = true;
+  syncSessionTimers();
   const wc = win.webContents;
   wc.setWindowOpenHandler(({ url }) => {
     if (isUrlAllowed(url, appList)) void win.loadURL(url);
@@ -1113,13 +1172,12 @@ async function boot(): Promise<void> {
   }
   rebuildMenu();
 
-  setInterval(() => {
+  timers.add(() => {
     const msg = aggregator.flush(Date.now());
     if (paired && !paused) emit(msg);
   }, WINDOW_MS);
-  setInterval(() => void pollApp(), APP_POLL_MS);
-  setInterval(() => permissionMonitor.check(), PERMISSION_POLL_MS);
-  setInterval(() => {
+  syncSessionTimers();
+  timers.add(() => {
     const now = Date.now();
     talk.tick(now);
     const next = expireBuddy(buddy, now);
@@ -1129,6 +1187,8 @@ async function boot(): Promise<void> {
     }
   }, 250);
   permissionMonitor.start();
+  // COMPANION_PERF=1: CPU per process every 5 s (docs/checks/performance.md, desktop section).
+  if (perfEnabled(process.env.COMPANION_PERF)) timers.add(() => log(formatMetrics(app.getAppMetrics())), PERF_LOG_MS);
 }
 
 // Before the lock and before ready: the new name, and userData pinned to the pre-rename folder.
@@ -1142,6 +1202,10 @@ if (!app.requestSingleInstanceLock()) {
   // No <webview> anywhere.
   app.on("web-contents-created", (_e, wc) => wc.on("will-attach-webview", (ev) => ev.preventDefault()));
   app.on("activate", () => showMain());
+  // Coming back to the app re-checks permissions (one revoked in System Settings meanwhile).
+  recheckOnActivate(app, () => {
+    if (app.isReady()) permissionMonitor.check();
+  });
   app.on("window-all-closed", () => {
     // Tray app: stay alive without windows.
   });
@@ -1152,6 +1216,9 @@ if (!app.requestSingleInstanceLock()) {
     pushView();
     globalShortcut.unregisterAll();
     stopHook();
+    cursorPoller.set(false);
+    throttle.cancel();
+    timers.clearAll();
     void server?.close();
   });
   void app.whenReady().then(boot);

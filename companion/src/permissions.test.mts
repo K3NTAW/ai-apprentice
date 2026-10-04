@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { canStartHook, PermissionMonitor, readPermissions, type PermissionApis } from "./permissions.mjs";
+import { canStartHook, PermissionMonitor, readPermissions, RECHECK_EVENTS, recheckOnActivate, sessionStarted, type PermissionApis } from "./permissions.mjs";
 import { statusMessage, type Permissions } from "./protocol.mjs";
 
 function apis(over: Partial<PermissionApis> = {}): PermissionApis {
@@ -79,5 +79,50 @@ describe("permission status from macOS permission APIs", () => {
     monitor.check();
     expect(seen).toHaveLength(2);
     expect(seen[1]).toMatchObject({ input: true, accessibility: true });
+  });
+});
+
+describe("permission re-check", () => {
+  /** Fake app: a permission revoked after launch, noticed only when a re-check runs. */
+  function revoked() {
+    let screen = "granted";
+    const changes: Permissions[] = [];
+    const monitor = new PermissionMonitor(() => readPermissions(apis({ getMediaAccessStatus: () => screen })), (p) => changes.push(p));
+    monitor.start();
+    return { monitor, changes, revoke: () => (screen = "denied") };
+  }
+
+  it("re-checks when the app becomes active or a window gets focus", () => {
+    const handlers = new Map<string, () => void>();
+    const app = { on: (ev: string, fn: () => void) => handlers.set(ev, fn) };
+    const r = revoked();
+    recheckOnActivate(app, () => r.monitor.check());
+    expect([...handlers.keys()]).toEqual([...RECHECK_EVENTS]);
+    expect(handlers.has("activate")).toBe(true);
+    expect(handlers.has("browser-window-focus")).toBe(true);
+    r.revoke();
+    expect(r.changes).toHaveLength(1);
+    handlers.get("activate")!();
+    expect(r.changes).toHaveLength(2);
+    expect(r.changes[1].screen).toBe(false);
+    // Unchanged on the next focus: no new emit.
+    handlers.get("browser-window-focus")!();
+    expect(r.changes).toHaveLength(2);
+  });
+
+  it("re-checks when a session starts, not on every session.state", () => {
+    expect(sessionStarted(null, "teach")).toBe(true);
+    expect(sessionStarted(undefined, "capture")).toBe(true);
+    expect(sessionStarted("teach", "teach")).toBe(false);
+    expect(sessionStarted("capture", "teach")).toBe(false);
+    expect(sessionStarted(null, null)).toBe(false);
+    const r = revoked();
+    r.revoke();
+    let mode: "capture" | "teach" | null = null;
+    for (const next of ["teach", "teach"] as const) {
+      if (sessionStarted(mode, next)) r.monitor.check();
+      mode = next;
+    }
+    expect(r.changes.map((p) => p.screen)).toEqual([true, false]);
   });
 });

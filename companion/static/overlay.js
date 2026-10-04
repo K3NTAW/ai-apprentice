@@ -8,6 +8,7 @@ const avatarEl = document.getElementById("avatar");
 const pathEl = document.getElementById("path");
 const pathLine = document.getElementById("path-line");
 const geo = window.companionPath;
+const sched = window.companionScheduler;
 const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
 const px = (n) => `${Number(n) || 0}px`;
 const OFFSET = 18;
@@ -104,8 +105,10 @@ function placeBubble() {
   sayEl.style.top = px(Math.max(0, y));
 }
 
+/** One frame; returns true while the buddy still moves (flight or easing), so the loop stops when idle. */
 function frame(now) {
   const g = goal();
+  let moving = false;
   if (!view.buddy || !g) {
     buddyEl.classList.add("hidden");
     pos = null;
@@ -121,8 +124,10 @@ function frame(now) {
         y: a * a * flight.from.y + 2 * a * e * flight.ctrl.y + e * e * flight.to.y,
       };
       if (t >= 1) flight = null;
-    } else if (pos) {
+      moving = true;
+    } else if (pos && !sched.settled(pos, g)) {
       pos = { x: pos.x + (g.x - pos.x) * 0.3, y: pos.y + (g.y - pos.y) * 0.3 };
+      moving = true;
     } else {
       pos = g;
     }
@@ -134,8 +139,11 @@ function frame(now) {
     clearPath();
   }
   placeBubble();
-  requestAnimationFrame(frame);
+  return moving || flight !== null;
 }
+
+// Halos and the buddy modes pulse in CSS; the loop only moves the buddy and draws the path.
+const loop = sched.createScheduler((cb) => requestAnimationFrame(cb), frame);
 
 window.companionOverlay.onView((next) => {
   view = next && typeof next === "object" ? next : view;
@@ -158,10 +166,12 @@ window.companionOverlay.onView((next) => {
     // Fly to a new target, and fly back to the cursor when a glance ends.
     if (g) startFlight(g);
   }
+  loop.wake();
 });
 
 window.companionOverlay.onCursor((p) => {
   cursor = p && typeof p.x === "number" && typeof p.y === "number" ? p : null;
+  loop.wake();
 });
 
-requestAnimationFrame(frame);
+loop.wake();

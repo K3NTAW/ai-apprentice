@@ -85,6 +85,8 @@ export type SessionStateMessage = {
   app_url: string;
   /** v3, optional: absent in local mode without an agent, or when the agent failed validation. */
   agent?: AgentInfo;
+  /** Optional: a voice session runs without a capture/teach mode (e.g. the debrief interview). */
+  voice_active?: boolean;
 };
 export type AgentInfo = { id: string; name: string; role: string; avatar: AvatarSet };
 export type DockShowMessage = { type: "dock.show"; side: DockSide };
@@ -169,6 +171,7 @@ function parseSessionState(d: Record<string, unknown>): ParseResult {
   const guardrails = counter(d.guardrails);
   if (asked === null || guardrails === null) return bad("session_counter");
   if (d.off_record !== undefined && typeof d.off_record !== "boolean") return bad("session_off_record");
+  if (d.voice_active !== undefined && typeof d.voice_active !== "boolean") return bad("session_voice_active");
   const agent = d.agent === undefined || d.agent === null ? null : parseAgent(d.agent);
   const msg: SessionStateMessage = {
     type: "session.state",
@@ -183,6 +186,7 @@ function parseSessionState(d: Record<string, unknown>): ParseResult {
     app_url: strings.app_url ?? "",
   };
   if (agent?.ok) msg.agent = agent.agent;
+  if (typeof d.voice_active === "boolean") msg.voice_active = d.voice_active;
   return agent && !agent.ok ? { ok: true, msg, warning: `session_${agent.reason}` } : { ok: true, msg };
 }
 

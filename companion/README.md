@@ -390,6 +390,9 @@ Web to companion:
 - v3: `session.state` may carry `"agent":{"id":"[A-Za-z0-9-]{1,64}","name":"<1..60>","role":"<0..80>","avatar":{"idle":"data:...",...}}`
   (lengths in code points, avatar rules above). A bad agent is dropped with a log line; the rest of
   `session.state` is kept.
+- Optional `"voice_active":bool` on `session.state`: a voice session runs without a capture/teach mode (e.g. the
+  debrief interview). It, `buddy.state` listening/thinking/speaking, or a capture/teach mode keep the main window's
+  background throttling off; throttling returns 30 s after the last activity. A non-boolean rejects the message.
 - v3: `{"type":"dock.show","side":"right"|"left"}` (side optional, default right), `{"type":"dock.hide"}`,
   `{"type":"dock.learned","kind":"step"|"shortcut"|"guardrail","text":"<1..140>"}`.
 

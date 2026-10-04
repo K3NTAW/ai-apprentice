@@ -150,3 +150,78 @@ How to run against the preview:
    `BASE_URL=https://<preview-host> SESSION_COOKIE='sb-<ref>-auth-token.0=...; sb-<ref>-auth-token.1=...; ws=...' node scripts/measure-ttfb.mjs`
 3. Run it once on a preview of the goal branch (before) and once on this branch (after); paste the medians above.
    `RUNS=10` or `PAGES=/agents,/map` narrow or widen the run. A 307 status means the cookie expired.
+
+## Desktop app (companion) CPU
+
+T-0175, 2026-10-04. Complaint: the app "stalls on different clicks".
+
+### Measuring
+
+- `COMPANION_PERF=1 npm --prefix companion run dev` logs `app.getAppMetrics()` every 5 s:
+  `[companion] cpu <total>% | Browser:<pid> <cpu> | GPU:<pid> <cpu> | Tab:<pid> <cpu> ...`
+- Let each state settle for 30 s, then average the last 4 lines. Activity Monitor (CPU, Energy, GPU) as a cross-check.
+- States: idle (app open, no session, cursor still), capture (session in capture, dock visible),
+  teach (session in teach, buddy visible, cursor moving then resting).
+
+### Results (total CPU %, all companion processes)
+
+T-0180, 2026-10-04, this Mac (Apple silicon, macOS 26), Electron 44.5.1, web app on `npx next dev` (local mode),
+`APP_URL=http://localhost:<port>`. Before = `goal/T-0001` companion (before T-0175), after = T-0180 head.
+Average of 12 samples (5 s apart, 60 s) after 10 s settling; the app was quit after every run.
+
+| state | before | after |
+| --- | --- | --- |
+| idle | 2.2 | 0.7 |
+| capture (dock visible) | 3.5 | 3.1 |
+| teach (buddy visible) | 2.3 | 2.2 |
+
+Per process (average CPU %):
+
+| state | version | Browser | GPU | main window | overlay | dock |
+| --- | --- | --- | --- | --- | --- | --- |
+| idle | before | 0.1 | 1.2 | 0.5 | 0.4 | hidden |
+| idle | after | 0.1 | 0.4 | 0.0 | 0.2 | hidden |
+| capture | before | 0.2 | 2.2 | 0.6 | 0.3 | 0.2 |
+| capture | after | 0.0 | 2.2 | 0.6 | 0.0 (hidden) | 0.2 |
+| teach | before | 0.1 | 1.3 | 0.5 | 0.4 | hidden |
+| teach | after (2 runs) | 0.1 | 1.3 | 0.55 | 0.25 | hidden |
+
+The network utility process was 0.0 everywhere. Teach after is the mean of two runs (2.4, 2.0). A first
+teach-before run (1.8) was dropped: no window was visible in its samples, so the buddy was not on screen.
+
+How it was run:
+- A harness outside the repo (`/tmp`, not shipped) set its own `appData` (another dev companion on this machine held
+  the single-instance lock in the default one), logged `app.getAppMetrics()` every 5 s labelled per window
+  (main, overlay, dock), and then loaded the companion's built `dist/main.mjs` unchanged. Before has no
+  `COMPANION_PERF`, so both sides used the harness for the same method.
+- States were set through the page's own bridge: `window.apprentice.send(session.state)` over the Chrome DevTools
+  Protocol, mode `capture` or `teach`, re-sent every 5 s. Idle: page connected, no session.
+
+Limits:
+- No macOS permission prompts appeared and none were granted. The input hook (uiohook) was not rebuilt for
+  Electron, so it did not run: after, the cursor poll never pauses (it needs the hook to resume) and stays at 30 Hz
+  in teach; with the hook it pauses after 2 s of rest. The cursor was resting in all runs.
+- Capture is the companion side only: the injected session.state does not make the page capture screen frames
+  or start voice, so frame and voice cost in the page are not in these numbers.
+- Most of the remaining cost in capture and teach is the GPU process (compositing the visible dock, main window
+  and overlay); idle drops most because the main window is throttled and the overlay loop sleeps.
+
+### What changed
+
+- Overlay (`static/overlay.js`, `static/scheduler.js`): the requestAnimationFrame loop ran every frame forever, in a
+  full-screen transparent always-on-top window per display. It now runs only while the buddy flies or eases toward
+  its goal and stops when settled; a new view (buddy.point, halo, say, state) or cursor update wakes it. Halos and
+  buddy modes pulse in CSS, which needs no loop.
+- Overlay windows are hidden (not just empty) when they draw nothing and in capture mode (the buddy is hidden there).
+- Cursor poll: was 16 ms (about 60 Hz) whenever the buddy was enabled. Now 34 ms (at most 30 Hz), only while the
+  buddy is shown, paused after 2 s without movement, resumed by the uiohook mousemove event (never paused without
+  the hook). Only moved points are sent.
+- Frontmost app poll: was 500 ms always; now 500 ms during a session, 5 s otherwise.
+- Permission poll: was 2 s always; now 10 s and only while a permission is missing.
+- buddy-view, cursor, dock-state and panel-state IPC are sent only when the value changed.
+- Main window: backgroundThrottling is off during a session (voice and frames) and during voice without a
+  capture/teach mode (buddy.state listening/thinking/speaking or session.state `voice_active`, e.g. the debrief
+  interview); it returns 30 s after the last activity (T-0180).
+- Permissions are re-checked when the app becomes active or a window gets focus, and when a session starts, so a
+  permission revoked while the app runs is noticed without relaunch (T-0180).
+- All repeating timers are cleared on quit.
