@@ -7,8 +7,10 @@ import {
   getStore,
   InvalidOffRecordRangeError,
   InvalidSessionIdError,
+  InvalidWorkMapError,
   isValidSessionId,
   ProcessesUnavailableError,
+  ProcessExistsError,
   ProcessNotFoundError,
   ProcessVersionConflictError,
   SessionNotFoundError,
@@ -47,6 +49,8 @@ export async function handle(fn: () => Promise<Response>): Promise<Response> {
     if (err instanceof SessionNotFoundError) return notFound(err.message);
     if (err instanceof ProcessNotFoundError) return notFound(err.message);
     if (err instanceof ProcessVersionConflictError) return Response.json({ error: err.code, message: err.message }, { status: 409 });
+    if (err instanceof ProcessExistsError) return Response.json({ error: err.code, message: err.message }, { status: 409 });
+    if (err instanceof InvalidWorkMapError) return badRequest(err.code);
     // Migration 20261004030000_processes not applied: a stable 503, never a 500. The UI falls back to sessions.
     if (err instanceof ProcessesUnavailableError) return Response.json({ error: err.code, message: err.message }, { status: 503 });
     // getStore errors: never fall back to the file store.

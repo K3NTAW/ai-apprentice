@@ -7,10 +7,17 @@
 // - Repeat learners: the latest teach session per learner and process counts (same rule as the Work Map page);
 //   mastery = mastered steps of those latest sessions over the steps of those processes.
 // - Deleting an agent keeps its sessions; they become agentless (agent_id cleared by the store).
+// - Processes (T-0225): cards, header stats, filter tabs, the Processes, Shortcuts and Guardrails tabs and Learn
+//   read the agent's Work Maps from agentWorkMaps (lib/processes/merge): confirmed, non-archived processes merged
+//   with legacy confirmed capture sessions not linked to a process. processes defaults to none (migration missing,
+//   previews), which leaves the session rule. Links (/map, Teach) go to an entry's session: the process's newest
+//   linked capture session; a process without one is listed but not startable in Learn.
 import { z } from "zod";
 import { agentStats, type AgentStats } from "@/lib/agents/stats";
 import { agentStatus, isReadyProcess, understandingPercent, type AgentStatus } from "@/lib/agents/status";
 import type { CreatedBy, DashboardMember } from "@/lib/dashboard/summary";
+import { agentWorkMaps, type AgentWorkMap } from "@/lib/processes/merge";
+import type { Process } from "@/lib/store/types";
 import { AGENT_EXPERT_NAME_MAX, type Agent, type Guardrail, type Session, type SessionDigest } from "@/lib/types";
 import { countsLine, formatT, formatZurich } from "@/lib/workmap/view";
 
@@ -94,13 +101,16 @@ export function filterCards(cards: readonly GalleryCard[], query: string, filter
   );
 }
 
-export function galleryCards(agents: readonly Agent[], sessions: readonly SessionDigest[]): GalleryCard[] {
+/** The processes the view models read (a Process from the store fits). */
+export type ModelProcess = Pick<Process, "id" | "agent_id" | "title" | "workmap" | "confirmed" | "archived_at" | "created_at">;
+
+export function galleryCards(agents: readonly Agent[], sessions: readonly SessionDigest[], processes: readonly ModelProcess[] = []): GalleryCard[] {
   return [...agents]
     .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id))
     .map((a) => {
-      const stats = agentStats(a.id, sessions);
+      const stats = agentStats(a.id, sessions, processes);
       const expertName = a.expert_name?.trim() || null;
-      const status = agentStatus(a.id, sessions);
+      const status = agentStatus(a.id, sessions, processes);
       return {
         id: a.id,
         name: a.name,
@@ -118,24 +128,27 @@ export function galleryCards(agents: readonly Agent[], sessions: readonly Sessio
     });
 }
 
-const confirmedOf = (agentId: string, sessions: readonly SessionDigest[]) =>
-  sessions
-    .filter((s) => s.agent_id === agentId && s.kind === "capture" && s.workmap?.confirmed_by_expert === true)
-    .sort((a, b) => Date.parse(b.started_at) - Date.parse(a.started_at) || a.id.localeCompare(b.id));
+/** The agent's confirmed Work Maps, newest first: processes merged with legacy sessions (agentWorkMaps). */
+const confirmedOf = (agentId: string, sessions: readonly SessionDigest[], processes: readonly ModelProcess[]) =>
+  agentWorkMaps(agentId, processes, sessions);
+
+const taskOf = (m: AgentWorkMap) => m.title || "Untitled capture";
+const mapHref = (agentId: string, m: AgentWorkMap, hash = "") =>
+  m.sessionId ? `/map/${encodeURIComponent(m.sessionId)}${hash}` : agentHref(agentId);
 
 /** understood: the shared understanding score as 0-100 (the 'Understood' bar); ready: startable in Learn. */
 export type ProcessRow = { sessionId: string; task: string; counts: string; understood: number; ready: boolean; date: string; href: string };
 
-/** The agent's confirmed Work Maps, newest first. */
-export function agentProcesses(agentId: string, sessions: readonly SessionDigest[]): ProcessRow[] {
-  return confirmedOf(agentId, sessions).map((s) => ({
-    sessionId: s.id,
-    task: s.workmap!.task || "Untitled capture",
-    counts: countsLine(s.workmap!),
-    understood: understandingPercent(s.workmap),
-    ready: isReadyProcess({ workmap: s.workmap, archived_at: null }),
-    date: formatZurich(s.started_at),
-    href: `/map/${encodeURIComponent(s.id)}`,
+/** The agent's confirmed Work Maps, newest first. sessionId: the entry's session, else the process id. */
+export function agentProcesses(agentId: string, sessions: readonly SessionDigest[], processes: readonly ModelProcess[] = []): ProcessRow[] {
+  return confirmedOf(agentId, sessions, processes).map((m) => ({
+    sessionId: m.sessionId ?? m.id,
+    task: taskOf(m),
+    counts: countsLine(m.workmap),
+    understood: understandingPercent(m.workmap),
+    ready: isReadyProcess({ workmap: m.workmap, archived_at: null }),
+    date: formatZurich(m.at),
+    href: mapHref(agentId, m),
   }));
 }
 
@@ -151,18 +164,18 @@ export type GuardrailRow = {
 };
 
 /** Every guardrail across the agent's confirmed Work Maps, with the expert quote and a link to the screen moment. */
-export function agentGuardrails(agentId: string, sessions: readonly SessionDigest[]): GuardrailRow[] {
-  return confirmedOf(agentId, sessions).flatMap((s) =>
-    s.workmap!.steps.flatMap((step) =>
+export function agentGuardrails(agentId: string, sessions: readonly SessionDigest[], processes: readonly ModelProcess[] = []): GuardrailRow[] {
+  return confirmedOf(agentId, sessions, processes).flatMap((m) =>
+    m.workmap.steps.flatMap((step) =>
       step.guardrails.map((g) => ({
         rule: g.rule,
         kind: g.kind,
         quote: g.quote?.trim() || null,
-        task: s.workmap!.task || "Untitled capture",
+        task: taskOf(m),
         step: `${step.n}. ${step.title}`,
         at: formatT(step.screen_moment.t),
-        href: `/map/${encodeURIComponent(s.id)}#step-${step.n}`,
-        sessionId: s.id,
+        href: mapHref(agentId, m, `#step-${step.n}`),
+        sessionId: m.sessionId ?? m.id,
       })),
     ),
   );
@@ -180,10 +193,10 @@ const ShortcutSchema = z.object({
 export type ShortcutRow = { chord: string; app: string; what: string; why: string; task: string; href: string };
 
 /** Glossary of the agent's shortcuts from its confirmed Work Maps; one row per chord and app, first seen wins. */
-export function agentShortcuts(agentId: string, sessions: readonly SessionDigest[]): ShortcutRow[] {
+export function agentShortcuts(agentId: string, sessions: readonly SessionDigest[], processes: readonly ModelProcess[] = []): ShortcutRow[] {
   const seen = new Set<string>();
   const rows: ShortcutRow[] = [];
-  const add = (s: SessionDigest, raw: unknown, n: number | undefined) => {
+  const add = (m: AgentWorkMap, raw: unknown, n: number | undefined) => {
     const p = ShortcutSchema.safeParse(raw);
     if (!p.success) return;
     const key = `${p.data.chord.toLowerCase()}|${(p.data.app ?? "").toLowerCase()}`;
@@ -194,18 +207,18 @@ export function agentShortcuts(agentId: string, sessions: readonly SessionDigest
       app: p.data.app ?? "",
       what: p.data.what ?? "",
       why: p.data.why ?? "",
-      task: s.workmap!.task || "Untitled capture",
-      href: `/map/${encodeURIComponent(s.id)}${n === undefined ? "" : `#step-${n}`}`,
+      task: taskOf(m),
+      href: mapHref(agentId, m, n === undefined ? "" : `#step-${n}`),
     });
   };
-  for (const s of confirmedOf(agentId, sessions)) {
+  for (const m of confirmedOf(agentId, sessions, processes)) {
     // Contract: WorkMap.shortcuts (effect and a quoted why), the same list the agent stats count.
-    for (const sc of s.workmap!.shortcuts ?? []) add(s, { chord: sc.chord, app: sc.app, what: sc.effect, why: sc.why?.quote }, sc.step);
+    for (const sc of m.workmap.shortcuts ?? []) add(m, { chord: sc.chord, app: sc.app, what: sc.effect, why: sc.why?.quote }, sc.step);
     // Older maps carried shortcuts per step.
-    for (const step of s.workmap!.steps) {
+    for (const step of m.workmap.steps) {
       const list = (step as { shortcuts?: unknown }).shortcuts;
       if (!Array.isArray(list)) continue;
-      for (const raw of list) add(s, raw, step.n);
+      for (const raw of list) add(m, raw, step.n);
     }
   }
   return rows;
@@ -272,22 +285,24 @@ export const masteryText = (mastered: number, steps: number) =>
   steps > 0 ? `${mastered} of ${steps} steps mastered (${Math.round((mastered / steps) * 100)}%)` : `${mastered} steps mastered`;
 
 /** Learn: only agents with at least one ready process are offered. */
-export function learnAgents(agents: readonly Agent[], sessions: readonly SessionDigest[]): GalleryCard[] {
-  return galleryCards(agents, sessions).filter((c) => c.ready);
+export function learnAgents(agents: readonly Agent[], sessions: readonly SessionDigest[], processes: readonly ModelProcess[] = []): GalleryCard[] {
+  return galleryCards(agents, sessions, processes).filter((c) => c.ready);
 }
 
 /** Learn: agents without a ready process yet, shown dimmed as 'Still training' (not startable). */
-export function learnTraining(agents: readonly Agent[], sessions: readonly SessionDigest[]): GalleryCard[] {
-  return galleryCards(agents, sessions).filter((c) => !c.ready);
+export function learnTraining(agents: readonly Agent[], sessions: readonly SessionDigest[], processes: readonly ModelProcess[] = []): GalleryCard[] {
+  return galleryCards(agents, sessions, processes).filter((c) => !c.ready);
 }
 
 export type LearnProcess = ProcessRow & { teachHref: string; focus: string[]; practice: string[] };
 
 /** Learn: the agent's confirmed processes (ready ones startable, the rest dimmed with their %), each linking to Teach, with the judgment-call steps the agent focuses on
  * and the screen entities to practise with. */
-export function learnProcesses(agentId: string, sessions: readonly SessionDigest[]): LearnProcess[] {
-  const maps = new Map(confirmedOf(agentId, sessions).map((s) => [s.id, s.workmap!]));
-  return agentProcesses(agentId, sessions).map((p) => {
+/** Processes reach Teach through their newest linked capture session; one without a session is not listed. */
+export function learnProcesses(agentId: string, sessions: readonly SessionDigest[], processes: readonly ModelProcess[] = []): LearnProcess[] {
+  const linked = confirmedOf(agentId, sessions, processes).filter((m) => m.sessionId !== null);
+  const maps = new Map(linked.map((m) => [m.sessionId!, m.workmap]));
+  return agentProcesses(agentId, sessions, processes).filter((p) => maps.has(p.sessionId)).map((p) => {
     const steps = maps.get(p.sessionId)?.steps ?? [];
     const focus = steps.filter((st) => st.is_judgment_call).map((st) => `Step ${st.n} · ${st.title}`);
     const practice = [...new Set(steps.map((st) => st.screen_moment.entity.trim()).filter(Boolean))];

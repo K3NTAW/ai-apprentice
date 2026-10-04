@@ -9,8 +9,9 @@
 //   (0.75 is ready, 0.74 is not).
 // - Agent status: 'ready' with at least one ready process; else 'training' when it has any capture session or
 //   process; else 'new'.
-// Until the processes table exists (503 fallback), a process is a capture session of the agent with a Work Map
-// (confirmed or not); archived_at is then always null.
+// The candidates are the agent's processes merged with its capture sessions not linked to any process (legacy
+// Work Maps, sessions.process_id null; see lib/processes/merge). Until the processes table exists (503 fallback)
+// there are no processes and every capture session counts, with archived_at null.
 import { SCORE_THRESHOLD, type Session, type WorkMap } from "@/lib/types";
 
 export type AgentStatus = "ready" | "training" | "new";
@@ -42,12 +43,13 @@ export function isReadyProcess(p: ProcessLike): boolean {
 /** Status of one agent from its sessions (fallback) and, when available, its processes. */
 export function agentStatus(
   agentId: string,
-  sessions: readonly Pick<Session, "agent_id" | "kind" | "workmap">[],
+  sessions: readonly (Pick<Session, "agent_id" | "kind" | "workmap"> & { process_id?: string | null })[],
   processes: readonly (ProcessLike & { agent_id: string })[] = [],
 ): AgentStatus {
   const captures = sessions.filter((s) => s.agent_id === agentId && s.kind === "capture");
   const mine = processes.filter((p) => p.agent_id === agentId);
-  const candidates: ProcessLike[] = mine.length > 0 ? mine : captures.map((s) => ({ workmap: s.workmap, archived_at: null }));
+  const legacy = captures.filter((s) => !s.process_id).map((s): ProcessLike => ({ workmap: s.workmap, archived_at: null }));
+  const candidates: ProcessLike[] = [...mine, ...legacy];
   if (candidates.some(isReadyProcess)) return "ready";
   return captures.length > 0 || mine.length > 0 ? "training" : "new";
 }

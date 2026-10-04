@@ -8,7 +8,8 @@ import { entry, event, qaPair, runStoreContract } from "./contract";
 import { FakeSupabase } from "./fakeSupabase";
 import { fileStore, getStore } from "./index";
 import { createSupabaseStore } from "./supabase";
-import { AgentNotFoundError, frameName, ProcessesUnavailableError, SessionNotFoundError } from "./types";
+import { AgentNotFoundError, frameName, InvalidWorkMapError, ProcessesUnavailableError, ProcessExistsError, SessionNotFoundError } from "./types";
+import { backfillProcesses } from "@/lib/processes/server";
 
 const UID = "00000000-0000-4000-8000-000000000001";
 const jpg = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
@@ -39,24 +40,111 @@ runStoreContract("file", () => fileStore);
 runStoreContract("supabase (fake client)", () => supabaseFixture().store);
 
 describe("supabase store only", () => {
-  it("changes a Work Map in one update_process call, never by direct writes to workmap, version or process_versions", async () => {
+  it("writes a combined patch in one update_process call and never writes processes or process_versions directly", async () => {
     const { fake, store } = supabaseFixture();
     const a = await store.createAgent({ name: "A", role: "R", avatar: { shape: "blob", face: "smile", color: "#3366FF", accent: "#FFCC00" } });
     const wm = { task: "t", expert: "S", confirmed_by_expert: true, steps: [], open_questions: [] };
     const p = await store.createProcess({ agent_id: a.id, title: "T", workmap: wm });
+    expect(fake.rpcCalls.map((c) => c.fn)).toEqual(["create_process"]);
     const before = fake.calls.length;
-    await store.updateProcess(p.id, { workmap: { ...wm, task: "t2" }, title: "T2", archived: true });
-    const writes = fake.calls.slice(before).filter((c) => c.op !== "select");
-    expect(writes).toEqual([expect.objectContaining({ table: "processes", op: "update" })]);
-    expect(fake.rpcCalls.map((c) => [c.fn, c.args.p_expected_version])).toEqual([["update_process", 1]]);
+    const next = await store.updateProcess(p.id, { workmap: { ...wm, task: "t2" }, title: "T2", archived: true });
+    expect(next).toMatchObject({ version: 2, title: "T2", workmap: { task: "t2" } });
+    expect(next.archived_at).not.toBeNull();
+    // No direct write at all: the Work Map, title and archive land in the one rpc call.
+    expect(fake.calls.slice(before).filter((c) => c.op !== "select")).toEqual([]);
+    expect(fake.rpcCalls.slice(1).map((c) => [c.fn, c.args.p_expected_version, c.args.p_title, c.args.p_archived])).toEqual([
+      ["update_process", 1, "T2", true],
+    ]);
     expect(fake.tables.process_versions.filter((v) => v.process_id === p.id)).toHaveLength(2);
 
-    // Title or archive alone: no rpc call.
-    const spy = vi.spyOn(fake as unknown as { rpc: (...x: unknown[]) => unknown }, "rpc");
+    // Title or archive alone: one rpc call without a Work Map, no version row, the version stays.
     await store.updateProcess(p.id, { title: "T3" });
-    expect(spy).not.toHaveBeenCalled();
-    const conflict = store.updateProcess(p.id, { workmap: wm, expected_version: 1 });
-    await expect(conflict).rejects.toThrow(/no longer at version 1/);
+    await store.updateProcess(p.id, { archived: false });
+    expect(fake.rpcCalls.slice(2).map((c) => [c.fn, c.args.p_workmap, c.args.p_title ?? null, c.args.p_archived ?? null])).toEqual([
+      ["update_process", null, "T3", null],
+      ["update_process", null, null, false],
+    ]);
+    expect(await store.getProcess(p.id)).toMatchObject({ title: "T3", archived_at: null, version: 2 });
+    expect(fake.tables.process_versions.filter((v) => v.process_id === p.id)).toHaveLength(2);
+
+    // A stale Work Map edit with a title fails as a whole: the title does not land either.
+    await expect(store.updateProcess(p.id, { workmap: wm, expected_version: 1, title: "Lost" })).rejects.toThrow(/no longer at version 1/);
+    expect(await store.getProcess(p.id)).toMatchObject({ title: "T3", version: 2 });
+  });
+
+  it("has no direct insert path: processes and process_versions inserts answer 42501", async () => {
+    const { client, workspaceId } = supabaseFixture();
+    const id = randomUUID();
+    const wm = { task: "t", expert: "S", confirmed_by_expert: false, steps: [], open_questions: [] };
+    const res = await client.from("process_versions").insert({ id, workspace_id: workspaceId, process_id: id, version: 1, workmap: wm, change_kind: "trained", changed_by: UID });
+    expect(res.error).toMatchObject({ code: "42501" });
+    const res2 = await client.from("processes").insert({ id, workspace_id: workspaceId, agent_id: id, title: "t", workmap: wm, created_by: UID });
+    expect(res2.error).toMatchObject({ code: "42501" });
+  });
+
+  it("maps a malformed Work Map rejected by the database to InvalidWorkMapError and writes nothing", async () => {
+    const { fake, store } = supabaseFixture();
+    const a = await store.createAgent({ name: "A", role: "R", avatar: { shape: "blob", face: "smile", color: "#3366FF", accent: "#FFCC00" } });
+    const wm = { task: "t", expert: "S", confirmed_by_expert: true, steps: [], open_questions: [] };
+    const p = await store.createProcess({ agent_id: a.id, title: "T", workmap: wm });
+    const step = { n: 1, title: "s", decision: "d", is_judgment_call: false, screen_moment: { t: 0, entity: "e" }, guardrails: [], scores: { reason_captured: 1, guardrail_captured: 1 }, reason: null };
+    for (const bad of [
+      { ...wm, steps: "nope" },
+      { ...wm, steps: [{ ...step, n: "1" }] },
+      { ...wm, steps: [{ ...step, screen_moment: null }] },
+      { task: "t", steps: [] },
+      { ...wm, open_questions: ["x".repeat(300000)] },
+    ]) {
+      await expect(store.updateProcess(p.id, { workmap: bad as never })).rejects.toBeInstanceOf(InvalidWorkMapError);
+      await expect(store.createProcess({ agent_id: a.id, title: "T", workmap: bad as never })).rejects.toBeInstanceOf(InvalidWorkMapError);
+    }
+    expect(await store.updateProcess(p.id, { workmap: { ...wm, steps: [step] } })).toMatchObject({ version: 2 });
+    expect(fake.tables.processes).toHaveLength(1);
+    expect(fake.tables.process_versions).toHaveLength(2);
+  });
+
+  it("skips and logs process and version rows whose Work Map fails WorkMapSchema instead of throwing", async () => {
+    const { fake, store, workspaceId } = supabaseFixture();
+    const a = await store.createAgent({ name: "A", role: "R", avatar: { shape: "blob", face: "smile", color: "#3366FF", accent: "#FFCC00" } });
+    const wm = { task: "t", expert: "S", confirmed_by_expert: true, steps: [], open_questions: [] };
+    const good = await store.createProcess({ agent_id: a.id, title: "Good", workmap: wm });
+    const badId = randomUUID();
+    const bad = { task: 1, steps: "x" };
+    fake.tables.processes.push({ ...fake.tables.processes[0], id: badId, workmap: bad });
+    fake.tables.process_versions.push({ ...fake.tables.process_versions[0], id: randomUUID(), process_id: good.id, version: 2, workmap: bad, workspace_id: workspaceId });
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      expect((await store.listProcesses()).map((p) => p.id)).toEqual([good.id]);
+      expect(await store.getProcess(badId)).toBeNull();
+      expect((await store.listProcessVersions(good.id)).map((v) => v.version)).toEqual([1]);
+      expect(log).toHaveBeenCalledWith(expect.stringContaining(badId));
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it("backfill: concurrent calls create each process once and keep the session's started_at as created_at", async () => {
+    const { fake, store } = supabaseFixture();
+    const a = await store.createAgent({ name: "A", role: "R", avatar: { shape: "blob", face: "smile", color: "#3366FF", accent: "#FFCC00" } });
+    const wm = { task: "t", expert: "S", confirmed_by_expert: true, steps: [], open_questions: [] };
+    const older = await store.createSession({ kind: "capture", agent_id: a.id });
+    await store.saveWorkMap(older.id, { ...wm, task: "older" });
+    const newer = await store.createSession({ kind: "capture", agent_id: a.id });
+    await store.saveWorkMap(newer.id, { ...wm, task: "newer" });
+    fake.tables.sessions.find((r) => r.id === older.id)!.started_at = "2026-09-01T08:00:00.000+00:00";
+    fake.tables.sessions.find((r) => r.id === newer.id)!.started_at = "2026-09-02T08:00:00.000+00:00";
+    const [x, y] = await Promise.all([backfillProcesses(store), backfillProcesses(store)]);
+    expect(x.length + y.length).toBe(2);
+    expect(fake.tables.processes).toHaveLength(2);
+    expect(fake.tables.process_versions).toHaveLength(2);
+    const list = await store.listProcesses();
+    expect(list.map((p) => [p.title, p.created_at])).toEqual([
+      ["newer", "2026-09-02T08:00:00.000Z"],
+      ["older", "2026-09-01T08:00:00.000Z"],
+    ]);
+    expect(await backfillProcesses(store)).toEqual([]);
+    // A second process for the same source session is refused.
+    await expect(store.createProcess({ agent_id: a.id, title: "again", workmap: wm, source_session_id: older.id })).rejects.toBeInstanceOf(ProcessExistsError);
   });
 
   it("reads digests without sessions.process_id while the processes migration is missing", async () => {

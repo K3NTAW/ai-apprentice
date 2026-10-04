@@ -6,12 +6,15 @@
 // Agents: RLS by workspace, the insert policy (created_by = auth.uid()), the sessions (workspace_id, agent_id)
 // foreign key (23503) and its on delete set null (agent_id). Not modelled: triggers (updated_at, guards).
 // Embedded counts on sessions (select "*,session_events(count)"): [{ count }] of the visible child rows.
-// Processes: RLS by workspace, the insert policies (created_by / changed_by = auth.uid()), processes_agent_fkey
-// (23503), the cascades (agent -> processes -> versions) and sessions.process_id on delete set null.
+// Processes: RLS by workspace, no insert policy on processes or process_versions (direct inserts answer 42501),
+// the cascades (agent -> processes -> versions) and sessions.process_id on delete set null.
 // missingTables answers every query on those tables with PostgREST PGRST205 (migration not applied); with
-// 'processes' missing, selecting sessions.process_id answers 42703 and rpc update_process PGRST202.
-// rpc('update_process'): the version check (PT409), the update, its process_versions row and the session link,
-// all or nothing, like the security definer function. Roles are not modelled.
+// 'processes' missing, selecting sessions.process_id answers 42703 and both rpcs PGRST202.
+// rpc('create_process'): workmap_valid (22023), the agent and session checks (P0002), the unique source session
+// (on conflict do nothing, then 23505 'process_exists'), created_at from the session on backfill, version 1 and
+// the session link. rpc('update_process'): workmap_valid, the version check (PT409) only for a Work Map change,
+// title and archive, its process_versions row only for a Work Map change and the session link, all or nothing,
+// like the security definer functions. Roles are not modelled.
 // Not modelled: workspace roles (owner/expert/learner), column projection on count queries.
 
 type Row = Record<string, unknown>;
@@ -36,7 +39,7 @@ const SERIAL = new Set(["session_events", "session_transcript"]);
 // Nullable columns come back as null, like Postgres, when an insert leaves them out.
 const DEFAULTS: Record<string, Row> = {
   sessions: { created_by: null, expert: null, ended_at: null, workmap: null, off_record_ranges: [], agent_id: null, process_id: null },
-  processes: { created_by: null, archived_at: null, version: 1, confirmed: false },
+  processes: { created_by: null, archived_at: null, version: 1, confirmed: false, source_session_id: null },
   process_versions: { source_session_id: null, changed_by: null },
   agents: { created_by: null, expert_name: null },
   session_qa: { t: null },
@@ -44,6 +47,27 @@ const DEFAULTS: Record<string, Row> = {
 };
 const TIMESTAMPTZ = new Set(["started_at", "ended_at", "created_at", "updated_at", "archived_at"]);
 const BY_WORKSPACE = new Set(["sessions", "agents", "processes", "process_versions"]);
+
+const isObj = (v: unknown): v is Row => typeof v === "object" && v !== null && !Array.isArray(v);
+
+/** public.workmap_valid: required keys and types, at most 200 steps and 256 KiB of JSON. */
+export function workmapValid(w: unknown): boolean {
+  if (!isObj(w) || JSON.stringify(w).length > 262144) return false;
+  if (typeof w.task !== "string" || typeof w.expert !== "string" || typeof w.confirmed_by_expert !== "boolean") return false;
+  if (!Array.isArray(w.steps) || !Array.isArray(w.open_questions) || (w.shortcuts !== undefined && !Array.isArray(w.shortcuts))) return false;
+  if (w.steps.length > 200) return false;
+  return w.steps.every(
+    (st: unknown) =>
+      isObj(st) &&
+      typeof st.n === "number" &&
+      typeof st.title === "string" &&
+      typeof st.decision === "string" &&
+      typeof st.is_judgment_call === "boolean" &&
+      isObj(st.screen_moment) &&
+      Array.isArray(st.guardrails) &&
+      isObj(st.scores),
+  );
+}
 
 function unsupported(what: string): never {
   throw new Error(`fakeSupabase: unsupported ${what}`);
@@ -118,30 +142,71 @@ export class FakeSupabase {
   rpcCalls: { fn: string; args: Row }[] = [];
 
   rpc(fn: string, args: Row): { data: Row | null; error: FakeError | null } {
-    if (fn !== "update_process") unsupported(`rpc ${fn}`);
+    if (fn !== "update_process" && fn !== "create_process") unsupported(`rpc ${fn}`);
     this.rpcCalls.push({ fn, args: structuredClone(args) });
     const fail = (message: string, code: string) => ({ data: null, error: { message, code } });
     if (this.missingTables.has("processes"))
-      return fail("Could not find the function public.update_process(p_change_kind, p_expected_version, p_id, p_source_session, p_workmap) in the schema cache", "PGRST202");
+      return fail(`Could not find the function public.${fn}(${Object.keys(args).sort().join(", ")}) in the schema cache`, "PGRST202");
+    const now = pgTs(new Date().toISOString());
+    const version = (p: Row, kind: unknown) =>
+      this.tables.process_versions.push({
+        id: crypto.randomUUID(),
+        workspace_id: p.workspace_id,
+        process_id: p.id,
+        version: p.version,
+        workmap: structuredClone(p.workmap),
+        source_session_id: args.p_source_session ?? null,
+        change_kind: kind ?? "edited",
+        changed_by: this.uid,
+        created_at: now,
+      });
+
+    if (fn === "create_process") {
+      const ws = args.p_workspace_id as string;
+      if (!this.visibleWorkspaces.has(ws)) return fail("forbidden", "42501");
+      if (!workmapValid(args.p_workmap)) return fail("invalid workmap", "22023");
+      if (!this.tables.agents.some((a) => a.id === args.p_agent_id && a.workspace_id === ws)) return fail("agent not found", "P0002");
+      const session = args.p_source_session == null ? null : this.tables.sessions.find((r) => r.id === args.p_source_session && r.workspace_id === ws);
+      if (args.p_source_session != null && !session) return fail("session not found", "P0002");
+      // processes_source_session_key: on conflict do nothing.
+      if (session && this.tables.processes.some((r) => r.source_session_id === session.id)) return fail("process_exists", "23505");
+      const workmap = structuredClone(args.p_workmap) as Row;
+      const p: Row = {
+        id: crypto.randomUUID(),
+        workspace_id: ws,
+        agent_id: args.p_agent_id,
+        title: args.p_title,
+        workmap,
+        version: 1,
+        confirmed: workmap.confirmed_by_expert === true,
+        archived_at: null,
+        source_session_id: session?.id ?? null,
+        created_by: this.uid,
+        created_at: args.p_backfill === true && session ? pgTs(session.started_at) : now,
+        updated_at: now,
+      };
+      this.tables.processes.push(p);
+      version(p, "trained");
+      if (session) session.process_id = p.id;
+      return { data: structuredClone(p), error: null };
+    }
+
     const p = this.tables.processes.find((r) => r.id === args.p_id && this.rowVisible("processes", r));
     if (!p) return fail("process not found", "P0002");
-    if (p.version !== args.p_expected_version) return fail("process_version_conflict", "PT409");
+    const workmap = args.p_workmap == null ? null : (structuredClone(args.p_workmap) as Row);
+    if (workmap === null && args.p_title == null && args.p_archived == null && args.p_source_session == null)
+      return fail("nothing to update", "22023");
+    if (workmap !== null && !workmapValid(workmap)) return fail("invalid workmap", "22023");
     const session = args.p_source_session == null ? null : this.tables.sessions.find((r) => r.id === args.p_source_session && r.workspace_id === p.workspace_id);
     if (args.p_source_session != null && !session) return fail("session not found", "P0002");
-    const workmap = structuredClone(args.p_workmap) as Row;
-    const now = pgTs(new Date().toISOString());
-    Object.assign(p, { workmap, version: (p.version as number) + 1, confirmed: workmap.confirmed_by_expert === true, updated_at: now });
-    this.tables.process_versions.push({
-      id: crypto.randomUUID(),
-      workspace_id: p.workspace_id,
-      process_id: p.id,
-      version: p.version,
-      workmap: structuredClone(workmap),
-      source_session_id: args.p_source_session ?? null,
-      change_kind: args.p_change_kind,
-      changed_by: this.uid,
-      created_at: now,
-    });
+    if (workmap !== null && p.version !== args.p_expected_version) return fail("process_version_conflict", "PT409");
+    if (args.p_title != null && (typeof args.p_title !== "string" || args.p_title.length < 1 || args.p_title.length > 120))
+      return fail('new row for relation "processes" violates check constraint', "23514");
+    if (workmap !== null) Object.assign(p, { workmap, version: (p.version as number) + 1, confirmed: workmap.confirmed_by_expert === true });
+    if (args.p_title != null) p.title = args.p_title;
+    if (args.p_archived != null) p.archived_at = args.p_archived ? (p.archived_at ?? now) : null;
+    p.updated_at = now;
+    if (workmap !== null) version(p, args.p_change_kind);
     if (session) session.process_id = p.id;
     return { data: structuredClone(p), error: null };
   }
@@ -173,16 +238,8 @@ export class FakeSupabase {
     if (table === "agent_reports") return this.visibleWorkspaces.has(row.workspace_id as string) ? null : rlsError(table);
     if (table === "agent_deletion_requests")
       return row.requested_by === this.uid && this.visibleWorkspaces.has(row.workspace_id as string) ? null : rlsError(table);
-    if (table === "processes") {
-      if (row.created_by !== this.uid || !this.visibleWorkspaces.has(row.workspace_id as string)) return rlsError(table);
-      const ok = this.tables.agents.some((a) => a.id === row.agent_id && a.workspace_id === row.workspace_id);
-      return ok ? null : { message: 'insert or update on table "processes" violates foreign key constraint "processes_agent_fkey"', code: "23503" };
-    }
-    if (table === "process_versions") {
-      if (row.changed_by !== this.uid || !this.visibleWorkspaces.has(row.workspace_id as string)) return rlsError(table);
-      const ok = this.tables.processes.some((p) => p.id === row.process_id && p.workspace_id === row.workspace_id);
-      return ok ? null : { message: 'insert or update on table "process_versions" violates foreign key constraint "process_versions_process_fkey"', code: "23503" };
-    }
+    // No insert grant or policy: rows come only from create_process and update_process.
+    if (table === "processes" || table === "process_versions") return rlsError(table);
     if (table === "sessions" || table === "agents") {
       if (row.created_by !== this.uid || !this.visibleWorkspaces.has(row.workspace_id as string)) return rlsError(table);
       if (table === "sessions" && row.agent_id != null) {

@@ -26,7 +26,7 @@ async function body() {
     return (
       <AgentsHome
         greeting={greeting(new Date(), ctx.email)}
-        cards={galleryCards(input.agents, input.sessions)}
+        cards={galleryCards(input.agents, input.sessions, input.processes)}
         canCreate={canCapture(ctx.role)}
         index={homeIndex(input.agents, input.sessions)}
       />

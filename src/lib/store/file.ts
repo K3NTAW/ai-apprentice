@@ -31,6 +31,7 @@ import {
   isValidSessionId,
   processNewestFirst,
   processPatchValues,
+  ProcessExistsError,
   ProcessNotFoundError,
   ProcessVersionConflictError,
   recognizersFromSettings,
@@ -497,11 +498,14 @@ async function getProcess(id: string): Promise<Process | null> {
   return (await readProcessData()).processes.find((p) => p.id === id) ?? null;
 }
 
+// One process per source session (like processes_source_session_key): the check runs inside the write queue, so
+// two concurrent backfills create each process once. backfill keeps the session's started_at as created_at.
 async function createProcess(input: ProcessInput): Promise<Process> {
   if (!(await getAgent(input.agent_id))) throw new AgentNotFoundError(input.agent_id);
   await requireSession(input.source_session_id);
   const workmap = WorkMapSchema.parse(input.workmap);
   const now = new Date().toISOString();
+  const src = input.backfill && input.source_session_id ? await readSession(input.source_session_id) : null;
   const p: Process = {
     id: randomUUID(),
     workspace_id: LOCAL_WORKSPACE,
@@ -512,10 +516,13 @@ async function createProcess(input: ProcessInput): Promise<Process> {
     confirmed: workmap.confirmed_by_expert === true,
     archived_at: null,
     created_by: null,
-    created_at: now,
+    created_at: src?.started_at ?? now,
     updated_at: now,
   };
   await mutateProcesses((d) => {
+    const sid = input.source_session_id;
+    if (sid && d.versions.some((v) => v.version === 1 && v.source_session_id === sid && d.processes.some((x) => x.id === v.process_id)))
+      throw new ProcessExistsError(sid);
     d.processes.push(p);
     d.versions.push(versionRow(p, "trained", input.source_session_id));
   });

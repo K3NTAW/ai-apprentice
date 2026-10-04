@@ -8,15 +8,21 @@
 -- references processes (workspace_id, id). A process goes with its agent (on delete cascade), versions go with
 -- their process, and a session keeps its history when its process is deleted (process_id becomes null).
 --
--- process_versions is append-only: every change of a process Work Map adds a row. No update or delete grant or
--- policy for anyone; rows go only with their process (on delete cascade). Only the on delete set null paths
--- (changed_by when an auth user is deleted, source_session_id when a session is deleted) may update it.
+-- process_versions is append-only: every change of a process Work Map adds a row. No insert, update or delete
+-- grant or policy for anyone: rows are written only inside create_process and update_process and go only with
+-- their process (on delete cascade). Only the on delete set null paths (changed_by when an auth user is deleted,
+-- source_session_id when a session is deleted) may update it.
 --
--- Writes through PostgREST: insert (version 1 only), update of title and archived_at (archive and restore are
--- owner only, enforced by processes_guard_update), delete (owners). workmap, version and confirmed change only
--- through public.update_process, which checks the expected version (optimistic concurrency, PT409 = HTTP 409) and
--- writes the update and its process_versions row in one transaction. confirmed always equals the Work Map's
--- confirmed_by_expert (processes_confirmed_derived).
+-- Writes: public.create_process (process, version 1 and the session link in one transaction), public.update_process
+-- (Work Map, title and archive in one call; a version row only for a Work Map change), delete (owners) through
+-- PostgREST. update_process checks the expected version of a Work Map change (optimistic concurrency, PT409 =
+-- HTTP 409). Archive and restore are owner only (update_process and processes_guard_update). confirmed always
+-- equals the Work Map's confirmed_by_expert (processes_confirmed_derived). Both functions validate the Work Map
+-- with public.workmap_valid (required keys and types, size cap) and raise 22023 otherwise.
+--
+-- Backfill: processes.source_session_id is unique where not null, and create_process inserts with on conflict do
+-- nothing, so two concurrent backfills create each process once (the loser gets 23505 'process_exists'). A
+-- backfilled process keeps its session's started_at as created_at, so the order is unchanged.
 --
 -- Until this migration is applied the API answers 503 'processes not available yet', never 500.
 
@@ -33,6 +39,7 @@ create table public.processes (
   version int not null default 1 check (version >= 1),
   confirmed boolean not null default false,
   archived_at timestamptz,
+  source_session_id text references public.sessions on delete set null,
   constraint processes_confirmed_derived check (confirmed = coalesce(workmap -> 'confirmed_by_expert' = 'true'::jsonb, false)),
   created_by uuid references auth.users on delete set null,
   created_at timestamptz not null default now(),
@@ -43,6 +50,9 @@ create table public.processes (
 );
 
 create index processes_workspace_agent_idx on public.processes (workspace_id, agent_id, created_at desc);
+
+-- One process per source session: the conflict target of create_process.
+create unique index processes_source_session_key on public.processes (source_session_id) where source_session_id is not null;
 
 create table public.process_versions (
   id uuid primary key default gen_random_uuid(),
@@ -74,9 +84,9 @@ create index sessions_workspace_process_idx on public.sessions (workspace_id, pr
 
 revoke all on table public.processes from public, anon;
 revoke all on table public.process_versions from public, anon;
-grant select, insert, delete on table public.processes to authenticated;
+grant select, delete on table public.processes to authenticated;
 grant update (title, archived_at) on table public.processes to authenticated;
-grant select, insert on table public.process_versions to authenticated;
+grant select on table public.process_versions to authenticated;
 
 -- ---------------------------------------------------------------------------
 -- Trigger functions and triggers
@@ -105,6 +115,10 @@ begin
   end if;
   if new.created_at is distinct from old.created_at then
     raise exception 'processes.created_at cannot change' using errcode = '42501';
+  end if;
+  -- Only on delete set null of the session may clear it.
+  if new.source_session_id is distinct from old.source_session_id and new.source_session_id is not null then
+    raise exception 'processes.source_session_id cannot change' using errcode = '42501';
   end if;
   -- Archive and restore are owner actions. Without a user JWT (service role) it is allowed.
   if new.archived_at is distinct from old.archived_at
@@ -166,9 +180,135 @@ create trigger process_versions_guard_update_trg
   for each row execute function public.process_versions_guard_update();
 
 -- ---------------------------------------------------------------------------
--- update_process: the only way to change a process Work Map.
+-- workmap_valid: the database-level shape check of a Work Map (mirrors the required part of WorkMapSchema in
+-- src/lib/types.ts). Top level: task and expert strings, confirmed_by_expert boolean, steps and open_questions
+-- arrays, shortcuts an array when present. Each step: an object with n number, title string, decision string,
+-- is_judgment_call boolean, screen_moment object, guardrails array and scores object. At most 200 steps and
+-- 256 KiB of JSON text.
+-- ---------------------------------------------------------------------------
+
+create function public.workmap_valid(p_workmap jsonb)
+returns boolean
+language plpgsql
+immutable
+set search_path = ''
+as $$
+declare
+  st jsonb;
+begin
+  if p_workmap is null or jsonb_typeof(p_workmap) is distinct from 'object' then
+    return false;
+  end if;
+  if octet_length(p_workmap::text) > 262144 then
+    return false;
+  end if;
+  if jsonb_typeof(p_workmap -> 'task') is distinct from 'string'
+     or jsonb_typeof(p_workmap -> 'expert') is distinct from 'string'
+     or jsonb_typeof(p_workmap -> 'confirmed_by_expert') is distinct from 'boolean'
+     or jsonb_typeof(p_workmap -> 'steps') is distinct from 'array'
+     or jsonb_typeof(p_workmap -> 'open_questions') is distinct from 'array'
+     or (p_workmap ? 'shortcuts' and jsonb_typeof(p_workmap -> 'shortcuts') is distinct from 'array') then
+    return false;
+  end if;
+  if jsonb_array_length(p_workmap -> 'steps') > 200 then
+    return false;
+  end if;
+  for st in select value from jsonb_array_elements(p_workmap -> 'steps') loop
+    if jsonb_typeof(st) is distinct from 'object'
+       or jsonb_typeof(st -> 'n') is distinct from 'number'
+       or jsonb_typeof(st -> 'title') is distinct from 'string'
+       or jsonb_typeof(st -> 'decision') is distinct from 'string'
+       or jsonb_typeof(st -> 'is_judgment_call') is distinct from 'boolean'
+       or jsonb_typeof(st -> 'screen_moment') is distinct from 'object'
+       or jsonb_typeof(st -> 'guardrails') is distinct from 'array'
+       or jsonb_typeof(st -> 'scores') is distinct from 'object' then
+      return false;
+    end if;
+  end loop;
+  return true;
+end
+$$;
+
+-- ---------------------------------------------------------------------------
+-- create_process: the only way to create a process. Security definer so it can write the version row (no insert
+-- grant on process_versions) and link the source session. It checks the caller's role itself: owner or expert;
+-- p_backfill (created_at = the source session's started_at) is owner only.
+-- On conflict (source_session_id) do nothing: a second process for the same source session is never created;
+-- the caller gets 23505 'process_exists' and nothing is written.
+-- ---------------------------------------------------------------------------
+
+create function public.create_process(
+  p_workspace_id uuid,
+  p_agent_id uuid,
+  p_title text,
+  p_workmap jsonb,
+  p_source_session text default null,
+  p_backfill boolean default false
+)
+returns public.processes
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  src_started timestamptz;
+  nxt public.processes;
+begin
+  if auth.uid() is null then
+    raise exception 'not authenticated' using errcode = '42501';
+  end if;
+  if public.workspace_role(p_workspace_id) is distinct from 'owner'
+     and public.workspace_role(p_workspace_id) is distinct from 'expert' then
+    raise exception 'forbidden' using errcode = '42501';
+  end if;
+  if coalesce(p_backfill, false) and public.workspace_role(p_workspace_id) is distinct from 'owner' then
+    raise exception 'only owners backfill processes' using errcode = '42501';
+  end if;
+  if coalesce(p_backfill, false) and p_source_session is null then
+    raise exception 'backfill needs a source session' using errcode = '22023';
+  end if;
+  if not public.workmap_valid(p_workmap) then
+    raise exception 'invalid workmap' using errcode = '22023';
+  end if;
+  if not exists (select 1 from public.agents a where a.id = p_agent_id and a.workspace_id = p_workspace_id) then
+    raise exception 'agent not found' using errcode = 'P0002';
+  end if;
+  if p_source_session is not null then
+    select s.started_at into src_started from public.sessions s
+     where s.id = p_source_session and s.workspace_id = p_workspace_id;
+    if not found then
+      raise exception 'session not found' using errcode = 'P0002';
+    end if;
+  end if;
+  insert into public.processes (workspace_id, agent_id, title, workmap, version, confirmed, created_by, source_session_id, created_at, updated_at)
+  values (
+    p_workspace_id, p_agent_id, p_title, p_workmap, 1,
+    coalesce(p_workmap -> 'confirmed_by_expert' = 'true'::jsonb, false),
+    auth.uid(), p_source_session,
+    case when coalesce(p_backfill, false) then src_started else now() end,
+    now()
+  )
+  on conflict (source_session_id) where source_session_id is not null do nothing
+  returning * into nxt;
+  if not found then
+    raise exception 'process_exists' using errcode = '23505';
+  end if;
+  insert into public.process_versions (workspace_id, process_id, version, workmap, source_session_id, change_kind, changed_by)
+  values (nxt.workspace_id, nxt.id, 1, nxt.workmap, p_source_session, 'trained', auth.uid());
+  if p_source_session is not null then
+    update public.sessions set process_id = nxt.id where id = p_source_session and workspace_id = nxt.workspace_id;
+  end if;
+  return nxt;
+end
+$$;
+
+-- ---------------------------------------------------------------------------
+-- update_process: the only way to change a process Work Map, and the one call for a combined change.
 -- Security definer so it can write workmap, version and confirmed (not granted to authenticated) and the
--- version row (no direct insert beyond version 1). It checks the caller's role itself.
+-- version row (no insert grant on process_versions). It checks the caller's role itself.
+-- A non-null p_workmap must be at p_expected_version (else PT409) and adds a version row; p_title renames;
+-- p_archived archives (true) or restores (false), owner only. Title or archive alone add no version row and skip
+-- the version check. p_source_session links that session to the process.
 -- ---------------------------------------------------------------------------
 
 create function public.update_process(
@@ -176,7 +316,9 @@ create function public.update_process(
   p_expected_version int,
   p_workmap jsonb,
   p_change_kind text,
-  p_source_session text
+  p_source_session text,
+  p_title text default null,
+  p_archived boolean default null
 )
 returns public.processes
 language plpgsql
@@ -198,22 +340,38 @@ begin
      and public.workspace_role(cur.workspace_id) is distinct from 'expert' then
     raise exception 'forbidden' using errcode = '42501';
   end if;
+  if p_archived is not null and public.workspace_role(cur.workspace_id) is distinct from 'owner' then
+    raise exception 'only owners archive or restore a process' using errcode = '42501';
+  end if;
+  if p_workmap is null and p_title is null and p_archived is null and p_source_session is null then
+    raise exception 'nothing to update' using errcode = '22023';
+  end if;
+  if p_workmap is not null and not public.workmap_valid(p_workmap) then
+    raise exception 'invalid workmap' using errcode = '22023';
+  end if;
   if p_source_session is not null and not exists (
     select 1 from public.sessions s where s.id = p_source_session and s.workspace_id = cur.workspace_id
   ) then
     raise exception 'session not found' using errcode = 'P0002';
   end if;
   update public.processes
-     set workmap = p_workmap,
-         version = version + 1,
-         confirmed = coalesce(p_workmap -> 'confirmed_by_expert' = 'true'::jsonb, false)
-   where id = p_id and version = p_expected_version
+     set workmap = coalesce(p_workmap, workmap),
+         version = case when p_workmap is null then version else version + 1 end,
+         confirmed = case when p_workmap is null then confirmed
+                          else coalesce(p_workmap -> 'confirmed_by_expert' = 'true'::jsonb, false) end,
+         title = coalesce(p_title, title),
+         archived_at = case when p_archived is null then archived_at
+                            when p_archived then coalesce(archived_at, now())
+                            else null end
+   where id = p_id and (p_workmap is null or version = p_expected_version)
   returning * into nxt;
   if not found then
     raise exception 'process_version_conflict' using errcode = 'PT409';
   end if;
-  insert into public.process_versions (workspace_id, process_id, version, workmap, source_session_id, change_kind, changed_by)
-  values (nxt.workspace_id, nxt.id, nxt.version, nxt.workmap, p_source_session, coalesce(p_change_kind, 'edited'), auth.uid());
+  if p_workmap is not null then
+    insert into public.process_versions (workspace_id, process_id, version, workmap, source_session_id, change_kind, changed_by)
+    values (nxt.workspace_id, nxt.id, nxt.version, nxt.workmap, p_source_session, coalesce(p_change_kind, 'edited'), auth.uid());
+  end if;
   if p_source_session is not null then
     update public.sessions set process_id = nxt.id where id = p_source_session and workspace_id = nxt.workspace_id;
   end if;
@@ -228,13 +386,19 @@ $$;
 revoke all on function public.processes_guard_update() from public, anon, authenticated;
 revoke all on function public.processes_touch_updated_at() from public, anon, authenticated;
 revoke all on function public.process_versions_guard_update() from public, anon, authenticated;
-revoke all on function public.update_process(uuid, int, jsonb, text, text) from public, anon;
-grant execute on function public.update_process(uuid, int, jsonb, text, text) to authenticated;
+revoke all on function public.workmap_valid(jsonb) from public, anon;
+grant execute on function public.workmap_valid(jsonb) to authenticated;
+revoke all on function public.create_process(uuid, uuid, text, jsonb, text, boolean) from public, anon;
+grant execute on function public.create_process(uuid, uuid, text, jsonb, text, boolean) to authenticated;
+revoke all on function public.update_process(uuid, int, jsonb, text, text, text, boolean) from public, anon;
+grant execute on function public.update_process(uuid, int, jsonb, text, text, text, boolean) to authenticated;
 
 -- ---------------------------------------------------------------------------
 -- Row level security
 -- Every policy is to authenticated. Every update policy has with check equal to using.
--- Members read; owners and experts write; only owners delete processes; nobody updates or deletes versions.
+-- Members read; owners and experts update title (archive is owner only, see processes_guard_update); only owners
+-- delete processes. No insert policy on either table (inserts go through create_process and update_process);
+-- nobody inserts, updates or deletes versions directly.
 -- ---------------------------------------------------------------------------
 
 alter table public.processes enable row level security;
@@ -243,14 +407,6 @@ alter table public.process_versions enable row level security;
 create policy processes_select on public.processes
   for select to authenticated
   using (public.is_workspace_member(workspace_id));
-
-create policy processes_insert on public.processes
-  for insert to authenticated
-  with check (
-    created_by = auth.uid()
-    and version = 1
-    and public.workspace_role(workspace_id) in ('owner', 'expert')
-  );
 
 create policy processes_update on public.processes
   for update to authenticated
@@ -264,11 +420,3 @@ create policy processes_delete on public.processes
 create policy process_versions_select on public.process_versions
   for select to authenticated
   using (public.is_workspace_member(workspace_id));
-
-create policy process_versions_insert on public.process_versions
-  for insert to authenticated
-  with check (
-    changed_by = auth.uid()
-    and version = 1
-    and public.workspace_role(workspace_id) in ('owner', 'expert')
-  );

@@ -1,4 +1,6 @@
 // Learn: a new employee picks an agent with a confirmed process, then a process; Teach starts with ?agent&session.
+// Processes come from agentWorkMaps (processes merged with legacy confirmed sessions); a process opens Teach with
+// its newest linked capture session.
 // Processes of every offered agent load with the page, so picking an agent switches client-side.
 import { redirect } from "next/navigation";
 import LearnView from "@/components/agents/LearnView";
@@ -21,16 +23,16 @@ async function body(agentId: string | null) {
   if (result.kind !== "ok") return <PageMessage title="Learn" text="Your workspace could not be loaded. Try signing in again." />;
   try {
     const input = await loadAgentsInput(result.ctx);
-    const agents = learnAgents(input.agents, input.sessions);
+    const agents = learnAgents(input.agents, input.sessions, input.processes);
     const selected = agentId ? (agents.find((a) => a.id === agentId) ?? null) : null;
     return (
       <LearnView
         agents={agents}
         selected={selected}
-        processes={selected ? learnProcesses(selected.id, input.sessions) : []}
-        processesByAgent={Object.fromEntries(agents.map((a) => [a.id, learnProcesses(a.id, input.sessions)]))}
+        processes={selected ? learnProcesses(selected.id, input.sessions, input.processes) : []}
+        processesByAgent={Object.fromEntries(agents.map((a) => [a.id, learnProcesses(a.id, input.sessions, input.processes)]))}
         unknownAgent={agentId !== null && selected === null}
-        training={learnTraining(input.agents, input.sessions)}
+        training={learnTraining(input.agents, input.sessions, input.processes)}
         firstName={result.ctx.email ? memberName(result.ctx.email).split(" ")[0] : null}
       />
     );

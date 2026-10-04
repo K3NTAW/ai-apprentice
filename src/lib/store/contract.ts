@@ -318,8 +318,12 @@ export function runStoreContract(name: string, makeStore: () => SessionStore | P
       await store.saveWorkMap(held.id, { ...workmap, confirmed_by_expert: true });
       const existing = await store.createProcess({ agent_id: a.id, title: "Held", workmap: { ...workmap, confirmed_by_expert: true }, source_session_id: held.id });
 
-      const created = await backfillProcesses(store, { agent_id: a.id });
+      // Two concurrent calls: each legacy session becomes one process, created_at is the session's started_at.
+      const both = await Promise.all([backfillProcesses(store, { agent_id: a.id }), backfillProcesses(store, { agent_id: a.id })]);
+      const created = both.flat();
       expect(created.map((p) => [p.title, p.confirmed, p.version])).toEqual([["Book invoices", true, 1]]);
+      expect(created[0].created_at).toBe(legacy.started_at);
+      expect((await store.listProcesses({ agent_id: a.id })).filter((p) => p.title === "Book invoices")).toHaveLength(1);
       expect((await store.listProcessVersions(created[0].id))[0]).toMatchObject({ change_kind: "trained", source_session_id: legacy.id });
       const digests = await store.listSessionDigests();
       expect(digests.find((d) => d.id === legacy.id)?.process_id).toBe(created[0].id);

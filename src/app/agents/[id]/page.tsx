@@ -34,16 +34,16 @@ async function body(id: string, tab: ReturnType<typeof parseTab>) {
   }
   const agent = input.agents.find((a) => a.id === id);
   if (!agent) notFound();
-  const { sessions } = input;
+  const { sessions, processes } = input;
   return (
     <AgentDetail
       agent={agent}
       role={ctx.role}
       tab={tab}
-      stats={agentStats(id, sessions.map((s) => ({ ...s, created_by: input.createdBy[s.id] ?? null })))}
-      processes={agentProcesses(id, sessions)}
-      shortcuts={agentShortcuts(id, sessions)}
-      guardrails={agentGuardrails(id, sessions)}
+      stats={agentStats(id, sessions.map((s) => ({ ...s, created_by: input.createdBy[s.id] ?? null })), processes)}
+      processes={agentProcesses(id, sessions, processes)}
+      shortcuts={agentShortcuts(id, sessions, processes)}
+      guardrails={agentGuardrails(id, sessions, processes)}
       learners={agentLearners(id, sessions, input.members, input.createdBy)}
     />
   );

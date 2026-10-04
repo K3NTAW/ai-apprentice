@@ -18,6 +18,7 @@ import {
   AgentSchema,
   newId,
   SessionSchema,
+  WorkMapSchema,
   type Agent,
   type Avatar,
   type QAPair,
@@ -36,10 +37,12 @@ import {
   inRange,
   isOffRecord,
   isValidAgentId,
+  InvalidWorkMapError,
   isValidProcessId,
   processNewestFirst,
   processPatchValues,
   ProcessesUnavailableError,
+  ProcessExistsError,
   ProcessNotFoundError,
   ProcessVersionConflictError,
   RECENT_SESSIONS_DEFAULT,
@@ -48,7 +51,6 @@ import {
   SessionNotFoundError,
   type OffRecordRange,
   type Process,
-  type ProcessChangeKind,
   type ProcessVersion,
   type SessionStore,
   type SessionSummary,
@@ -162,12 +164,26 @@ function isVersionConflict(error: unknown): boolean {
   return e.code === "PT409" || (typeof e.message === "string" && e.message.includes("process_version_conflict"));
 }
 
-/** update_process raises no_data_found (P0002) for a missing process or source session. */
+/** update_process and create_process raise no_data_found (P0002) for a missing process, agent or source session. */
 function isNoDataFound(error: unknown): boolean {
   return ((error ?? {}) as { code?: unknown }).code === "P0002";
 }
 
-function toProcess(r: ProcessRow): Process {
+const errorCode = (error: unknown) => ((error ?? {}) as { code?: unknown }).code;
+const errorMentions = (error: unknown, word: string) => new RegExp(word, "i").test(String(((error ?? {}) as { message?: unknown }).message));
+
+/**
+ * A processes or process_versions row whose workmap fails WorkMapSchema (written before workmap_valid, or by
+ * hand) is skipped and logged, never thrown: one bad row must not break a list.
+ */
+function validWorkMap(table: string, id: string, workmap: unknown): boolean {
+  if (WorkMapSchema.safeParse(workmap).success) return true;
+  console.error(`supabase ${table}: skipped row ${id}: workmap does not match WorkMapSchema`);
+  return false;
+}
+
+function toProcess(r: ProcessRow): Process | null {
+  if (!validWorkMap("processes", r.id, r.workmap)) return null;
   return {
     id: r.id,
     workspace_id: r.workspace_id,
@@ -183,7 +199,8 @@ function toProcess(r: ProcessRow): Process {
   };
 }
 
-function toProcessVersion(r: ProcessVersionRow): ProcessVersion {
+function toProcessVersion(r: ProcessVersionRow): ProcessVersion | null {
+  if (!validWorkMap("process_versions", r.id, r.workmap)) return null;
   return {
     id: r.id,
     process_id: r.process_id,
@@ -417,32 +434,13 @@ export function createSupabaseStore(
     return check(op, res);
   }
 
-  async function insertVersion(p: Process, kind: ProcessChangeKind, sourceSessionId: string | undefined): Promise<void> {
-    checkP(
-      "insert process_versions",
-      await client.from("process_versions").insert({
-        id: randomUUID(),
-        workspace_id: workspaceId,
-        process_id: p.id,
-        version: p.version,
-        workmap: p.workmap,
-        source_session_id: sourceSessionId ?? null,
-        change_kind: kind,
-        changed_by: userId,
-      }),
-    );
-  }
-
-  async function linkSession(sessionId: string | undefined, processId: string): Promise<void> {
-    if (!sessionId) return;
-    const res = await client
-      .from("sessions")
-      .update({ process_id: processId })
-      .eq("id", sessionId)
-      .eq("workspace_id", workspaceId)
-      .select("id");
-    const rows = checkP("update sessions.process_id", res) as unknown[] | null;
-    if (!rows || rows.length === 0) throw new SessionNotFoundError(sessionId);
+  /** The processes row an RPC returned (one row or a one-row array). */
+  function rpcProcess(op: string, res: Result<unknown>, id: string): Process {
+    const row = checkP(op, res) as ProcessRow | ProcessRow[] | null;
+    const one = Array.isArray(row) ? row[0] : row;
+    const p = one ? toProcess(one) : null;
+    if (!p) throw new ProcessNotFoundError(id);
+    return p;
   }
 
   const store: SessionStore = {
@@ -754,7 +752,10 @@ export function createSupabaseStore(
         if (isProcessesMissing((err as { cause?: unknown }).cause)) throw new ProcessesUnavailableError();
         throw err;
       });
-      return rows.map(toProcess).filter((p) => opts.include_archived || !p.archived_at).sort(processNewestFirst);
+      return rows
+        .map(toProcess)
+        .filter((p): p is Process => !!p && (opts.include_archived || !p.archived_at))
+        .sort(processNewestFirst);
     },
 
     async getProcess(id) {
@@ -764,71 +765,53 @@ export function createSupabaseStore(
       return row ? toProcess(row) : null;
     },
 
-    // No transaction: process, then version 1, then the session link. A failure after the insert leaves a
-    // process without its first version row; the caller sees the error and may retry.
+    // public.create_process writes the process, version 1 and the session link in one transaction. It inserts with
+    // on conflict (source_session_id) do nothing: a second process for the same session raises 23505
+    // 'process_exists' (ProcessExistsError), so concurrent backfills create each process once.
     async createProcess(input) {
       if (!(await store.getAgent(input.agent_id))) throw new AgentNotFoundError(input.agent_id);
       if (input.source_session_id !== undefined) await requireRow(input.source_session_id);
-      const res = await client
-        .from("processes")
-        .insert({
-          id: randomUUID(),
-          workspace_id: workspaceId,
-          agent_id: input.agent_id,
-          created_by: userId,
-          title: input.title,
-          workmap: input.workmap,
-          version: 1,
-          confirmed: input.workmap.confirmed_by_expert === true,
-        })
-        .select("*")
-        .single();
-      if (isProcessAgentFkViolation(res.error)) throw new AgentNotFoundError(input.agent_id);
-      const p = toProcess(checkP("insert processes", res) as ProcessRow);
-      await insertVersion(p, "trained", input.source_session_id);
-      await linkSession(input.source_session_id, p.id);
-      return p;
+      const res = await client.rpc("create_process", {
+        p_workspace_id: workspaceId,
+        p_agent_id: input.agent_id,
+        p_title: input.title,
+        p_workmap: input.workmap,
+        p_source_session: input.source_session_id ?? null,
+        p_backfill: input.backfill === true,
+      });
+      if (res.error && errorCode(res.error) === "23505" && input.source_session_id) throw new ProcessExistsError(input.source_session_id);
+      if (res.error && errorCode(res.error) === "22023" && errorMentions(res.error, "workmap")) throw new InvalidWorkMapError();
+      if (isNoDataFound(res.error)) {
+        if (input.source_session_id && errorMentions(res.error, "session")) throw new SessionNotFoundError(input.source_session_id);
+        throw new AgentNotFoundError(input.agent_id);
+      }
+      return rpcProcess("rpc create_process", res, input.agent_id);
     },
 
-    // A Work Map change goes through public.update_process: the version check (where version = expected), the
-    // update and its process_versions row are one transaction. Title and archive are plain column updates (the
-    // only columns authenticated may update directly); updated_at is set by processes_touch_updated_at_trg.
+    // One public.update_process call for any patch: the Work Map (version check where version = expected, the
+    // update and its process_versions row), the title, the archive flag and the session link are one transaction.
+    // Title or archive alone add no version row. updated_at is set by processes_touch_updated_at_trg.
     async updateProcess(id, patch) {
       const cur = await store.getProcess(id);
       if (!cur) throw new ProcessNotFoundError(id);
       if (patch.source_session_id !== undefined) await requireRow(patch.source_session_id);
-      let next = cur;
-      if (patch.workmap !== undefined) {
-        const expected = patch.expected_version ?? cur.version;
-        const res = await client.rpc("update_process", {
-          p_id: id,
-          p_expected_version: expected,
-          p_workmap: patch.workmap,
-          p_change_kind: patch.change_kind ?? "edited",
-          p_source_session: patch.source_session_id ?? null,
-        });
-        if (isVersionConflict(res.error)) throw new ProcessVersionConflictError(id, expected);
-        if (isNoDataFound(res.error)) {
-          if (patch.source_session_id && /session/i.test(String((res.error as { message?: unknown }).message)))
-            throw new SessionNotFoundError(patch.source_session_id);
-          throw new ProcessNotFoundError(id);
-        }
-        const row = checkP("rpc update_process", res) as ProcessRow | ProcessRow[] | null;
-        const one = Array.isArray(row) ? row[0] : row;
-        if (!one) throw new ProcessNotFoundError(id);
-        next = toProcess(one);
-      } else {
-        await linkSession(patch.source_session_id, id);
+      const expected = patch.expected_version ?? cur.version;
+      const res = await client.rpc("update_process", {
+        p_id: id,
+        p_expected_version: expected,
+        p_workmap: patch.workmap ?? null,
+        p_change_kind: patch.change_kind ?? "edited",
+        p_source_session: patch.source_session_id ?? null,
+        p_title: patch.title ?? null,
+        p_archived: patch.archived ?? null,
+      });
+      if (isVersionConflict(res.error)) throw new ProcessVersionConflictError(id, expected);
+      if (res.error && errorCode(res.error) === "22023" && errorMentions(res.error, "workmap")) throw new InvalidWorkMapError();
+      if (isNoDataFound(res.error)) {
+        if (patch.source_session_id && errorMentions(res.error, "session")) throw new SessionNotFoundError(patch.source_session_id);
+        throw new ProcessNotFoundError(id);
       }
-      const direct = {
-        ...(patch.title !== undefined ? { title: patch.title } : {}),
-        ...(patch.archived !== undefined ? { archived_at: patch.archived ? (next.archived_at ?? new Date().toISOString()) : null } : {}),
-      };
-      if (Object.keys(direct).length === 0) return next;
-      const res = await client.from("processes").update(direct).eq("id", id).eq("workspace_id", workspaceId).select("*");
-      const rows = checkP("update processes", res) as ProcessRow[] | null;
-      if (!rows || rows.length === 0) throw new ProcessNotFoundError(id);
-      return toProcess(rows[0]);
+      return rpcProcess("rpc update_process", res, id);
     },
 
     // process_versions_process_fkey cascades the versions; sessions_process_fkey clears sessions.process_id.
@@ -852,7 +835,7 @@ export function createSupabaseStore(
         if (isProcessesMissing((err as { cause?: unknown }).cause)) throw new ProcessesUnavailableError();
         throw err;
       });
-      return rows.map(toProcessVersion);
+      return rows.map(toProcessVersion).filter((v): v is ProcessVersion => !!v);
     },
   };
   return store;

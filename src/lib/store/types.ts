@@ -61,7 +61,9 @@ export type ProcessVersion = {
 };
 
 /**
- * source_session_id links the session to the new process (sessions.process_id) and is kept on version 1.
+ * source_session_id links the session to the new process (sessions.process_id) and is kept on version 1. At most
+ * one process per source session: a second create throws ProcessExistsError and writes nothing.
+ * backfill (needs source_session_id) keeps the session's started_at as created_at, so the order is unchanged.
  * confirmed is derived from workmap.confirmed_by_expert, never given.
  */
 export type ProcessInput = {
@@ -69,14 +71,15 @@ export type ProcessInput = {
   title: string;
   workmap: WorkMap;
   source_session_id?: string;
+  backfill?: boolean;
 };
 
 /**
- * PATCH semantics. A new workmap bumps version and adds a process_versions row with change_kind (default 'edited')
- * and source_session_id (which is also linked to the process), in one transaction. The Work Map change is
- * conditional on expected_version (default: the version read just before); a mismatch throws
- * ProcessVersionConflictError and writes nothing. confirmed follows workmap.confirmed_by_expert.
- * archived true archives now, false restores.
+ * PATCH semantics, all keys in one transaction. A new workmap bumps version and adds a process_versions row with
+ * change_kind (default 'edited') and source_session_id (which is also linked to the process). The Work Map change
+ * is conditional on expected_version (default: the version read just before); a mismatch throws
+ * ProcessVersionConflictError and writes nothing, title and archive included. confirmed follows
+ * workmap.confirmed_by_expert. archived true archives now, false restores. Title or archive alone add no version.
  */
 export type ProcessPatch = {
   title?: string;
@@ -176,6 +179,24 @@ export class ProcessVersionConflictError extends Error {
   constructor(id: string, expected: number) {
     super(`process ${id} is no longer at version ${expected}`);
     this.name = "ProcessVersionConflictError";
+  }
+}
+
+/** A process for this source session exists already (one process per source session). The API answers 409. */
+export class ProcessExistsError extends Error {
+  readonly code = "process_exists";
+  constructor(sessionId: string) {
+    super(`a process for session ${sessionId} exists already`);
+    this.name = "ProcessExistsError";
+  }
+}
+
+/** The database rejected a Work Map (update_process / create_process, workmap_valid). The API answers 400. */
+export class InvalidWorkMapError extends Error {
+  readonly code = "invalid_workmap";
+  constructor() {
+    super("invalid workmap");
+    this.name = "InvalidWorkMapError";
   }
 }
 

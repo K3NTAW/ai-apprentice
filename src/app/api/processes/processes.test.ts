@@ -35,7 +35,7 @@ vi.mock("@/lib/supabase/server", () => ({
     return {
       auth: { getUser: async () => ({ data: { user: { id: USER, email: "u@example.test" } }, error: null }) },
       from: (table: string) => (table === "workspace_members" ? membershipQuery() : inner.from(table)),
-      rpc: async (fn: string, args: unknown) => (fn === "update_process" ? inner.rpc(fn, args) : { data: [], error: null }),
+      rpc: async (fn: string, args: unknown) => (fn === "update_process" || fn === "create_process" ? inner.rpc(fn, args) : { data: [], error: null }),
       storage: inner.storage,
     };
   },
@@ -166,6 +166,36 @@ describe("/api/processes", () => {
     expect((await backfillPost(req("POST", { nope: 1 }))).status).toBe(400);
     state.fake.missingTables.add("processes");
     expect((await backfillPost(req("POST"))).status).toBe(503);
+  });
+
+  it("PATCH with workmap, title and archived is one rpc call; a stale one changes nothing; title or archive alone add no version", async () => {
+    const agentId = await agent();
+    const p = (await (await createPost(req("POST", { agent_id: agentId, title: "T", workmap }))).json()) as { id: string };
+    const patch = (body: unknown) => processPatch(req("PATCH", body), params(p.id));
+    const before = state.fake.rpcCalls.length;
+    const res = await patch({ workmap: { ...workmap, task: "v2" }, title: "T2", archived: true, expected_version: 1 });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ version: 2, title: "T2", workmap: { task: "v2" } });
+    expect(state.fake.rpcCalls.slice(before).map((c) => c.fn)).toEqual(["update_process"]);
+    const stale = await patch({ workmap, title: "Lost", archived: false, expected_version: 1 });
+    expect(stale.status).toBe(409);
+    expect(state.fake.tables.processes[0]).toMatchObject({ title: "T2", version: 2 });
+    expect(state.fake.tables.processes[0].archived_at).not.toBeNull();
+    expect((await patch({ title: "T3" })).status).toBe(200);
+    expect((await patch({ archived: false })).status).toBe(200);
+    expect(state.fake.tables.processes[0]).toMatchObject({ title: "T3", version: 2, archived_at: null });
+    expect(state.fake.tables.process_versions.filter((v) => v.process_id === p.id)).toHaveLength(2);
+  });
+
+  it("backfill twice at once creates each process once", async () => {
+    const agentId = await agent();
+    const store = createSupabaseStore(state.fake.client as never, { workspaceId: WS_A, userId: USER });
+    const s = await store.createSession({ kind: "capture", expert: "Sabine", agent_id: agentId });
+    await store.saveWorkMap(s.id, workmap);
+    const [x, y] = await Promise.all([backfillPost(req("POST")), backfillPost(req("POST"))]);
+    const created = [(await x.json()) as { created: number }, (await y.json()) as { created: number }].map((b) => b.created);
+    expect(created.sort()).toEqual([0, 1]);
+    expect(state.fake.tables.processes).toHaveLength(1);
   });
 
   it("answers 400 for a bad body and 404 for a missing agent, process or another workspace's process", async () => {

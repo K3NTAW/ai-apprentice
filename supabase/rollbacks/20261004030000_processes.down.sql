@@ -6,8 +6,9 @@
 -- The policies of both tables go with their tables. Safe to run twice: every drop uses if exists.
 --
 -- Order: the sessions foreign key, index and column,
--- update_process (it returns the processes row type), the process_versions table, the processes table, then the
--- trigger functions.
+-- create_process and update_process (they return the processes row type), workmap_valid, the process_versions
+-- table, the processes table (its unique index processes_source_session_key goes with it), then the trigger
+-- functions.
 --
 -- When the migration was applied with supabase db push, also run
 --   supabase migration repair --status reverted 20261004030000
@@ -16,8 +17,10 @@ alter table if exists public.sessions drop constraint if exists sessions_process
 drop index if exists public.sessions_workspace_process_idx;
 alter table if exists public.sessions drop column if exists process_id;
 drop index if exists public.processes_workspace_agent_idx;
--- update_process returns the processes row type, so it goes before the table.
-drop function if exists public.update_process(uuid, int, jsonb, text, text);
+-- create_process and update_process return the processes row type, so they go before the table.
+drop function if exists public.create_process(uuid, uuid, text, jsonb, text, boolean);
+drop function if exists public.update_process(uuid, int, jsonb, text, text, text, boolean);
+drop function if exists public.workmap_valid(jsonb);
 drop table if exists public.process_versions;
 drop table if exists public.processes;
 drop function if exists public.process_versions_guard_update();
