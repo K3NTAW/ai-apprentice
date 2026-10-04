@@ -24,7 +24,7 @@ Teach on real apps: the tutor watches the learner's whole screen, asks for predi
 
 - Step 5: within a few seconds of 4711 appearing on screen, before any save, the tutor says "Sabine would stop here. Why do you think?", the page shows the quote and "Replay Sabine's moment" (frame plus quote inline), and a halo with a short bubble sits over the cost_code cell in Excel.
 - The same wrong value does not trigger a second stop. Changing to 0400 removes the halo and the stop card. Moving on to another step, Pause, Finish, a companion disconnect and leaving the page all remove the halo.
-- Step 6: the page shows Mastered and Practice next (step 3 under Practice next) and the tutor speaks it. The teach session's `teach` holds workmap_session_id, mastered, practice, interventions 1 and finished_at (ISO, UTC). With the sample map it says "Not saved" (no Work Map session).
+- Step 6: the page shows Mastered and Practice next (step 3 under Practice next) and the tutor speaks it. The teach session's `teach` holds workmap_session_id, mastered, practice, interventions 1 and finished_at (ISO, UTC). With the sample map it says "Practice run on the sample Work Map: progress stays on this page." (no Work Map session).
 - Step 7: the stop is by voice only and the page says "Companion not paired: the tutor stops by voice only, no halo over the app."
 - Step 8: no stop at 4711 (amount under the limit).
 - A failed or timed out guardrail check never stops; the Current step box shows the failure count. After a 429 it says the checks are paused (usage cap).
@@ -33,4 +33,4 @@ Teach on real apps: the tutor watches the learner's whole screen, asks for predi
 
 - Any stop after the save instead of before, a halo on the wrong monitor or position, a second stop for the same value, a halo left on screen after Finish, a stop in the EUR 1,200 case.
 
-Notes: halo rects map to the primary display, so they are only right when the shared surface is the whole primary monitor. Saving Session.teach posts to `/api/session/<id>/teach`; that route is outside this task's scope and needs a follow-up, until then the page shows "Not saved (... 404)". Rollback: revert the T-0094 commit.
+Notes: halo rects map to the primary display, so they are only right when the shared surface is the whole primary monitor. Saving Session.teach posts to `/api/session/<id>/teach` (T-0250). A failed save shows a quiet notice, never a raw error; without migration 20261004040000_session_teach the route answers 503 and the notice says progress tracking is not switched on yet. Rollback: revert the T-0094 commit.

@@ -32,6 +32,7 @@ import { agentBlocker, useAgent } from "@/components/agents/useAgent";
 import { checkTeachSource, teachSessionBody } from "./agentSource";
 import { sendTextTurn, textTurnError } from "./textTurn";
 import TeachConsole, { type TeachConsoleProps, type TeachLine } from "./TeachConsole";
+import { HttpError, quiet, type SaveOutcome, saveOutcomeText, visionFailedText } from "./quietNotice";
 
 /**
  * agentParam: ?agent, the agent of the new teach session. sessionId: ?session, the source Work Map capture session.
@@ -68,7 +69,7 @@ type Loop = {
 
 async function postJson<T>(url: string, body: unknown): Promise<T> {
   const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-  if (!res.ok) throw new Error(`${url} ${res.status}`);
+  if (!res.ok) throw new HttpError(url, res.status);
   return (await res.json()) as T;
 }
 
@@ -179,7 +180,7 @@ function TeachInner({ sessionId, localMode, agentParam = null, processId = null,
         setOptions(opts);
         setSelected(preselect(opts, sessionId));
       },
-      (err) => live && setBanner(`Work Maps could not be loaded (${err instanceof Error ? err.message : String(err)}). Reload to try again.`),
+      (err) => live && setBanner(quiet("Work Maps could not be loaded. Reload to try again.", err)),
     );
     return () => {
       live = false;
@@ -206,7 +207,7 @@ function TeachInner({ sessionId, localMode, agentParam = null, processId = null,
         setWorkmapSessionId(m.sessionId);
         setBanner(m.banner);
       },
-      (err) => live && setBanner(`The Work Map could not be loaded (${err instanceof Error ? err.message : String(err)}). Reload to try again.`),
+      (err) => live && setBanner(quiet("The Work Map could not be loaded. Reload to try again.", err)),
     );
     return () => {
       live = false;
@@ -310,8 +311,7 @@ function TeachInner({ sessionId, localMode, agentParam = null, processId = null,
       });
       for (const e of res.events ?? []) onScreenEvent(loop, { ...e, id: newId("ev"), t: f.t, source: "vision", frame_ref: res.frame_ref });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setNotice(/429/.test(msg) ? "Daily vision limit reached: the tutor cannot see the screen any more today." : `Vision failed (${msg}).`);
+      setNotice(visionFailedText(err));
     } finally {
       loop.visionBusy = false;
       setThinking((n) => Math.max(0, n - 1));
@@ -333,7 +333,7 @@ function TeachInner({ sessionId, localMode, agentParam = null, processId = null,
     try {
       id = (await postJson<{ id: string }>("/api/session", teachSessionBody(agentId))).id;
     } catch (err) {
-      setNotice(`Could not create the teach session: ${err instanceof Error ? err.message : String(err)}`);
+      setNotice(quiet("The teach session could not start. Try again in a moment.", err));
       setStarting(false);
       return;
     }
@@ -380,7 +380,7 @@ function TeachInner({ sessionId, localMode, agentParam = null, processId = null,
         } catch (err) {
           voiceModeRef.current = false;
           setTextMode(true);
-          setNotice(`Voice did not start (${err instanceof Error ? err.message : String(err)}). Text mode: the tutor writes here.`);
+          setNotice(quiet("Voice did not start. Text mode: the tutor writes here.", err));
           return false;
         }
       },
@@ -424,7 +424,7 @@ function TeachInner({ sessionId, localMode, agentParam = null, processId = null,
       setSharing(true);
       setShareWarning(monitorRef.current ? null : MONITOR_WARNING);
     } catch (err) {
-      setNotice(`Screen share not started (${err instanceof Error ? err.message : String(err)}).`);
+      setNotice(quiet("Screen share not started.", err));
     }
   }
 
@@ -451,7 +451,7 @@ function TeachInner({ sessionId, localMode, agentParam = null, processId = null,
     setRunning(false);
     const s = summary(masteryRef.current, loop.workmap.steps);
     say(buildMasteryTurn(s.text), s.text);
-    let saved = "Not saved: this Work Map has no session (sample).";
+    let outcome: SaveOutcome = { kind: "sample" };
     if (workmapSessionId) {
       const teach = buildTeachProgress({
         workmapSessionId,
@@ -461,11 +461,13 @@ function TeachInner({ sessionId, localMode, agentParam = null, processId = null,
       });
       try {
         await postJson(`/api/session/${encodeURIComponent(loop.sessionId)}/teach`, { teach });
-        saved = "Saved to this teach session.";
+        outcome = { kind: "saved" };
       } catch (err) {
-        saved = `Not saved (${err instanceof Error ? err.message : String(err)}).`;
+        outcome = { kind: "failed", err };
       }
     }
+    const { saved, notice: saveNotice } = saveOutcomeText(outcome);
+    if (saveNotice) setNotice(saveNotice);
     void postJson(`/api/session/${encodeURIComponent(loop.sessionId)}/end`, {}).catch(() => {});
     setResult({ ...s, saved });
     if (voiceModeRef.current) setTimeout(() => void agentRef.current.stop(), 8000);

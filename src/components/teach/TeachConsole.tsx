@@ -184,7 +184,7 @@ function Summary({ p }: { p: TeachConsoleProps }) {
           <h1 className="ui-t1">
             Nice work. {r.mastered.length} of {total} steps mastered.
           </h1>
-          <p style={{ color: "var(--mu)", fontSize: 15 }}>{r.saved}</p>
+          {r.saved && <p style={{ color: "var(--mu)", fontSize: 15 }}>{r.saved}</p>}
         </div>
       </Card>
       <div className="grid items-start" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 380px), 1fr))", gap: 16 }}>
