@@ -6,7 +6,8 @@
 // BASE_URL defaults to http://localhost:3000 (local mode needs no cookie). RUNS (default 5) requests per page,
 // PAGES (comma separated) overrides the page list. The cookie is read from the environment only; never commit it.
 // Prints one row per page: median and min/max TTFB in ms, the status, and the Server-Timing header of the last run
-// (proxy-auth on pages; auth and db on /api routes).
+// (ctx-auth, db and total on pages in supabase mode and on /api routes). Local mode needs `next dev`: a production
+// build without Supabase is misconfigured (503).
 
 const BASE_URL = (process.env.BASE_URL ?? "http://localhost:3000").replace(/\/$/, "");
 const COOKIE = process.env.SESSION_COOKIE ?? "";

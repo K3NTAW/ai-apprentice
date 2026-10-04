@@ -45,9 +45,32 @@ Report: "still slow and stalls on different clicks". Functions run in fra1 (Flui
 | request | before | after |
 | --- | --- | --- |
 | page navigation (document or RSC) | 2 getUser (proxy, then getRequestContext) | 1 (proxy; the render reuses the signed forwarded user) |
-| router prefetch (viewport or hover, RSC prefetch) | 2 | 1 (the render only, proxy skips) |
+| router prefetch (viewport or hover, RSC prefetch) | 2 | 1 (proxy; redirected when signed out, the render reuses the forwarded user) |
 | /api/* route handler | 2 (proxy, then requireContext) | 1 (requireContext; it still answers 401) |
-| static asset outside the matcher exclusions | 1 | 0 |
+| /_next/* outside the matcher exclusions | 1 | 0 |
+| any other path ending in .js, .css, .txt and similar | 1 | 1 (still a protected page, T-0178) |
+
+T-0178 (fix round, code review T-0177): T-0174 skipped the proxy session check for router prefetches and for any
+path ending in a static extension. Both are client controlled, so a signed-out request with `next-router-prefetch: 1`
+reached the render without the sign-in redirect. Now only /api/* and /_next/* skip the proxy getUser.
+
+### getUser calls per page request (from the test call logs, before = f103f05, after = this branch)
+
+Counted by `src/lib/auth/context.test.ts` ("one getUser per page request (proxy plus context)": the proxy's
+getUser counter plus the render client's getUser mock calls for one request) and `src/proxy.test.ts` ("getUser calls
+in the proxy per request"). Every main page goes through the same proxy and getRequestContext, so the count is the
+same per page.
+
+| page | before | after | after, no FORWARDED_USER_SECRET and no service role key |
+| --- | --- | --- | --- |
+| /agents | 2 | 1 | 2 |
+| /dashboard | 2 | 1 | 2 |
+| /map | 2 | 1 | 2 |
+| /learn | 2 | 1 | 2 |
+| /capture | 2 | 1 | 2 |
+| /workspace | 2 | 1 | 2 |
+| /agents prefetch (next-router-prefetch) | 2 | 1 | 2 |
+| /api/session | 2 | 1 | 1 |
 
 The forwarded user is an HMAC-signed request header (`x-aa-verified-user`, 30 s expiry). The proxy deletes any
 client-sent header of that name on every request; getRequestContext ignores a value that does not verify and calls
@@ -60,9 +83,12 @@ getUser itself; requireContext never reads it. Key: `FORWARDED_USER_SECRET`, els
 - Across requests, 5 s, supabase mode only, unstable_cache keyed `[name, user:<id>, ws:<id>]`:
   memberships (tag `user:<id>:memberships`), the agents input behind the agent list and stats
   (`ws:<id>:agents`, `ws:<id>:sessions`, `ws:<id>:members`), the sidebar recent sessions (`ws:<id>:sessions`).
-- Expired by: agent POST/PATCH/DELETE (agents); session, events, transcript, qa, off-record, end, vision, workmap,
-  workmap/confirm writes (sessions); bootstrap (memberships, members); member removal (the removed user's memberships,
-  members). Route handlers (requireContext) never read the memberships cache. Errors and empty results are not cached.
+- Expired by: agent POST/PATCH/DELETE (agents); session create, end and workmap/confirm (sessions; there is no
+  session delete route); bootstrapAfterSignIn, so both /auth/callback and /api/auth/bootstrap (memberships, members
+  of a joined workspace); member removal (the removed user's memberships, members). Route handlers (requireContext)
+  never read the memberships cache. Errors and empty results are not cached.
+- Not expired by capture writes (events, transcript, qa, vision frames, off-record, workmap): they arrive several
+  times a second during a capture. The sidebar and agent stats can lag a live capture by the cache TTL (5 s).
 
 ## Prefetch and refresh
 
@@ -72,16 +98,39 @@ getUser itself; requireContext never reads it. Key: `FORWARDED_USER_SECRET`, els
 
 ## Timing
 
-- Pages: the proxy sends `Server-Timing: proxy-auth;dur=<ms>`. ctx-auth and db (memberships) inside the render are
-  logged with `PERF_LOG=1` (`[perf] ctx-auth 182.3ms`), since a server component cannot set response headers.
-  Render is the remainder: TTFB minus proxy-auth minus the logged steps.
-- Route handlers keep `Server-Timing: auth;dur, db;dur` (withApi).
+- Pages (supabase mode): the proxy sends `Server-Timing: ctx-auth;dur=<ms>, db;dur=0.0, total;dur=<ms>`. ctx-auth is
+  the proxy getUser (the only one per page), db is store time in the proxy (none), total is proxy start to response.
+  The render's own steps (memberships read, loaders) are logged with `PERF_LOG=1` (`[perf] db 41.0ms`), since a
+  server component cannot set response headers. Render is the remainder: TTFB minus total minus the logged steps.
+  Local mode has no proxy work and sends no page Server-Timing.
+- Route handlers (withApi): `Server-Timing: ctx-auth;dur, db;dur, total;dur`. ctx-auth is requireContext (getUser plus
+  memberships), db is the sum of the store calls of the request (overlapping calls each count), total is requireContext
+  start to response. A 401 from requireContext carries the same three entries (db 0).
 
 ## TTFB (median of 5, scripts/measure-ttfb.mjs)
 
-Local mode (`npm run dev`, no Supabase) only checks that the script and pages run: it has no Auth or database round
-trips, so it says nothing about the preview. The preview numbers are for the human to fill in, before (goal branch
-without T-0174) and after (this branch):
+### Local mode, measured 2026-10-04
+
+`next dev` (local mode exists only outside production, no Supabase), both servers warm (every page requested twice
+first), 10 runs per page, two rounds, same machine. Before = f103f05 (goal/T-0001 right before the T-0174 lineage;
+the merge-base ec2d4f4 has no app yet), after = this branch. Median TTFB in ms, round 1 / round 2:
+
+| page | before ms | after ms |
+| --- | --- | --- |
+| /agents | 39 / 40 | 45 / 41 |
+| /dashboard (307 to the default page) | 20 / 21 | 30 / 22 |
+| /map | 34 / 32 | 40 / 35 |
+| /learn | 39 / 38 | 44 / 39 |
+| /capture | 36 / 37 | 65 / 40 |
+| /workspace | 63 / 35 | 41 / 38 |
+| /api/session | 6 / 5 | 5 / 5 |
+
+Reading: no difference beyond noise (round 1 has dev-server outliers, e.g. /capture max 205 ms). Local mode has no
+Auth or database round trips and the proxy returns at once, so it cannot show what T-0174 and T-0178 change; it
+checks that the script and pages run. The changes are in the getUser counts above, and the preview run below is the
+real measure. /api/session after: `ctx-auth;dur=0.0, db;dur=0.1, total;dur=0.3`.
+
+### Preview (supabase mode), for the human to fill in
 
 | page | before ms | after ms |
 | --- | --- | --- |

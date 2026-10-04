@@ -75,6 +75,7 @@ Vercel project, Settings, Environment Variables. Set each for **Production** and
 | NEXT_PUBLIC_SUPABASE_URL | Supabase project URL (set already if you used the Marketplace) |
 | NEXT_PUBLIC_SUPABASE_ANON_KEY | Supabase anon key (same) |
 | SUPABASE_SERVICE_ROLE_KEY | Supabase service role key, server only (same) |
+| FORWARDED_USER_SECRET | optional, server only: HMAC key for the user the proxy forwards to the page render (any long random string, e.g. `openssl rand -base64 32`). Unset, the key is derived from SUPABASE_SERVICE_ROLE_KEY, which is enough on Vercel. With neither, the server logs one warning and every page calls getUser twice |
 | ELEVENLABS_API_KEY | ElevenLabs API key |
 | ELEVENLABS_AGENT_ID_INTERVIEWER | ElevenLabs agent id for capture interviews, see docs/VOICE_SETUP.md |
 | ELEVENLABS_AGENT_ID_TUTOR | ElevenLabs agent id for teach sessions |
