@@ -10,3 +10,4 @@ form { display: flex; gap: 8px; }
 }
 .field:focus-visible { outline: 2px solid var(--bl); outline-offset: 2px; }
 .error { color: var(--rd); min-height: 1.5em; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; }

@@ -23,6 +23,7 @@ import { appAllowlist, PRODUCT_NAME, resolveAppUrl, userDataDirName, wsEnabled, 
 import { ActivityAggregator, AppChangeTracker, WINDOW_MS, toInputKind, type InputKind } from "./activity.mjs";
 import { checkAppUrl, planMainLoad, serializeStoredAppUrl, STORED_APP_URL_FILE, validateSetupUrl } from "./appUrl.mjs";
 import { avatarFor } from "./avatarUrl.mjs";
+import { blockedNavigationLog, isLoadErrorAction, loadErrorView, navigationAllowed, type LoadFailure } from "./loadError.mjs";
 import { BRIDGE_CHANNELS, createForwarder, exposeBridge, routeBridgeMessage, senderAllowed, type BridgeHandlers } from "./bridge.mjs";
 import { buddyView, cursorPollNeeded, expireBuddy, initialBuddy, reduceBuddy, type BuddyAction } from "./buddy.mjs";
 import { chordsEnabled, createChordListener, type ChordGates } from "./chord.mjs";
@@ -792,6 +793,9 @@ function openExternal(url: string): void {
 }
 
 const SETUP_HTML = path.join(here, "..", "static", "setup.html");
+const LOAD_ERROR_HTML = path.join(here, "..", "static", "load-error.html");
+/** Set by the error page's Change URL: the setup screen may then replace a stored URL that does not load. */
+let changingUrl = false;
 
 function storedAppUrlPath(): string {
   return path.join(app.getPath("userData"), STORED_APP_URL_FILE);
@@ -826,7 +830,7 @@ function loadMain(win: BrowserWindow): void {
 ipcMain.handle("setup-save-url", (e, raw: unknown) => {
   const frame = e.senderFrame;
   const onSetup = !!frame && frame === e.sender.mainFrame && isMainContents(e.sender) && frame.url.split(/[?#]/)[0] === pathToFileURL(SETUP_HTML).href;
-  if (!onSetup || appUrl.ok) return { ok: false, reason: "not_allowed" };
+  if (!onSetup || (appUrl.ok && !changingUrl)) return { ok: false, reason: "not_allowed" };
   const checked = validateSetupUrl(raw);
   if (!checked.ok) return { ok: false, reason: checked.reason };
   try {
@@ -835,9 +839,35 @@ ipcMain.handle("setup-save-url", (e, raw: unknown) => {
     log(`app url not saved: ${String(err)}`);
     return { ok: false, reason: "app_url_not_saved" };
   }
+  changingUrl = false;
   applyAppUrl();
   if (mainWin && !mainWin.isDestroyed()) loadMain(mainWin);
   return { ok: true };
+});
+
+/** The control room did not load: the local error page says why. Never the blocked origin itself. */
+function showLoadError(win: BrowserWindow, failure: LoadFailure): void {
+  if (win.isDestroyed()) return;
+  const view = loadErrorView(appUrl.ok ? appUrl.url : null, failure);
+  log(`main window not loaded: ${failure.kind}`);
+  void win.loadFile(LOAD_ERROR_HTML, { query: { title: view.title, reason: view.reason } });
+}
+
+/** Error page buttons: only the main window's main frame on the local error page. */
+ipcMain.on("load-error-action", (e, action: unknown) => {
+  const frame = e.senderFrame;
+  const onPage = !!frame && frame === e.sender.mainFrame && isMainContents(e.sender) && frame.url.split(/[?#]/)[0] === pathToFileURL(LOAD_ERROR_HTML).href;
+  if (!onPage || !isLoadErrorAction(action) || !mainWin || mainWin.isDestroyed()) return;
+  if (action === "retry") {
+    applyAppUrl();
+    loadMain(mainWin);
+  } else if (action === "change-url") {
+    changingUrl = true;
+    void mainWin.loadFile(SETUP_HTML);
+  } else if (appUrl.ok) {
+    const checked = checkAppUrl(appUrl.url, appList);
+    if (checked.ok) openExternal(checked.href);
+  }
 });
 
 let boundsTimer: NodeJS.Timeout | null = null;
@@ -886,18 +916,29 @@ function createMainWindow(): BrowserWindow {
     else openExternal(url);
     return { action: "deny" };
   });
-  const guard = (e: Electron.Event, url: string) => {
-    if (isUrlAllowed(url, appList)) return;
+  // A blocked link opens in the browser; a blocked redirect (the page itself went elsewhere) shows the error page.
+  const guard = (e: Electron.Event, url: string, redirect: boolean) => {
+    if (navigationAllowed(url, appList)) return;
     e.preventDefault();
-    openExternal(url);
+    log(blockedNavigationLog(url));
+    if (redirect) setImmediate(() => showLoadError(win, { kind: "blocked", url }));
+    else openExternal(url);
   };
-  wc.on("will-navigate", (e) => guard(e, e.url));
-  wc.on("will-redirect", (e) => guard(e, e.url));
+  wc.on("will-navigate", (e) => guard(e, e.url, false));
+  wc.on("will-redirect", (e) => guard(e, e.url, true));
+  // -3 is ERR_ABORTED (a navigation we or the page cancelled): not a failure to explain.
+  wc.on("did-fail-load", (_e, code, description, url, isMainFrame) => {
+    if (!isMainFrame || code === -3 || !navigationAllowed(url, appList)) return;
+    showLoadError(win, { kind: "network", code, description });
+  });
   // Navigation, reload or crash: the page is gone until the next preload hello.
   wc.on("did-start-navigation", (e) => {
     if (e.isMainFrame && !e.isSameDocument && pageConnected) setConnection("page", false);
   });
-  wc.on("render-process-gone", () => setConnection("page", false));
+  wc.on("render-process-gone", (_e, details) => {
+    setConnection("page", false);
+    if (details.reason !== "clean-exit") showLoadError(win, { kind: "crash", reason: details.reason });
+  });
   win.on("resize", () => saveBoundsSoon(win));
   win.on("move", () => saveBoundsSoon(win));
   win.on("show", syncDockIcon);

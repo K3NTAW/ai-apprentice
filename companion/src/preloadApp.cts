@@ -17,6 +17,12 @@ if ((globalThis as { location?: { protocol?: string } }).location?.protocol === 
       return ipcRenderer.invoke("setup-save-url", String(url));
     },
   });
+  // Load error page (local file only): Retry, Change URL, Open in browser. Main re-checks the sender.
+  contextBridge.exposeInMainWorld("apprenticeLoadError", {
+    act(action: string): void {
+      ipcRenderer.send("load-error-action", String(action));
+    },
+  });
 }
 
 const info = ipcRenderer.sendSync("apprentice-hello") as Info | null;
