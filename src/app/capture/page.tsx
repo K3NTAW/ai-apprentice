@@ -11,7 +11,7 @@ export default async function CapturePage({ searchParams }: { searchParams: Prom
     return (
       <main className="flex flex-col gap-2 p-8">
         <h1 className="text-lg font-semibold">Capture</h1>
-        <p className="text-sm text-slate-600">Capturing is for owners and experts. Open Teach to learn from the workspace&apos;s Work Maps.</p>
+        <p className="text-sm text-muted">Capturing is for owners and experts. Open Teach to learn from the workspace&apos;s Work Maps.</p>
       </main>
     );
   }

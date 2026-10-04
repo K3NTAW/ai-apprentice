@@ -46,22 +46,22 @@ export default function CompanionCard({ status, permissions, onPair }: Companion
   }
 
   return (
-    <section data-testid="companion-card" className="flex flex-col gap-2 rounded border border-slate-200 bg-white p-3 text-xs">
+    <section data-testid="companion-card" className="ui-card flex flex-col gap-2 text-xs" style={{ padding: 22 }}>
       <div className="flex items-center gap-2">
-        <span className={`h-2 w-2 rounded-full ${status === "paired" ? "bg-green-500" : "bg-slate-300"}`} />
+        <span className={`h-2 w-2 rounded-full ${status === "paired" ? "bg-[var(--gr)]" : "bg-[var(--s3)]"}`} />
         <h3 className="font-semibold">Desktop companion</h3>
-        <span data-testid="companion-status" className="ml-auto text-slate-600">
+        <span data-testid="companion-status" className="ml-auto text-muted">
           {LABEL[status]}
         </span>
       </div>
       {status === "not connected" && (
-        <p className="text-slate-500">
+        <p className="text-muted">
           Start the companion app. Safari blocks the local connection from an https page and Chrome may ask to allow local
           network access. Without it, Capture uses speech pauses and screen stillness.
         </p>
       )}
       {missing.length > 0 && (
-        <p role="alert" className="text-amber-800">
+        <p role="alert" className="text-[var(--am)]">
           Missing macOS permissions: {missing.join(", ")}. Grant them in System Settings, Privacy &amp; Security.
         </p>
       )}
@@ -73,17 +73,17 @@ export default function CompanionCard({ status, permissions, onPair }: Companion
             autoComplete="off"
             maxLength={6}
             placeholder="6-digit code"
-            className="min-w-0 flex-1 rounded border border-slate-300 px-2 py-1"
+            className="ui-inp min-w-0 flex-1"
             value={code}
             onChange={(e) => setCode(e.target.value)}
           />
-          <button type="submit" className="rounded bg-slate-900 px-2 py-1 text-white">
+          <button type="submit" className="ui-btn ui-bp ui-bsm">
             Pair
           </button>
         </form>
       )}
-      {bad && <p className="text-red-700">The code has 6 digits.</p>}
-      <a href={COMPANION_README} target="_blank" rel="noreferrer" className="text-blue-700 underline">
+      {bad && <p className="text-[var(--rd)]">The code has 6 digits.</p>}
+      <a href={COMPANION_README} target="_blank" rel="noreferrer" className="text-[var(--ac2)] underline">
         Install the companion (companion/README)
       </a>
     </section>

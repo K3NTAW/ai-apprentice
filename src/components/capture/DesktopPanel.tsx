@@ -27,17 +27,69 @@ export function appStatusLabel(status: CompanionCardProps["status"]): string {
   return "AI Apprentice not connected";
 }
 
+const PERMISSION_ROWS: [keyof NonNullable<CompanionCardProps["permissions"]>, string, string?][] = [
+  ["screen", "Screen Recording"],
+  ["accessibility", "Accessibility", "Without it the agent cannot tell which field you typed in"],
+  ["input", "Input Monitoring", "Without it shortcuts and typing pauses are not seen"],
+];
+
+/** macOS privacy panes behind each Fix button (opened by the system; harmless elsewhere). */
+const SETTINGS_PANE: Record<string, string> = {
+  screen: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
+  accessibility: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
+  input: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent",
+};
+
+/** Desktop app card (Capture.dc.html 'Companion' card without the pairing digits): status and the permission rows. */
 export function AppStatus({ companion }: { companion: CompanionCardProps }) {
   const missing = missingPermissions(companion.permissions);
+  const running = companion.status === "paired";
   return (
-    <section data-testid="app-status" className="flex flex-col gap-1 rounded border border-slate-200 bg-white p-3 text-xs">
-      <div className="flex items-center gap-2">
-        <span className={`h-2 w-2 rounded-full ${companion.status === "paired" ? "bg-green-500" : "bg-slate-300"}`} />
-        <span className="font-semibold">{appStatusLabel(companion.status)}</span>
-        {companion.permissions && missing.length === 0 && <span className="ml-auto text-slate-600">All permissions granted</span>}
+    <section data-testid="app-status" className="ui-card flex flex-col" style={{ padding: 22, gap: 14 }}>
+      <div className="flex items-center justify-between" style={{ gap: 10 }}>
+        <h2 className="ui-t3">Desktop app</h2>
+        <span className={`ui-bdg ${running ? "ui-k-ok" : "ui-k-pend"}`}>{running ? "Running" : "Not connected"}</span>
       </div>
+      <span className="text-[13px]" style={{ color: "var(--mu)" }}>
+        {appStatusLabel(companion.status)}
+        {companion.permissions && missing.length === 0 && " · All permissions granted"}
+      </span>
+      {companion.permissions && (
+        <div className="flex flex-col" style={{ borderTop: "1px solid var(--ln)" }}>
+          {PERMISSION_ROWS.map(([key, name, why], i) => {
+            const ok = companion.permissions![key];
+            return (
+              <div
+                key={key}
+                data-testid={`permission-${key}`}
+                className="flex flex-wrap items-center justify-between"
+                style={{ gap: 10, padding: "10px 0", borderTop: i ? "1px solid var(--ln)" : undefined }}
+              >
+                <span className="text-[13px]">
+                  {name}
+                  {!ok && why && (
+                    <span className="block text-xs" style={{ color: "var(--fa)" }}>
+                      {why}
+                    </span>
+                  )}
+                </span>
+                {ok ? (
+                  <span className="ui-bdg ui-k-ok">Allowed</span>
+                ) : (
+                  <span className="flex items-center" style={{ gap: 8 }}>
+                    <span className="ui-bdg ui-k-rd">Missing</span>
+                    <a href={SETTINGS_PANE[key]} className="ui-btn ui-bs ui-bsm">
+                      Fix
+                    </a>
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
       {missing.length > 0 && (
-        <p role="alert" className="text-amber-800">
+        <p role="alert" className="text-xs" style={{ color: "var(--am)" }}>
           Missing permissions: {missing.join(", ")}. Grant them in your system settings, then restart the app.
         </p>
       )}
@@ -47,21 +99,24 @@ export function AppStatus({ companion }: { companion: CompanionCardProps }) {
 
 export function GetDesktopApp({ downloads = desktopDownloads() }: { downloads?: DesktopDownloads }) {
   return (
-    <section id="companion" data-testid="get-desktop-app" className="flex flex-col gap-2 rounded border border-slate-200 bg-white p-3 text-xs">
-      <h3 className="font-semibold">Get the desktop app</h3>
-      <p className="text-slate-600">
+    <section id="companion" data-testid="get-desktop-app" className="ui-card flex flex-col" style={{ padding: 22, gap: 14 }}>
+      <div className="flex items-center justify-between" style={{ gap: 10 }}>
+        <h2 className="ui-t3">Get the desktop app</h2>
+        <span className="ui-bdg ui-k-pend">Browser</span>
+      </div>
+      <p className="text-[13px]" style={{ color: "var(--mu)" }}>
         Training and teaching run in the AI Apprentice desktop app: it sees your real apps, docks the agent at the side of
         the screen and shares the screen without a picker. Agents, Work Maps and your workspace work here in the browser.
       </p>
       {(downloads.mac || downloads.win) && (
-        <div className="flex gap-3">
+        <div className="flex flex-wrap" style={{ gap: 8 }}>
           {downloads.mac && (
-            <a href={downloads.mac} rel="noreferrer" className="text-blue-700 underline">
+            <a href={downloads.mac} rel="noreferrer" className="ui-btn ui-bs ui-bsm">
               Download for macOS
             </a>
           )}
           {downloads.win && (
-            <a href={downloads.win} rel="noreferrer" className="text-blue-700 underline">
+            <a href={downloads.win} rel="noreferrer" className="ui-btn ui-bs ui-bsm">
               Download for Windows
             </a>
           )}

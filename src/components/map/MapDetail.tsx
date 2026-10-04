@@ -16,9 +16,9 @@ export function MapLearners({ rows }: { rows: MasteryRow[] | null }) {
   return (
     <section className="flex flex-col gap-2 text-sm">
       <h2 className="ui-t3">Learners</h2>
-      {rows === null && <p className="text-slate-500">Learners could not be loaded.</p>}
+      {rows === null && <p className="text-muted">Learners could not be loaded.</p>}
       {rows?.length === 0 && (
-        <p className="text-slate-500">
+        <p className="text-muted">
           Nobody has practised this Work Map yet. Open it in Teach, or{" "}
           <Link className="underline" href="/workspace">
             invite a learner
@@ -27,7 +27,7 @@ export function MapLearners({ rows }: { rows: MasteryRow[] | null }) {
         </p>
       )}
       {rows && rows.length > 0 && (
-        <ul className="flex flex-col divide-y divide-slate-100">
+        <ul className="flex flex-col divide-y divide-line">
           {rows.map((r, i) => (
             <li key={`${r.learner}-${i}`} className="flex flex-col gap-0.5 py-1.5">
               <span className="font-medium">{r.learner}</span>

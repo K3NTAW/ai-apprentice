@@ -24,11 +24,11 @@ function ScoreBar({ label, value }: { label: string; value: number }) {
   const pct = Math.round(Math.max(0, Math.min(1, value)) * 100);
   return (
     <div className="flex flex-col gap-1">
-      <div className="flex justify-between text-xs text-slate-600">
+      <div className="flex justify-between text-xs text-muted">
         <span>{label}</span>
         <span className="font-mono">{pct}%</span>
       </div>
-      <div className="relative h-2 w-full rounded bg-slate-200" title={`threshold ${Math.round(SCORE_THRESHOLD * 100)}%`}>
+      <div className="relative h-2 w-full rounded bg-panel-2" title={`threshold ${Math.round(SCORE_THRESHOLD * 100)}%`}>
         <div className={`h-2 rounded ${ok ? "bg-green-500" : "bg-amber-400"}`} style={{ width: `${pct}%` }} />
         <div className="absolute top-[-2px] h-3 w-px bg-slate-500" style={{ left: `${SCORE_THRESHOLD * 100}%` }} />
       </div>
@@ -43,7 +43,7 @@ function Timeline({ steps, selected, onSelect }: { steps: WorkMapStep[]; selecte
   const pos = (t: number) => ((t - min) / (max - min)) * 100;
   return (
     <div className="relative mx-3 my-4 h-8" role="list" aria-label="timeline">
-      <div className="absolute left-0 right-0 top-1/2 h-px bg-slate-300" />
+      <div className="absolute left-0 right-0 top-1/2 h-px bg-line" />
       {steps.map((s) => {
         const active = s.n === selected;
         return (
@@ -55,7 +55,7 @@ function Timeline({ steps, selected, onSelect }: { steps: WorkMapStep[]; selecte
             title={`Step ${s.n} at ${formatT(s.screen_moment.t)}: ${s.title}`}
             className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 ${
               s.is_judgment_call ? "h-4 w-4 border-amber-500" : "h-3 w-3 border-slate-500"
-            } ${active ? "bg-slate-900" : s.is_judgment_call ? "bg-amber-200" : "bg-white"}`}
+            } ${active ? "bg-slate-900" : s.is_judgment_call ? "bg-amber-200" : "bg-panel"}`}
             style={{ left: `${pos(s.screen_moment.t)}%` }}
             aria-label={`Step ${s.n}`}
           />
@@ -68,7 +68,7 @@ function Timeline({ steps, selected, onSelect }: { steps: WorkMapStep[]; selecte
 function StepCard({ sessionId, workmap, step, compact }: { sessionId: string; workmap: WorkMap; step: WorkMapStep; compact?: boolean }) {
   const m = step.screen_moment;
   return (
-    <article className="flex flex-col gap-3 rounded border border-slate-200 p-4">
+    <article className="flex flex-col gap-3 rounded border border-line p-4">
       <h3 className="font-semibold">
         Step {step.n} of {workmap.steps.length}: {step.title}
         {step.is_judgment_call && (
@@ -76,7 +76,7 @@ function StepCard({ sessionId, workmap, step, compact }: { sessionId: string; wo
         )}
       </h3>
       <section className="flex flex-col gap-1">
-        <h4 className="text-xs font-semibold uppercase text-slate-500">Screen moment</h4>
+        <h4 className="text-xs font-semibold uppercase text-muted">Screen moment</h4>
         <p className="text-sm">
           <span className="font-mono">{formatT(m.t)}</span>, {m.entity}
           {m.field ? `, ${m.field} field` : ""}
@@ -84,24 +84,24 @@ function StepCard({ sessionId, workmap, step, compact }: { sessionId: string; wo
         <StepFrame sessionId={sessionId} frameRef={m.frame_ref} compact={compact} />
       </section>
       <section className="flex flex-col gap-1">
-        <h4 className="text-xs font-semibold uppercase text-slate-500">Decision</h4>
+        <h4 className="text-xs font-semibold uppercase text-muted">Decision</h4>
         <p className="text-sm">{step.decision}</p>
       </section>
       <section className="flex flex-col gap-1">
-        <h4 className="text-xs font-semibold uppercase text-slate-500">Reason</h4>
+        <h4 className="text-xs font-semibold uppercase text-muted">Reason</h4>
         <ExpertQuote expert={workmap.expert} reason={step.reason} />
       </section>
       <section className="flex flex-col gap-1">
-        <h4 className="text-xs font-semibold uppercase text-slate-500">Guardrails</h4>
+        <h4 className="text-xs font-semibold uppercase text-muted">Guardrails</h4>
         {step.guardrails.length === 0 ? (
-          <p className="text-sm text-slate-400">none captured</p>
+          <p className="text-sm text-muted">none captured</p>
         ) : (
           <ul className="flex flex-col gap-2">
             {step.guardrails.map((g, i) => (
               <li key={i} className="text-sm">
                 <span className={`mr-2 rounded px-1.5 py-0.5 text-xs ${KIND_BADGE[g.kind]}`}>{guardrailKindLabel(g.kind)}</span>
                 {g.rule}
-                <p className="mt-1 text-xs text-slate-500">
+                <p className="mt-1 text-xs text-muted">
                   {g.quote ? <>&ldquo;{g.quote}&rdquo; </> : <span className="text-amber-700">quote not captured </span>}
                   at <span className="font-mono">{formatT(g.quote_ref)}</span>
                 </p>
@@ -134,15 +134,15 @@ export default function WorkMapView({ sessionId, workmap, onSelectStep, compact 
           {workmap.confirmed_by_expert ? (
             <span className="rounded bg-green-100 px-1.5 py-0.5 text-xs text-green-800">confirmed</span>
           ) : (
-            <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600">not yet confirmed</span>
+            <span className="rounded bg-panel-2 px-1.5 py-0.5 text-xs text-muted">not yet confirmed</span>
           )}
         </div>
-        <p className="text-sm text-slate-600">Expert: {workmap.expert}</p>
-        <p className="text-sm text-slate-600">{countsLine(workmap)}</p>
+        <p className="text-sm text-muted">Expert: {workmap.expert}</p>
+        <p className="text-sm text-muted">{countsLine(workmap)}</p>
       </header>
 
       {workmap.steps.length === 0 ? (
-        <p className="text-sm text-slate-400">No steps yet.</p>
+        <p className="text-sm text-muted">No steps yet.</p>
       ) : (
         <>
           <Timeline steps={workmap.steps} selected={step.n} onSelect={select} />
@@ -153,7 +153,7 @@ export default function WorkMapView({ sessionId, workmap, onSelectStep, compact 
                   <button
                     type="button"
                     onClick={() => select(s.n)}
-                    className={`w-full rounded px-2 py-1 text-left text-sm ${s.n === step.n ? "bg-slate-900 text-white" : "hover:bg-slate-100"}`}
+                    className={`w-full rounded px-2 py-1 text-left text-sm ${s.n === step.n ? "bg-slate-900 text-white" : "hover:bg-panel-2"}`}
                   >
                     <span className="mr-2 font-mono text-xs">{formatT(s.screen_moment.t)}</span>
                     {s.n}. {s.title}
@@ -170,7 +170,7 @@ export default function WorkMapView({ sessionId, workmap, onSelectStep, compact 
       <section className="flex flex-col gap-1">
         <h3 className="text-sm font-semibold">Open questions</h3>
         {workmap.open_questions.length === 0 ? (
-          <p className="text-sm text-slate-400">none</p>
+          <p className="text-sm text-muted">none</p>
         ) : (
           <ul className="list-disc pl-5 text-sm">
             {workmap.open_questions.map((q, i) => (

@@ -35,11 +35,11 @@ export type SidePanelProps = {
 };
 
 const DOT: Record<PresenceStatus, string> = {
-  idle: "bg-slate-300",
-  listening: "bg-green-500",
-  thinking: "bg-amber-400 animate-pulse",
-  speaking: "bg-blue-500 animate-pulse",
-  paused: "bg-red-500",
+  idle: "bg-[var(--s3)]",
+  listening: "bg-[var(--gr)]",
+  thinking: "bg-[var(--am)] animate-pulse",
+  speaking: "bg-[var(--ac)] animate-pulse",
+  paused: "bg-[var(--rd)]",
 };
 
 function mmss(t: number): string {
@@ -59,35 +59,38 @@ export default function SidePanel(p: SidePanelProps) {
   }
 
   return (
-    <aside className="flex w-80 shrink-0 flex-col gap-3 border-l border-slate-300 bg-white p-3 text-sm">
+    <aside
+      className={p.hideControls ? "flex flex-col gap-3 text-sm" : "flex w-80 shrink-0 flex-col gap-3 border-l border-line bg-panel p-3 text-sm"}
+      data-testid="side-panel"
+    >
       <div className="flex items-center gap-2">
         <span data-testid="presence" className={`h-3 w-3 rounded-full ${DOT[p.status]}`} />
         <span className="font-medium capitalize">{p.status}</span>
-        {p.running && <span className="ml-auto text-xs text-slate-500">{p.textMode ? "text mode" : "voice"}</span>}
+        {p.running && <span className="ml-auto text-xs text-muted">{p.textMode ? "text mode" : "voice"}</span>}
       </div>
 
       {p.offRecord && (
-        <div role="status" className="rounded bg-red-600 px-2 py-2 text-center text-xs font-bold text-white">
-          OFF THE RECORD - nothing is captured
+        <div role="status" className="ui-bdg ui-k-rd self-start">
+          Off the record · nothing is captured
         </div>
       )}
 
       {p.limitNotice && (
-        <div role="alert" data-testid="daily-limit" className="rounded border border-red-300 bg-red-50 p-2 text-xs text-red-900">
+        <div role="alert" data-testid="daily-limit" className="rounded-xl bg-[var(--rds)] p-3 text-xs text-[var(--rd)]">
           {p.limitNotice}
         </div>
       )}
 
-      {p.notice && <div className="rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">{p.notice}</div>}
+      {p.notice && <div className="rounded-xl bg-[var(--ams)] p-3 text-xs text-[var(--am)]">{p.notice}</div>}
 
       {!p.hideControls && (
         <>
       {!p.running ? (
         <div className="flex flex-col gap-2">
-          <label className="flex flex-col gap-1 text-xs text-slate-600">
+          <label className="flex flex-col gap-1 text-xs text-muted">
             Expert
             <input
-              className="rounded border border-slate-300 px-2 py-1 text-sm text-slate-900"
+              className="ui-inp"
               value={p.expert}
               onChange={(e) => p.onExpertChange(e.target.value)}
             />
@@ -96,7 +99,7 @@ export default function SidePanel(p: SidePanelProps) {
             type="button"
             disabled={p.starting}
             onClick={p.onStart}
-            className="rounded bg-slate-900 px-3 py-2 font-medium text-white disabled:opacity-50"
+            className="ui-btn ui-bp"
           >
             {p.starting ? "Starting..." : "Start session"}
           </button>
@@ -114,25 +117,25 @@ export default function SidePanel(p: SidePanelProps) {
             <button
               type="button"
               onClick={p.onToggleShare}
-              className={`flex-1 rounded border px-2 py-1 text-xs ${p.sharing ? "border-blue-500 bg-blue-50" : "border-slate-300"}`}
+              className={`flex-1 rounded border px-2 py-1 text-xs ${p.sharing ? "border-[var(--ac)] bg-[var(--acs)]" : "border-line"}`}
             >
               {p.sharing ? "Stop sharing" : "Share screen"}
             </button>
-            <button type="button" onClick={p.onEnd} className="flex-1 rounded border border-slate-300 px-2 py-1 text-xs">
+            <button type="button" onClick={p.onEnd} className="ui-btn ui-bs ui-bsm flex-1">
               End task
             </button>
           </div>
         </>
       )}
 
-      <div className="text-xs text-slate-600">
+      <div className="text-xs text-muted">
         {p.asked} asked, {p.guardrailAsked} about guardrails
         {p.savedForDebrief ? `, ${p.savedForDebrief} saved for debrief` : ""}
       </div>
 
       <div>
-        <div className="text-[11px] uppercase tracking-wide text-slate-500">Last question</div>
-        <div className="min-h-10 rounded bg-slate-50 p-2">{p.lastQuestion ?? "None yet"}</div>
+        <div className="ui-eb">Last question</div>
+        <div className="min-h-10 rounded-xl bg-[var(--s2)] p-2">{p.lastQuestion ?? "None yet"}</div>
       </div>
 
         </>
@@ -140,18 +143,18 @@ export default function SidePanel(p: SidePanelProps) {
 
       {p.running && p.textMode && (
         <form onSubmit={submit} className="flex flex-col gap-1">
-          <label className="text-[11px] uppercase tracking-wide text-slate-500" htmlFor="capture-answer">
+          <label className="ui-eb" htmlFor="capture-answer">
             {p.openQuestion ? "Your answer" : "Say something"}
           </label>
           <div className="flex gap-1">
             <input
               id="capture-answer"
-              className="min-w-0 flex-1 rounded border border-slate-300 px-2 py-1"
+              className="ui-inp min-w-0 flex-1"
               value={answer}
               onChange={(e) => setAnswer(e.target.value)}
               placeholder="Type, or 'off the record'"
             />
-            <button type="submit" className="rounded bg-slate-900 px-2 py-1 text-xs text-white">
+            <button type="submit" className="ui-btn ui-bp">
               Send
             </button>
           </div>
@@ -160,11 +163,11 @@ export default function SidePanel(p: SidePanelProps) {
 
       {!p.hideControls && (
       <div className="min-h-0 flex-1">
-        <div className="text-[11px] uppercase tracking-wide text-slate-500">Events</div>
+        <div className="ui-eb">Events</div>
         <ol className="flex flex-col gap-1 font-mono text-xs">
-          {p.feed.length === 0 && <li className="text-slate-400">No events yet</li>}
+          {p.feed.length === 0 && <li className="text-muted">No events yet</li>}
           {p.feed.map((e) => (
-            <li key={e.id} className="border-b border-slate-100 pb-1">
+            <li key={e.id} className="border-b border-line pb-1">
               {mmss(e.t)} {describeEvent(e)}
             </li>
           ))}

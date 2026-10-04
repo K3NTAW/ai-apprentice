@@ -41,9 +41,9 @@ export default function MapListPage() {
     <main className="flex flex-col gap-4 p-4 sm:p-8">
       <h1 className="text-lg font-semibold">Work Maps</h1>
       {error && <p className="text-sm text-red-600">{error}</p>}
-      {!rows && !error && <p className="text-sm text-slate-400">Loading…</p>}
+      {!rows && !error && <p className="text-sm text-muted">Loading…</p>}
       {rows && rows.length === 0 && (
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-muted">
           No Work Maps yet.{" "}
           <Link className="underline" href="/capture">
             Capture a session
@@ -52,14 +52,14 @@ export default function MapListPage() {
         </p>
       )}
       {rows && rows.length > 0 && (
-        <ul className="flex flex-col divide-y divide-slate-100 text-sm">
+        <ul className="flex flex-col divide-y divide-line text-sm">
           {rows.map((r) => (
             <li key={r.id}>
-              <Link href={r.href} className="flex flex-col gap-1 py-2 hover:bg-slate-50 sm:flex-row sm:items-center sm:gap-4">
+              <Link href={r.href} className="flex flex-col gap-1 py-2 hover:bg-panel-2 sm:flex-row sm:items-center sm:gap-4">
                 <span className="font-medium">{r.expert}</span>
-                <span className="font-mono text-slate-500">{r.date}</span>
+                <span className="font-mono text-muted">{r.date}</span>
                 {r.confirmed && <span className="self-start rounded bg-green-100 px-1.5 py-0.5 text-xs text-green-800">confirmed</span>}
-                <span className="text-slate-600 sm:ml-auto">{r.counts}</span>
+                <span className="text-muted sm:ml-auto">{r.counts}</span>
               </Link>
             </li>
           ))}

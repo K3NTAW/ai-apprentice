@@ -29,7 +29,7 @@ const STATUS_STYLE: Record<WorkflowStatus, string> = {
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="flex flex-col gap-3 rounded border border-slate-200 p-4">
+    <section className="flex flex-col gap-3 rounded border border-line p-4">
       <h2 className="font-semibold">{title}</h2>
       {children}
     </section>
@@ -44,7 +44,7 @@ export function MasteryLine({ row }: { row: MasteryRow }) {
         {" · "}Practice next: {row.practiceNext.length ? row.practiceNext.join(", ") : "nothing"}
         {" · "}Interventions: {row.interventions}
       </span>
-      <span className="font-mono text-xs text-slate-500">
+      <span className="font-mono text-xs text-muted">
         {row.date}
         {!row.finished && " (in progress)"}
       </span>
@@ -60,7 +60,7 @@ export default function Dashboard({ summary, role }: { summary: DashboardSummary
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title="Captured workflows">
           {experts.length === 0 ? (
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-muted">
               No captures yet. Open{" "}
               <Link className="underline" href="/capture">
                 Capture
@@ -73,14 +73,14 @@ export default function Dashboard({ summary, role }: { summary: DashboardSummary
               {experts.map((e) => (
                 <li key={e.expert} className="flex flex-col gap-1">
                   <span className="font-medium">{e.expert}</span>
-                  <ul className="flex flex-col divide-y divide-slate-100">
+                  <ul className="flex flex-col divide-y divide-line">
                     {e.workflows.map((w) => (
                       <li key={w.sessionId}>
-                        <Link href={w.href} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5 hover:bg-slate-50">
+                        <Link href={w.href} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5 hover:bg-panel-2">
                           <span>{w.task}</span>
                           <span className={`rounded px-1.5 py-0.5 text-xs ${STATUS_STYLE[w.status]}`}>{w.status}</span>
-                          {w.counts && <span className="text-slate-600">{w.counts}</span>}
-                          <span className="ml-auto font-mono text-xs text-slate-500">{w.updated}</span>
+                          {w.counts && <span className="text-muted">{w.counts}</span>}
+                          <span className="ml-auto font-mono text-xs text-muted">{w.updated}</span>
                         </Link>
                       </li>
                     ))}
@@ -92,7 +92,7 @@ export default function Dashboard({ summary, role }: { summary: DashboardSummary
         </Card>
         <Card title="Learners">
           {learners.length === 0 ? (
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-muted">
               No learners yet.{" "}
               <Link className="underline" href="/workspace">
                 Invite a colleague
@@ -105,7 +105,7 @@ export default function Dashboard({ summary, role }: { summary: DashboardSummary
                 <li key={l.userId} className="flex flex-col gap-1">
                   <span className="font-medium">{l.label}</span>
                   {l.mastery.length === 0 ? (
-                    <span className="text-slate-500">No tutoring on a confirmed Work Map yet.</span>
+                    <span className="text-muted">No tutoring on a confirmed Work Map yet.</span>
                   ) : (
                     <ul className="flex flex-col gap-1.5">
                       {l.mastery.map((m) => (
@@ -129,7 +129,7 @@ export default function Dashboard({ summary, role }: { summary: DashboardSummary
               const link = (
                 <Link
                   key={a.href}
-                  className={a.primary ? "rounded bg-slate-900 px-3 py-1.5 text-white" : "rounded border border-slate-300 px-3 py-1.5 hover:bg-slate-50"}
+                  className={a.primary ? "rounded bg-slate-900 px-3 py-1.5 text-white" : "rounded border border-line px-3 py-1.5 hover:bg-panel-2"}
                   href={a.href}
                 >
                   {a.label}

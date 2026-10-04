@@ -18,7 +18,7 @@ export function StepFrame({ sessionId, frameRef, compact }: { sessionId: string;
   const size = compact ? "h-28" : "h-48";
   if (!frameRef || failed === frameRef) {
     return (
-      <div className={`flex ${size} w-full items-center justify-center rounded border border-dashed border-slate-300 bg-slate-50 text-xs text-slate-400`}>
+      <div className={`flex ${size} w-full items-center justify-center rounded border border-dashed border-line bg-panel-2 text-xs text-muted`}>
         no frame for this moment
       </div>
     );
@@ -28,7 +28,7 @@ export function StepFrame({ sessionId, frameRef, compact }: { sessionId: string;
     <img
       src={frameUrl(sessionId, frameRef)}
       alt={`screen at ${frameRef}`}
-      className={`${size} w-full rounded border border-slate-200 bg-slate-50 object-contain`}
+      className={`${size} w-full rounded border border-line bg-panel-2 object-contain`}
       onError={() => setFailed(frameRef)}
     />
   );
@@ -43,9 +43,9 @@ export function ExpertQuote({ expert, reason }: { expert: string; reason: WorkMa
     );
   }
   return (
-    <blockquote className="border-l-4 border-slate-300 pl-3">
+    <blockquote className="border-l-4 border-line pl-3">
       <p className="text-sm italic">&ldquo;{reason.quote}&rdquo;</p>
-      <footer className="mt-1 text-xs text-slate-500">
+      <footer className="mt-1 text-xs text-muted">
         — {expert}, {sourceLabel(reason.source)} at {formatT(reason.t)}
       </footer>
     </blockquote>
@@ -55,7 +55,7 @@ export function ExpertQuote({ expert, reason }: { expert: string; reason: WorkMa
 export default function StepMoment({ sessionId, expert, moment, reason, compact }: StepMomentProps) {
   return (
     <div className="flex flex-col gap-2">
-      <p className="text-xs text-slate-600">
+      <p className="text-xs text-muted">
         <span className="font-mono">{formatT(moment.t)}</span>, {moment.entity}
         {moment.field ? `, ${moment.field} field` : ""}
       </p>

@@ -29,6 +29,7 @@ import { selectTransport, type CompanionTransport, type TransportHost } from "@/
 import { createShareFlow, startVoiceThenShare } from "@/lib/companion/stepAside";
 import { bindCaptureTransport, captureCompanionSink } from "@/lib/capture/companionWiring";
 import { routeShortcut } from "@/lib/companion/shortcuts";
+import AgentAvatar from "@/components/agents/AgentAvatar";
 import AgentHeader from "@/components/agents/AgentHeader";
 import { agentBlocker, useAgent } from "@/components/agents/useAgent";
 import { createAgentCaptureSession } from "./agentSession";
@@ -122,6 +123,14 @@ function CaptureInner({ agentParam, transport }: { agentParam: string | null; tr
   const [companionStatus, setCompanionStatus] = useState<CompanionStatus>("not connected");
   const [companionPerms, setCompanionPerms] = useState<CompanionPermissions | null>(null);
   const [shareWarning, setShareWarning] = useState<string | null>(null);
+  const [elapsed, setElapsed] = useState(0);
+
+  // The capturing pill's mm:ss, ticking once a second while the session runs.
+  useEffect(() => {
+    if (!running) return;
+    const id = setInterval(() => setElapsed(loopRef.current?.getT() ?? 0), 1000);
+    return () => clearInterval(id);
+  }, [running]);
 
   const clientTools = useMemo<NonNullable<UseVoiceAgentOptions["clientTools"]>>(
     () => ({
@@ -360,61 +369,63 @@ function CaptureInner({ agentParam, transport }: { agentParam: string | null; tr
           ? "thinking"
           : "listening";
 
+  const loaded = agentLoad.status === "ok" ? agentLoad.agent : null;
   return (
     <>
-    <AgentHeader load={agentLoad} state={running ? "listening" : "idle"} verb="training" />
-    <main className="flex h-screen bg-slate-100">
-      <div className="min-w-0 flex-1 overflow-auto p-4">
-        <CaptureConsole
-          running={running}
-          starting={starting}
-          offRecord={view.offRecord}
-          sharing={sharing}
-          shareWarning={shareWarning}
-          expert={expert}
-          lastQuestion={view.lastQuestion}
-          asked={view.asked}
-          guardrailAsked={view.guardrailAsked}
-          savedForDebrief={view.debrief}
-          feed={view.feed}
-          host={host}
-          companion={{
-            status: companionStatus,
-            permissions: companionPerms,
-            onPair: (code) => companionRef.current?.pair(code) ?? false,
-          }}
-          onExpertChange={setExpert}
-          onStart={() => void start()}
-          onEnd={endTask}
-          onTogglePause={togglePause}
-          onToggleShare={() => void toggleShare()}
-        />
-      </div>
-      <SidePanel
-        status={status}
+      {/* Only the unknown-agent or loading notice: the console header names the agent (Capture.dc.html). */}
+      {!loaded && <AgentHeader load={agentLoad} verb="training" />}
+      <CaptureConsole
         running={running}
         starting={starting}
         offRecord={view.offRecord}
-        textMode={textMode}
         sharing={sharing}
-        notice={notice}
-        limitNotice={dailyLimitNotice(view.dailyLimit)}
+        shareWarning={shareWarning}
         expert={expert}
+        agentName={loaded?.name ?? null}
+        avatar={loaded ? <AgentAvatar avatar={loaded.avatar} state={running ? "listening" : "idle"} size={96} /> : undefined}
+        elapsed={running ? elapsed : undefined}
         lastQuestion={view.lastQuestion}
-        openQuestion={view.openQuestion}
         asked={view.asked}
         guardrailAsked={view.guardrailAsked}
         savedForDebrief={view.debrief}
         feed={view.feed}
+        host={host}
+        companion={{
+          status: companionStatus,
+          permissions: companionPerms,
+          onPair: (code) => companionRef.current?.pair(code) ?? false,
+        }}
         onExpertChange={setExpert}
         onStart={() => void start()}
         onEnd={endTask}
         onTogglePause={togglePause}
         onToggleShare={() => void toggleShare()}
-        onAnswer={(text) => loopRef.current?.ctrl.onTranscript("expert", text)}
-        hideControls
-      />
-    </main>
+      >
+        <SidePanel
+          status={status}
+          running={running}
+          starting={starting}
+          offRecord={view.offRecord}
+          textMode={textMode}
+          sharing={sharing}
+          notice={notice}
+          limitNotice={dailyLimitNotice(view.dailyLimit)}
+          expert={expert}
+          lastQuestion={view.lastQuestion}
+          openQuestion={view.openQuestion}
+          asked={view.asked}
+          guardrailAsked={view.guardrailAsked}
+          savedForDebrief={view.debrief}
+          feed={view.feed}
+          onExpertChange={setExpert}
+          onStart={() => void start()}
+          onEnd={endTask}
+          onTogglePause={togglePause}
+          onToggleShare={() => void toggleShare()}
+          onAnswer={(text) => loopRef.current?.ctrl.onTranscript("expert", text)}
+          hideControls
+        />
+      </CaptureConsole>
     </>
   );
 }
