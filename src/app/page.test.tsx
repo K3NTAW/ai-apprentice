@@ -13,17 +13,22 @@ beforeEach(() => {
 });
 
 describe("landing page", () => {
-  it("renders the promise and the three steps", () => {
+  it("renders the Main.dc.html promise, the three steps, the Apprentice Test and trust", () => {
     const html = render();
-    expect(html).toContain("captured while they work and taught to the next hire");
-    for (const step of ["Capture", "Map", "Teach"]) expect(html).toContain(`. ${step}</h2>`);
-    expect(html).toContain("Apprentice Test");
-    expect(html).toContain("private workspaces");
+    expect(html).toContain("Keep the judgment when the expert retires.");
+    expect(html).toContain("For teams whose experts are about to retire");
+    expect(html).toContain("Train, Map, Teach.");
+    for (const step of ["Train", "Map", "Teach"]) expect(html).toContain(`>${step}</h3>`);
+    expect(html).toContain("Five questions any good apprentice has to answer.");
+    for (const q of ["When to ask", "What to ask", "When it has understood", "Whether the new hire learned", "Trust"]) expect(html).toContain(`>${q}</h3>`);
+    expect(html).toContain("Off the record, whenever you say it.");
+    expect(html).toContain("Built in Zug, Switzerland");
+    expect(html).toContain('data-screen="landing"');
   });
 
-  it("says it works on the apps you already use and never mentions the ERP sandbox", async () => {
+  it("says it runs next to the apps you already use and never mentions the ERP sandbox", async () => {
     const html = render();
-    expect(html).toContain("works on the apps you already use");
+    expect(html).toContain("Runs next to Outlook, Excel, PowerPoint and any browser tab. Nothing to integrate.");
     expect(html).not.toMatch(/ERP|sandbox/i);
     const { default: ShellHeader } = await import("@/components/shell/ShellHeader");
     const nav = renderToStaticMarkup(<ShellHeader user={null} />);

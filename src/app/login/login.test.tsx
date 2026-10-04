@@ -61,8 +61,24 @@ describe("login page", () => {
   it("in the desktop app offers 'Email me a code'; the browser keeps the magic link", () => {
     expect(renderToStaticMarkup(<LoginForm next={null} inApp />)).toContain("Email me a code");
     const browser = renderToStaticMarkup(<LoginForm next={null} inApp={false} />);
-    expect(browser).toContain("Send sign-in link");
+    expect(browser).toContain("Email me a sign-in link");
     expect(browser).not.toContain("Email me a code");
+  });
+
+  it("Login.dc.html and LoginSent.dc.html key elements: code entry in the app, the link in the browser", () => {
+    const idle = renderToStaticMarkup(<LoginForm next={null} inApp={false} />);
+    for (const t of ["Sign in", "We email you a one-time link. No password to remember.", "Work email", "New here? Your workspace owner sends the first invite."]) {
+      expect(idle).toContain(t);
+    }
+    const app = renderToStaticMarkup(<LoginForm next={null} inApp initialSent="sabine.keller@example.com" />);
+    expect(app).toContain("Check your email");
+    expect(app).toContain('autoComplete="one-time-code"');
+    expect(app).toContain("Enter it here.");
+    expect(app).not.toContain("Subject to look for");
+    const web = renderToStaticMarkup(<LoginForm next={null} inApp={false} initialSent="sabine.keller@example.com" />);
+    for (const t of ["Check your email", "We sent a sign-in link to ", "sabine.keller@example.com", "It works once and expires in 15 minutes.", "Subject to look for", "Your AI Apprentice sign-in link", "Use a different email"]) {
+      expect(web).toContain(t);
+    }
   });
 
   it("code flow: signInWithOtp, then verifyOtp(type 'email'), the workspace bootstrap and /agents", async () => {
