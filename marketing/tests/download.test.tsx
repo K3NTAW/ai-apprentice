@@ -20,8 +20,10 @@ describe("download page logic", () => {
 
   it("Apple silicon is the primary button, Intel secondary, Windows 'Coming soon' without a link", () => {
     const html = renderToStaticMarkup(<DownloadList items={downloads()} version="0.1.0" />);
-    expect(html).toMatch(new RegExp(`class="ui-btn ui-bp ui-bl" href="${esc(ARM)}">Download for macOS \\(Apple silicon\\)<`));
-    expect(html).toMatch(new RegExp(`class="ui-btn ui-bs ui-bl" href="${esc(X64)}">Download for macOS \\(Intel\\)<`));
+    expect(html).toMatch(new RegExp(`class="ui-btn ui-bp ui-bdl" href="${esc(ARM)}" aria-label="Download AI Apprentice for macOS, Apple Silicon"><svg[^>]*aria-hidden="true">.*?</svg>Download</a>`));
+    expect(html).toMatch(new RegExp(`class="ui-btn ui-bs ui-bdl" href="${esc(X64)}" aria-label="Download AI Apprentice for macOS, Intel"><svg[^>]*aria-hidden="true">.*?</svg>Download</a>`));
+    expect(html).not.toContain("Download for macOS");
+    expect(html).not.toContain("ui-bl");
     expect(html).toContain("Version 0.1.0 · 145 MB");
     expect(html).toContain("Version 0.1.0 · 153 MB");
     expect(html.match(/<a /g)).toHaveLength(2);
@@ -29,6 +31,15 @@ describe("download page logic", () => {
     expect(win).toContain("Coming soon");
     expect(win).not.toContain("<a ");
     expect(html).not.toContain("Download for Windows");
+  });
+
+  it("the download button class is compact and cannot overflow its card", async () => {
+    const { readFileSync } = await import("node:fs");
+    const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+    const rule = css.match(/\.ui-bdl \{([^}]*)\}/)?.[1] ?? "";
+    for (const d of ["width: fit-content", "max-width: 100%", "min-height: 40px", "padding: 10px 18px", "font-size: 15px", "white-space: normal"]) {
+      expect(rule, d).toContain(d);
+    }
   });
 
   it("the page renders all three builds, the release link, the which-build hint, the notarized note and the simplified install steps", async () => {
