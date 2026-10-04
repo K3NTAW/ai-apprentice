@@ -3,6 +3,7 @@
 // 'Open the app' in local mode.
 import Link from "next/link";
 import { Badge, buttonClass } from "@/components/ui";
+import AgentAvatar from "@/components/agents/AgentAvatar";
 import BrandMark from "./BrandMark";
 
 export const STEPS = [
@@ -36,6 +37,7 @@ const ROWS = [
   ["4502", "Novak Logistika s.r.o.", "3,960.00", "4711 opex"],
   ["4517", "Krämer Antriebstechnik", "7,200.00", "4711 → 0400"],
   ["4523", "Alpen Clean Services", "2,150.00", "·"],
+  ["4523", "Alpen Clean Services", "2,150.00", "·"],
 ] as const;
 
 export function ctaFor(mode: string): { label: string; href: string } {
@@ -47,6 +49,21 @@ const faint = { color: "var(--fa)" } as const;
 const wrap = "mx-auto max-w-[1240px] px-4 sm:px-8";
 const row = "grid grid-cols-[56px_minmax(0,1fr)_92px_128px] gap-3 px-[18px]";
 
+const PIP = { shape: "blob", face: "curious", color: "#ECEAE5", accent: "#3A4EFD" };
+
+function CostCenter({ value }: { value: string }) {
+  if (value.includes("→")) {
+    const [from, to] = value.split(" → ");
+    return (
+      <span className="flex items-center gap-1.5">
+        <span className="ui-mono line-through" style={faint}>{from}</span>
+        <span className="ui-mono rounded-[6px] border px-[7px] py-0.5" style={{ borderColor: "var(--ac)", color: "var(--ac2)" }}>{to}</span>
+      </span>
+    );
+  }
+  return <span className="ui-mono" style={value === "·" ? faint : muted}>{value}</span>;
+}
+
 export default function Landing({ mode }: { mode: string }) {
   const cta = ctaFor(mode);
   return (
@@ -57,9 +74,9 @@ export default function Landing({ mode }: { mode: string }) {
           AI Apprentice
         </a>
         <nav className="flex flex-wrap items-center gap-1" aria-label="Main">
-          <a className={buttonClass("ghost")} href="#how">How it works</a>
-          <a className={buttonClass("ghost")} href="#test">The Apprentice Test</a>
-          <a className={buttonClass("ghost")} href="#trust">Trust</a>
+          <a className={buttonClass("ghost")} style={{ color: "var(--tx)" }} href="#how">How it works</a>
+          <a className={buttonClass("ghost")} style={{ color: "var(--tx)" }} href="#test">The Apprentice Test</a>
+          <a className={buttonClass("ghost")} style={{ color: "var(--tx)" }} href="#trust">Trust</a>
           <Link className={buttonClass("secondary")} href={cta.href}>{cta.label}</Link>
         </nav>
       </header>
@@ -75,7 +92,7 @@ export default function Landing({ mode }: { mode: string }) {
             <Link className={buttonClass("primary", "lg")} href={cta.href}>{cta.label}</Link>
             <a className={buttonClass("secondary", "lg")} href="#how">See how it works</a>
           </div>
-          <p className="text-sm" style={faint}>Runs next to Outlook, Excel, PowerPoint and any browser tab. Nothing to integrate.</p>
+          <p className="text-[13px]" style={faint}>Runs next to Outlook, Excel, PowerPoint and any browser tab. Nothing to integrate.</p>
         </div>
 
         <div className="flex min-w-0 flex-col">
@@ -93,17 +110,20 @@ export default function Landing({ mode }: { mode: string }) {
               </div>
               {ROWS.map(([n, s, a, c]) => (
                 <div key={n} className={`${row} border-t border-[var(--ln)] py-2.5 text-sm`} style={n === "4517" ? { background: "var(--acs)" } : undefined}>
-                  <span className="ui-mono">{n}</span><span>{s}</span><span className="ui-mono text-right">{a}</span><span className="ui-mono" style={muted}>{c}</span>
+                  <span className="ui-mono">{n}</span><span>{s}</span><span className="ui-mono text-right">{a}</span><CostCenter value={c} />
                 </div>
               ))}
             </div>
           </div>
-          <div className="relative -mt-9 flex flex-col items-end gap-2 pl-5">
-            <div className="ui-bub" style={{ boxShadow: "var(--sh)" }}>
-              <div className="mb-0.5 text-xs" style={muted}>Pip · asked at a pause</div>
-              <div className="text-[15px]">You moved that one to capex. What made you do that?</div>
+          <div className="relative -mt-9 flex items-end gap-3.5 pl-5">
+            <AgentAvatar avatar={PIP} state="asking" size={104} className="flex-none" />
+            <div className="flex min-w-0 flex-col gap-2 pb-1.5">
+              <div className="ui-bub" style={{ boxShadow: "var(--sh)" }}>
+                <div className="mb-0.5 text-xs" style={muted}>Pip · asked at a pause</div>
+                <div className="text-[15px]">You moved that one to capex. What made you do that?</div>
+              </div>
+              <div className="ui-bub ui-bub-expert self-end text-xl leading-[1.2]">Equipment over €5,000 is always capex.</div>
             </div>
-            <div className="ui-bub ui-bub-expert ui-qs text-xl leading-[1.2]">Equipment over €5,000 is always capex.</div>
           </div>
           <div className="mt-3 flex justify-end">
             <Badge kind="limit">Guardrail learned · Limit · over €5,000 → capex 0400</Badge>

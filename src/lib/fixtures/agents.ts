@@ -70,3 +70,15 @@ export const previewSessions: Session[] = [
   teach("t-4", "juno", "juno-1", "learner-1"),
   teach("t-5", "bolt", "bolt-1", "learner-2"),
 ];
+
+/** Workspace members for the agent preview (Learners tab). */
+export const previewMembers = [
+  { userId: "learner-1", label: "Lena Graf", role: "learner" },
+  { userId: "learner-2", label: "Tim Huber", role: "learner" },
+  { userId: "learner-3", label: "Mia Steiner", role: "learner" },
+];
+
+/** created_by per teach session id, as loadAgentsInput returns it. */
+export const previewCreatedBy: Record<string, string> = Object.fromEntries(
+  previewSessions.flatMap((s) => ("created_by" in s ? [[s.id, String(s.created_by)]] : [])),
+);

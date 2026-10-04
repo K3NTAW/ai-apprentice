@@ -154,7 +154,7 @@ body {
 
 /* Shared components (src/components/ui/), values from Components.dc.html. */
 @layer components {
-  .ui-td { font-size: 64px; line-height: 1.02; letter-spacing: -.035em; font-weight: 600; background: linear-gradient(180deg, var(--tx) 30%, color-mix(in oklab, var(--tx) 70%, transparent)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .ui-td { font-size: 64px; line-height: 1.02; letter-spacing: -.035em; font-weight: 600; text-wrap: balance; background: linear-gradient(180deg, var(--tx) 30%, color-mix(in oklab, var(--tx) 70%, transparent)); -webkit-background-clip: text; background-clip: text; color: transparent; }
   .ui-t1 { font-size: 36px; line-height: 1.1; letter-spacing: -.025em; font-weight: 600; }
   .ui-t2 { font-size: 24px; line-height: 1.2; letter-spacing: -.02em; font-weight: 600; }
   .ui-t3 { font-size: 17px; line-height: 1.35; letter-spacing: -.01em; font-weight: 600; }
