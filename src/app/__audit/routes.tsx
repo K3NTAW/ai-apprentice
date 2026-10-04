@@ -28,7 +28,6 @@ import TeachPage from "../teach/page";
 import TeachPreviewPage from "../teach/preview/page";
 import WorkspacePage from "../workspace/page";
 import WorkspacePreviewPage from "../workspace/preview/page";
-import DashboardPage from "../dashboard/page";
 
 const sp = <T extends object>(o: T = {} as T) => ({ searchParams: Promise.resolve(o) });
 const params = (id: string) => Promise.resolve({ id });
@@ -94,5 +93,4 @@ export const ROUTES: Array<{ route: string; render: () => Promise<ReactElement> 
   { route: "/teach/preview", render: () => shell(<TeachPreviewPage />) },
   { route: "/workspace", render: async () => <WorkspacePage /> },
   { route: "/workspace/preview", render: async () => <WorkspacePreviewPage /> },
-  { route: "/dashboard", render: async () => <DashboardPage /> },
 ];

@@ -16,7 +16,7 @@ Date: 2026-10-04. Question: does every button, link and page do something?
   from the doc or the doc lists an element that does not render (A4).
 - Shell controls (sidebar, user menu, workspace switcher, recent sessions) render on every app page; they are
   listed once under `/shell` (local user) and `/shell (signed in)` (owner of two workspaces, three recent sessions).
-- Routes that redirect in local mode (`/login`) or 404 on the empty local store (`/agents/[id]`, real ids) are
+- `/dashboard` only redirects to /agents (not rendered). Routes that redirect in local mode (`/login`) or 404 on the empty local store (`/agents/[id]`, real ids) are
   covered by their preview routes, which render the same components with fixture data.
 
 Status: works, app-only (disabled in the browser with reason and download link), disabled (with a reason),
