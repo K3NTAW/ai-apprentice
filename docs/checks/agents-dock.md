@@ -40,9 +40,18 @@ Send from the paired page console. An agent payload needs real avatar data URLs 
 12. **Password field**: in Safari or System Settings, focus a password field and press `Cmd+A`,
     `Cmd+V`: nothing is sent on macOS (secure input). Windows: record what is sent; only chord names,
     never characters (residual risk documented in `companion/README.md`).
-13. **Gates**: tray `Pause sensing`, `off_record: true` in `session.state`, `buddy.state` paused: no
+13. **Gates**: Pause in the dock or panel, `off_record: true` in `session.state`, `buddy.state` paused: no
     chords. The companion's own shortcuts (`Option+Space`, `Option+Shift+O/E/P/A`) never appear as chords.
 14. **Rollback**: `COMPANION_DOCK=0 npm run dev`: no dock, the orb buddy shows in capture and teach.
     `COMPANION_CHORDS=0`: no chord messages.
 15. **Screen capture**: start Capture (whole screen): the dock is not in the frames (content protection);
     note the OS build if it is.
+
+## Dock surface and avatar (T-0192)
+
+- [ ] Dock and floating panel read as a solid light surface over a bright app (white editor, browser): hairline border and shadow visible.
+- [ ] Capture with an agent: the avatar shows in the dock header and in the collapsed tab; listening and asking animate (not with Reduce motion).
+- [ ] Teach with an agent: the cursor buddy is the agent's avatar.
+- [ ] Header: state line `listening · quiet while you type` / `thinking` / `asking`, the timer pill counts up, the collapse button works.
+- [ ] A question shows `answer out loud, or hold ⌃⌥` with keycaps.
+- [ ] Log: no `session.state agent avatar dropped` warning.

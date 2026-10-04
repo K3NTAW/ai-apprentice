@@ -14,7 +14,7 @@ The local WebSocket server and the pairing code flow are still there, opt-in onl
 
 1. Install (below) and open **AI Apprentice**. The main window opens at about 1280x820 (min
    960x640) and remembers its size and position (`window-state.json` in userData; a corrupt file or
-   a position on a display that is gone falls back to the default size). The tray icon stays.
+   a position on a display that is gone falls back to the default size). The app has no menu-bar item: it lives in the Dock (taskbar on Windows).
 2. Sign in inside the window. Sign-in uses the **email one-time code** (enter the 6-digit code from
    the email in the app): magic links and OAuth would open in the system browser, outside the app.
    The web login page owns that change (code entry next to the magic link); this app needs nothing
@@ -25,9 +25,20 @@ The local WebSocket server and the pairing code flow are still there, opt-in onl
    apps; `restore` brings it back when the task ends (only if the app stepped it aside), `focus`
    always brings it forward.
 
-Closing the window hides it (the app keeps running in the tray, the Dock icon goes away while no
-window is visible). `Open AI Apprentice` in the tray menu (or a second launch, or clicking the Dock
-icon) brings it back. Quit with Cmd+Q or `Quit` in the tray menu.
+### No menu-bar item: reopen and quit
+
+There is no menu-bar (tray) item. Sensing only runs during a session, and the side dock has Pause, Off
+the record and End task (`Option+Shift+O` / `Option+Shift+E`, Alt on Windows); status and permissions
+are shown in the app and the dock.
+
+- **Reopen**: click the Dock icon (taskbar on Windows) or launch the app again. The Dock icon is always
+  there; clicking it reopens the main window when none is visible.
+- **Floating panel**: `Option+Shift+A` (Windows `Alt+Shift+A`).
+- **Closing the window**: without a session macOS keeps the app in the Dock (standard behaviour) and
+  Windows quits. During a session the app keeps running with the side dock or the buddy even when the
+  window is stepped aside or closed; End task in the dock brings the window back.
+- **Quit**: Cmd+Q or `AI Apprentice > Quit` in the app menu (Windows: close the window outside a
+  session, or `File > Exit`).
 
 ## Where the app loads from (APP_URL)
 
@@ -105,11 +116,11 @@ npm 11 runs install scripts only for packages listed in `allowScripts` in `packa
 npm run dev        # tsc build to dist/, then `electron .`
 ```
 
-The app shows up as a ring icon with `AI` in the menu bar. The menu shows pairing status, the current
-6-digit pairing code, `New pairing code`, `Show pairing window`, missing permissions, `Pause sensing`
-and `Quit`.
+The app shows up in the Dock (no menu-bar item). In dev mode macOS lists it as `Electron` (Dock,
+System Settings permission lists and prompts), not `AI Apprentice`: grant the permissions to
+`Electron` there. The packaged app uses its own name.
 
-On launch the companion opens the floating panel (in the Dock while open). Its first-run view shows
+With `COMPANION_WS=1`, on launch the companion opens the floating panel (in the Dock while open). Its first-run view shows
 the pairing code in large digits and `New code`; after pairing it shows the session (see below).
 On launch and on every new code it prints one line to stdout:
 
@@ -117,17 +128,10 @@ On launch and on every new code it prints one line to stdout:
 [companion] pairing code: 123 456 (enter it in the web app)
 ```
 
-### Can't find the menu-bar item?
-
-On a MacBook with a notch and a full menu bar, macOS hides menu-bar items that do not fit, and the
-companion's item may be one of them. Use the panel (open on launch, `Option+Shift+A` toggles it, or
-click the companion in the Dock while it is open) or read the code from the terminal line above. Quitting other
-menu-bar apps or shortening their titles also brings the item back.
-
 Environment:
 
 - `COMPANION_PORT` (default `47321`, 1024..65535). An invalid value or a port in use is shown as an
-  error line in the tray menu; the app keeps running without the server.
+  error line in the panel; the app keeps running without the server.
 - `COMPANION_BUDDY=0` (or `off`, `false`): rollback switch. No cursor buddy, no bubbles, no glances;
   `stop` points and `overlay.halo` still draw the v1 halo. Same as unticking `Cursor buddy` in the panel.
 - `COMPANION_DOCK=0` (or `off`, `false`, `no`): rollback switch for the v3 dock. No side dock and the v2
@@ -176,7 +180,7 @@ the Planner runs it before merge.
   elsewhere; light and dark follow the OS. Shows pairing (first run), mode and title, last question and
   answer, questions and guardrail counters, `Pause`, `Off the record`, `End task` (same as the
   shortcuts), `Open control room` (only when `app_url` passes the check below), macOS permissions and
-  the shortcut settings. Toggle it from the tray (Windows: left click) or `Option+Shift+A` / `Alt+Shift+A`.
+  the shortcut settings. Toggle it with `Option+Shift+A` / `Alt+Shift+A`.
 - **`app_url`** (`appUrl.mts`): `new URL`, `https` (or `http` for `localhost`/`127.0.0.1`), no
   userinfo, `isOriginAllowed(url.origin)` against the single exact-origin allowlist; the
   normalised `href` is opened.
@@ -199,7 +203,7 @@ Shortcuts (configurable in the panel, saved to `settings.json` in the app's user
 - These five bindings are never sent as `chord` messages (the off the record toggle included).
 - Without the input hook (macOS Input Monitoring or Accessibility missing) talk falls back to
   press-to-toggle and the panel says so.
-- While paused (tray `Pause sensing`, or `buddy.state` paused) talk is blocked with a bubble; pause,
+- While paused (Pause in the dock or panel, or `buddy.state` paused) talk is blocked with a bubble; pause,
   off the record, end task and the panel shortcut keep working.
 - `talk_end` is always sent when a hold ends early: pause, unpair or disconnect, screen lock or sleep,
   input hook stop, and after a hard 60 s cap.
@@ -294,8 +298,7 @@ a CI job on `windows-latest` running the same two commands; `uiohook-napi` and `
 Windows x64 prebuilds and `npmRebuild` rebuilds them for Electron. Cross-building from macOS needs
 Wine and is not supported here.
 
-On Windows: no permission UI (there are no such prompts), the tray uses `static/icon.ico` and a left
-click toggles the panel, the panel uses Mica on Windows 11 22H2+ and a solid background elsewhere.
+On Windows: no permission UI (there are no such prompts), the app icon is `assets/icon.ico`, the panel uses Mica on Windows 11 22H2+ and a solid background elsewhere.
 `Alt+Space` replaces the window system menu shortcut while the companion runs.
 
 **Verified on which OS**: everything here was written and unit-tested on macOS (Apple silicon). The
@@ -317,7 +320,16 @@ or your terminal) under:
    used for window titles. Without it training and teaching cannot see the screen.
 4. **Microphone**: asked on first push-to-talk (`NSMicrophoneUsageDescription`).
 
-The tray menu lists what is missing and each item opens the right pane. Permissions are polled
+The app shows what is missing; each `Fix` button calls `window.apprentice.openPermissionSettings(kind)`
+(`microphone`, `screen`, `accessibility`, `input-monitoring`). Main validates the kind and opens only
+its fixed pane (`x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone`,
+`Privacy_ScreenCapture`, `Privacy_Accessibility`, `Privacy_ListenEvent`; on Windows only
+`ms-settings:privacy-microphone`, the rest answer `not_needed`). The page never navigates to a settings
+URL: the main window's navigation guard blocks `x-apple.systempreferences:` and `ms-settings:`. For the
+microphone macOS first shows its prompt (`askForMediaAccess`), for screen recording one
+`desktopCapturer.getSources` call triggers the prompt; then `status` is re-sent. The mac build sets
+`NSMicrophoneUsageDescription` and `NSScreenCaptureUsageDescription` (electron-builder `extendInfo`);
+no camera is used, so there is no `NSCameraUsageDescription`. Permissions are polled
 every 2 s; a change re-sends `status` and starts the hook once Accessibility is granted. Restart the
 app if macOS asks for it.
 
@@ -432,7 +444,7 @@ Invalid messages are ignored with a log line. Halos are cleared on disconnect, o
 ## Rollback
 
 Desktop-app behaviour: `COMPANION_WS=1` brings back the local WebSocket server, the pairing code
-in the tray and panel, and the old pairing flow from a browser tab (events then go to both the page
+in the panel, and the old pairing flow from a browser tab (events then go to both the page
 and the WebSocket client). Nothing in the window, single-instance or lock code deletes pairing or
 settings files.
 

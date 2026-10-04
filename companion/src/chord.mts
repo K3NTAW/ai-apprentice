@@ -15,7 +15,7 @@ export type ChordGates = {
   enabled: boolean;
   /** A page is paired (no paired client: nothing to send to). */
   paired: boolean;
-  /** Tray 'Pause sensing'. */
+  /** Pause sensing (dock or panel). */
   paused: boolean;
   /** session.state.off_record from the page. */
   offRecord: boolean;

@@ -14,6 +14,7 @@ import type { CompanionPermissions, CompanionStatus, ShortcutAction } from "@/li
 import { selectTransport, type CompanionTransport, type TransportHost } from "@/lib/companion/transport";
 import { createShareFlow, startVoiceThenShare } from "@/lib/companion/stepAside";
 import { buddyStateFor } from "@/lib/companion/buddyState";
+import { buildSessionAgent } from "@/lib/companion/agentState";
 import { routeShortcut } from "@/lib/companion/shortcuts";
 import { bindTeachTransport, stopPointSink, teachShortcutControls } from "@/lib/teach/companionBridge";
 import { COMPANION_STALE_MS, MIN_SILENCE_MS, effectiveActivity } from "@/lib/voice/askGate";
@@ -506,6 +507,8 @@ function TeachInner({ sessionId, localMode, agentParam = null, transport }: Teac
   const lastLine = (who: TeachLine["speaker"]) => [...transcript].reverse().find((l) => l.speaker === who)?.text ?? "";
   const lastQuestion = lastLine("tutor");
   const lastAnswer = lastLine("learner");
+  // The teach buddy is drawn with the agent's avatar: session.state carries the agent (eight data URLs).
+  const sessionAgent = useMemo(() => (agentLoad.status === "ok" ? buildSessionAgent(agentLoad.agent) : null), [agentLoad]);
   useEffect(() => {
     companionRef.current?.sessionState({
       mode: running ? "teach" : null,
@@ -517,8 +520,9 @@ function TeachInner({ sessionId, localMode, agentParam = null, transport }: Teac
       last_answer: lastAnswer,
       off_record: paused,
       app_url: typeof window !== "undefined" ? window.location.href : "",
+      ...(sessionAgent ? { agent: sessionAgent } : {}),
     });
-  }, [running, workmap, stats.interventions, transcript, lastQuestion, lastAnswer, paused]);
+  }, [running, workmap, stats.interventions, transcript, lastQuestion, lastAnswer, paused, sessionAgent]);
 
   return (
     <>

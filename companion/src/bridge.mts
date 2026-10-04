@@ -18,6 +18,8 @@ export const BRIDGE_CHANNELS = {
   hello: "apprentice-hello",
   send: "apprentice-send",
   window: "apprentice-window",
+  /** invoke(kind): openPermissionSettings, see permissionSettings.mts. */
+  permissionSettings: "apprentice-permission-settings",
   event: "apprentice-event",
 } as const;
 
@@ -89,6 +91,10 @@ export function routeBridgeMessage(raw: unknown, h: BridgeHandlers): boolean {
     return false;
   }
   if (parsed.warning) h.log(`bridge: dropped part of message: ${parsed.warning}`);
+  // The agent block (avatar) is dropped, not the message: say so loudly, the dock would show no avatar.
+  if (parsed.warning?.startsWith("session_agent") || parsed.warning?.startsWith("session_avatar")) {
+    console.warn(`[companion] warning: session.state agent avatar dropped (${parsed.warning})`);
+  }
   if (msg.type === "session.state") h.onSession(msg);
   else if (msg.type === "dock.show" || msg.type === "dock.hide" || msg.type === "dock.learned") h.onDock(msg);
   else {

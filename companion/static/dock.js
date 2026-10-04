@@ -7,6 +7,22 @@ const num = (v) => (typeof v === "number" && Number.isFinite(v) ? String(v) : "0
 const show = (el, on) => el.classList.toggle("hidden", !on);
 const KINDS = ["step", "shortcut", "guardrail"];
 
+// Timer pill: mm:ss since the session started (set by main), ticking locally.
+let startedAt = null;
+const pad = (n) => String(n).padStart(2, "0");
+function tick() {
+  const el = $("timer");
+  if (startedAt === null) {
+    el.textContent = "";
+    show(el, false);
+    return;
+  }
+  const s = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+  el.textContent = s >= 3600 ? `${Math.floor(s / 3600)}:${pad(Math.floor(s / 60) % 60)}:${pad(s % 60)}` : `${pad(Math.floor(s / 60))}:${pad(s % 60)}`;
+  show(el, true);
+}
+setInterval(tick, 1000);
+
 $("collapse").addEventListener("click", () => api.collapse(true));
 $("tab").addEventListener("click", () => api.collapse(false));
 for (const btn of document.querySelectorAll("[data-action]")) {
@@ -24,6 +40,12 @@ api.onState((v) => {
   $("chev").setAttribute("d", v.side === "left" ? "M15 6l-6 6 6 6" : "m9 6 6 6-6 6");
   window.companionAvatar.setAvatarSrc($("avatar"), v.avatar);
   window.companionAvatar.setAvatarSrc($("tab-avatar"), v.avatar);
+  // listening and asking animate (dock.css; none with reduced motion).
+  const frame = str(v.avatarState);
+  $("avatar").dataset.state = frame;
+  $("tab-avatar").dataset.state = frame;
+  startedAt = typeof v.startedAt === "number" && Number.isFinite(v.startedAt) ? v.startedAt : null;
+  tick();
   $("header").textContent = str(v.header);
   $("name").textContent = str(v.name);
   $("role").textContent = str(v.role);

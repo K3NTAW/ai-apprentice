@@ -9,6 +9,7 @@ type Info = { version: string; platform: string; status: Message | null };
 
 const EVENT_TYPES = ["status", "activity", "app", "chord", "shortcut"];
 const WINDOW_ACTIONS = ["step-aside", "restore", "focus"];
+const PERMISSION_KINDS = ["microphone", "screen", "accessibility", "input-monitoring"];
 
 // First-run setup screen (local file only): save the pasted URL. Main re-checks the sender and https.
 if ((globalThis as { location?: { protocol?: string } }).location?.protocol === "file:") {
@@ -69,6 +70,11 @@ if (info && typeof info === "object") {
     },
     window(action: string): void {
       if (WINDOW_ACTIONS.includes(action)) ipcRenderer.send("apprentice-window", action);
+    },
+    // Main validates the kind again and opens only its fixed System Settings pane; never a URL from the page.
+    openPermissionSettings(kind: string): Promise<{ ok: boolean; opened?: string | null; granted?: boolean; reason?: string }> {
+      if (!PERMISSION_KINDS.includes(kind)) return Promise.resolve({ ok: false, reason: "unknown_kind" });
+      return ipcRenderer.invoke("apprentice-permission-settings", kind);
     },
   });
 }

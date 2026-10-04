@@ -115,6 +115,10 @@ export type DockView = {
   header: string;
   stateLabel: string;
   recLabel: string;
+  /** Frame shown in the header and the tab; dock.js animates 'listening' and 'asking'. */
+  avatarState: AvatarState;
+  /** Session start (epoch ms) for the timer pill; null outside a session. */
+  startedAt: number | null;
 };
 
 const MODE_HEADER = { capture: "training", teach: "teaching" } as const;
@@ -122,7 +126,8 @@ const STATE_LABELS: Record<BuddyMode, string> = {
   idle: "watching · quiet while you type",
   listening: "listening · quiet while you type",
   thinking: "thinking",
-  speaking: "talking",
+  // In the dock the agent speaks to ask (Dock.dc.html: 'asking').
+  speaking: "asking",
   paused: "paused",
 };
 
@@ -134,12 +139,30 @@ export function dockLabels(i: { mode: DockSession["mode"]; buddy: BuddyMode; off
   return { header, stateLabel: STATE_LABELS[i.buddy] ?? STATE_LABELS.idle, recLabel: i.mode ? "rec" : "on" };
 }
 
-export function dockViewModel(i: { state: DockState; session: DockSession | null; mode: BuddyMode; target: PointStyle | null; say: string | null; paused: boolean }): DockView {
+/** Dock frame: like avatarState, but speaking is the 'asking' frame (the dock agent only speaks to ask). */
+export function dockAvatarState(mode: BuddyMode, target: PointStyle | null): AvatarState {
+  const s = avatarState(mode, target);
+  return s === "talking" ? "asking" : s;
+}
+
+export function dockViewModel(i: {
+  state: DockState;
+  session: DockSession | null;
+  mode: BuddyMode;
+  target: PointStyle | null;
+  say: string | null;
+  paused: boolean;
+  startedAt?: number | null;
+}): DockView {
   const agent = i.session?.agent;
+  const frame = dockAvatarState(i.paused ? "paused" : i.mode, i.target);
   return {
     side: i.state.side,
     collapsed: i.state.collapsed,
-    avatar: avatarFor(agent?.avatar, avatarState(i.paused ? "paused" : i.mode, i.target)),
+    // An agent without an 'asking' frame shows its 'talking' frame (then idle).
+    avatar: frame === "asking" ? (agent?.avatar.asking ?? avatarFor(agent?.avatar, "talking")) : avatarFor(agent?.avatar, frame),
+    avatarState: frame,
+    startedAt: i.session?.mode ? (i.startedAt ?? null) : null,
     name: agent?.name ?? "AI Apprentice",
     role: agent?.role ?? "",
     say: i.say,

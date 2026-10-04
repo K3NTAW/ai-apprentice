@@ -29,6 +29,9 @@ describe("electron-builder config", () => {
 
   it("windows builds nsis x64", () => {
     expect(build.win.target).toEqual([{ target: "nsis", arch: ["x64"] }]);
+    // The app icon lives in assets/; static/ ships no tray icon any more.
+    expect(build.win.icon).toBe("assets/icon.ico");
+    expect(fs.existsSync(path.join(root, build.win.icon))).toBe(true);
   });
 
   it("app.config.json ships no default appUrl (APP_URL or the setup screen provides it)", () => {

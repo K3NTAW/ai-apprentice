@@ -2,7 +2,7 @@
 // - desktop app (bridge): a small 'Running in AI Apprentice' status with the permission state, no pairing card;
 // - plain browser (none): 'Get the desktop app' with the download links from the build env (hidden when unset);
 // - websocket opt-in: the old pairing card; detecting (SSR, first render): nothing, so the app never flashes the panel.
-import type { TransportHost } from "@/lib/companion/transport";
+import { getBridge, type ApprenticeBridge, type PermissionSettingsKind, type TransportHost } from "@/lib/companion/transport";
 import CompanionCard, { missingPermissions, type CompanionCardProps } from "./CompanionCard";
 
 export type DesktopDownloads = { mac: string | null; win: string | null };
@@ -33,12 +33,51 @@ const PERMISSION_ROWS: [keyof NonNullable<CompanionCardProps["permissions"]>, st
   ["input", "Input Monitoring", "Without it shortcuts and typing pauses are not seen"],
 ];
 
-/** macOS privacy panes behind each Fix button (opened by the system; harmless elsewhere). */
-const SETTINGS_PANE: Record<string, string> = {
-  screen: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
-  accessibility: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
-  input: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent",
+/** Permission row to the bridge's openPermissionSettings kind. The page never navigates to a settings URL. */
+export const PERMISSION_KIND: Record<string, PermissionSettingsKind> = {
+  screen: "screen",
+  accessibility: "accessibility",
+  input: "input-monitoring",
+  microphone: "microphone",
 };
+
+/** Manual steps where the app cannot open System Settings (plain browser, older app). */
+export const MANUAL_STEPS: Record<PermissionSettingsKind, string> = {
+  screen: "Open System Settings › Privacy & Security › Screen Recording, switch on AI Apprentice, then restart the app.",
+  accessibility: "Open System Settings › Privacy & Security › Accessibility and switch on AI Apprentice.",
+  "input-monitoring": "Open System Settings › Privacy & Security › Input Monitoring, switch on AI Apprentice, then restart the app.",
+  microphone: "Open System Settings › Privacy & Security › Microphone (Windows: Settings › Privacy › Microphone) and allow AI Apprentice.",
+};
+
+/** Fix: the app opens the pane (true); without the bridge action the caller shows the manual steps (false). */
+export function fixPermission(key: string, bridge: ApprenticeBridge | null = getBridge()): boolean {
+  const kind = PERMISSION_KIND[key];
+  if (!kind || typeof bridge?.openPermissionSettings !== "function") return false;
+  void bridge.openPermissionSettings(kind).catch(() => {});
+  return true;
+}
+
+/** In the app: a button that asks the app to open the pane. In the browser: Fix opens the manual steps (no URL). */
+export function PermissionFix({ permission, bridge }: { permission: string; bridge?: ApprenticeBridge | null }) {
+  const kind = PERMISSION_KIND[permission];
+  const b = bridge === undefined ? getBridge() : bridge;
+  if (!kind) return null;
+  if (typeof b?.openPermissionSettings === "function") {
+    return (
+      <button type="button" className="ui-btn ui-bs ui-bsm" onClick={() => fixPermission(permission, b)}>
+        Fix
+      </button>
+    );
+  }
+  return (
+    <details data-testid={`manual-${permission}`} className="text-xs">
+      <summary className="ui-btn ui-bs ui-bsm">Fix</summary>
+      <span className="block" style={{ color: "var(--mu)", maxWidth: 320, marginTop: 6 }}>
+        {MANUAL_STEPS[kind]}
+      </span>
+    </details>
+  );
+}
 
 /** Desktop app card (Capture.dc.html 'Companion' card without the pairing digits): status and the permission rows. */
 export function AppStatus({ companion }: { companion: CompanionCardProps }) {
@@ -78,9 +117,7 @@ export function AppStatus({ companion }: { companion: CompanionCardProps }) {
                 ) : (
                   <span className="flex items-center" style={{ gap: 8 }}>
                     <span className="ui-bdg ui-k-rd">Missing</span>
-                    <a href={SETTINGS_PANE[key]} className="ui-btn ui-bs ui-bsm">
-                      Fix
-                    </a>
+                    <PermissionFix permission={key} />
                   </span>
                 )}
               </div>

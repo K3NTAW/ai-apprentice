@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { formatPairingLine, isPermissionKey, pairingViewModel, splitCode } from "./pairingWindow.mjs";
-import { trayIconBitmap } from "./trayIcon.mjs";
 
 const allGranted = { input: true, screen: true, accessibility: true };
 
@@ -48,17 +47,5 @@ describe("pairing window view model", () => {
     expect(isPermissionKey("screen")).toBe(true);
     expect(isPermissionKey("javascript:alert(1)")).toBe(false);
     expect(isPermissionKey(undefined)).toBe(false);
-  });
-});
-
-describe("tray icon bitmap", () => {
-  it("draws a BGRA bitmap of the right size with opaque and transparent pixels", () => {
-    for (const size of [16, 32]) {
-      const buf = trayIconBitmap(size);
-      expect(buf.length).toBe(size * size * 4);
-      const alphas = new Set<number>();
-      for (let i = 3; i < buf.length; i += 4) alphas.add(buf[i]);
-      expect([...alphas].sort()).toEqual([0, 255]);
-    }
   });
 });

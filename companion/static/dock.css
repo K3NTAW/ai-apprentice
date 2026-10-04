@@ -2,6 +2,9 @@
 html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
 body { user-select: none; }
 .dock { height: 100%; }
+/* Solid light surface over any app: >= .92 alpha, the canvas hairline border and shadow; vibrancy/acrylic only
+   shows through faintly underneath. */
+.dock .glass { background: rgba(250,250,252,.94); border: 1px solid var(--ln); box-shadow: 0 10px 24px #0000001f, 0 30px 80px rgba(0,0,0,.22), inset 0 1px 1px #fffc; }
 .full { height: 100%; border-radius: 24px; display: flex; flex-direction: column; overflow: hidden; }
 .tab {
   display: none; width: 100%; height: 100%; border-radius: 20px 0 0 20px; border-right: 0; flex-direction: column; align-items: center;
@@ -49,6 +52,14 @@ body { user-select: none; }
 .buttons { padding: 12px 14px 14px; display: flex; gap: 8px; }
 .offdot { width: 8px; height: 8px; border-radius: 50%; background: #FF6B6B; }
 /* Off the record and paused: desaturate the dock and dim the feed, like the canvas. */
+.timer { font-variant-numeric: tabular-nums; }
+.hint { display: inline-flex; align-items: center; gap: 4px; }
+/* Avatar: listening breathes, asking bobs. Never with reduced motion. */
+.avatar[data-state="listening"], .avatar-sm[data-state="listening"] { animation: aa-breathe 2.4s ease-in-out infinite; }
+.avatar[data-state="asking"], .avatar-sm[data-state="asking"] { animation: aa-bob 1.1s ease-in-out infinite; }
+@keyframes aa-breathe { 50% { transform: scale(1.05); } }
+@keyframes aa-bob { 50% { transform: translateY(-3px) rotate(-3deg); } }
+@media (prefers-reduced-motion: reduce) { .avatar, .avatar-sm { animation: none !important; } }
 .dock.off .full { filter: saturate(.15); }
 .dock.off .feed { opacity: .45; }
 .dock.off .state { color: var(--mu); }

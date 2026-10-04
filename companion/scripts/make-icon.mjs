@@ -1,4 +1,4 @@
-// Draws the app icon (ring with a dot, like the tray icon) as PNGs and builds assets/icon.icns with
+// Draws the app icon (ring with a dot) as PNGs and builds assets/icon.icns with
 // iconutil (macOS). No dependencies: PNG encoded with node:zlib. Run: node scripts/make-icon.mjs
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";

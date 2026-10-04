@@ -43,7 +43,11 @@ export type ApprenticeBridge = {
   on(type: BridgeEvent, handler: (payload: unknown) => void): () => void;
   send(message: object): void;
   window(action: WindowAction): void;
+  /** Opens the System Settings pane for one permission (main opens only its fixed URL). Absent on older apps. */
+  openPermissionSettings?(kind: PermissionSettingsKind): Promise<unknown>;
 };
+
+export type PermissionSettingsKind = "microphone" | "screen" | "accessibility" | "input-monitoring";
 
 export type CompanionTransport = {
   readonly kind: TransportKind;

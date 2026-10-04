@@ -1,4 +1,4 @@
-// Electron main process: the AI Apprentice main window (control room page + bridge), tray, sensing, buddy
+// Electron main process: the AI Apprentice main window (control room page + bridge), sensing, buddy
 // overlays, floating panel, shortcuts, and the opt-in WebSocket server (COMPANION_WS=1).
 import {
   app,
@@ -7,8 +7,6 @@ import {
   globalShortcut,
   ipcMain,
   Menu,
-  Tray,
-  nativeImage,
   powerMonitor,
   screen,
   session as electronSession,
@@ -76,17 +74,19 @@ import {
   type ShortcutAction,
 } from "./shortcuts.mjs";
 import { startServer, type CompanionServer } from "./server.mjs";
-import { trayIconBitmap } from "./trayIcon.mjs";
+import { installLifecycle, mainCloseAction } from "./lifecycle.mjs";
+import { MAC_SETTINGS_URLS, openPermissionSettings } from "./permissionSettings.mjs";
 import { isWindowAction, MAIN_WINDOW, planWindowAction, restoreWindowBounds, serializeWindowBounds, type WindowAction } from "./windowActions.mjs";
 
 const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
 const HOOK_EVENTS = ["keydown", "mousedown", "mousemove", "wheel"] as const;
 
+/** Panel permission rows to the fixed System Settings panes (permissionSettings.mts). */
 const SETTINGS = {
-  accessibility: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
-  input: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent",
-  screen: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
+  accessibility: MAC_SETTINGS_URLS.accessibility,
+  input: MAC_SETTINGS_URLS["input-monitoring"],
+  screen: MAC_SETTINGS_URLS.screen,
 } as const;
 
 const log = (line: string) => console.log(`[companion] ${line}`);
@@ -97,7 +97,6 @@ const timers = new TimerSet(timerApi);
 /** Last value sent per window channel: unchanged views, cursors, dock and panel states are not re-sent. */
 const sent = new SendGate();
 
-let tray: Tray | null = null;
 /** One transparent, click-through overlay per display, keyed by display id. */
 const overlays = new Map<number, BrowserWindow>();
 let panel: BrowserWindow | null = null;
@@ -122,6 +121,8 @@ const wsOn = wsEnabled(process.env);
 let hookRunning = false;
 let buddy = initialBuddy();
 let session: SessionStateMessage | null = null;
+/** Start of the current capture/teach session, for the dock's timer pill. */
+let sessionStartedAt: number | null = null;
 /** Frontmost app name from the app poll, sent with chords. */
 let frontApp = "";
 // Rollback switches: COMPANION_DOCK=0 is the v2 orb buddy without dock, COMPANION_CHORDS=0 sends no chords.
@@ -157,7 +158,7 @@ let keyTable: Record<string, number> = {};
 const aggregator = new ActivityAggregator(Date.now());
 const appTracker = new AppChangeTracker();
 // Pairing exists only with COMPANION_WS=1; nothing here deletes or rewrites pairing state on disk.
-const pairing = wsOn ? createWsPairing(() => rebuildMenu()) : null;
+const pairing = wsOn ? createWsPairing(() => pushPanel()) : null;
 
 /** Companion -> web: the connected page (bridge) and, with COMPANION_WS=1, the paired WebSocket client. */
 const emit: (msg: ServerMessage) => void = createForwarder({
@@ -285,7 +286,7 @@ const permissionMonitor = new PermissionMonitor(permissions, (p) => {
   permissionTimer.set(permissionPollMs(p));
   startHook();
   emit(status());
-  rebuildMenu();
+  pushPanel();
 });
 
 function primaryDisplay(): DisplayInfo {
@@ -401,7 +402,7 @@ function pushDock(): void {
   const now = Date.now();
   const live = expireBuddy(buddy, now);
   const view = buddyView(buddy, now, { enabled: true, paused });
-  const model = dockViewModel({ state: dock, session, mode: view.mode, target: view.target?.style ?? null, say: live.say?.text ?? null, paused });
+  const model = dockViewModel({ state: dock, session, mode: view.mode, target: view.target?.style ?? null, say: live.say?.text ?? null, paused, startedAt: sessionStartedAt });
   if (sent.changed("dock", model)) dockWin.webContents.send("dock-state", model);
 }
 
@@ -530,7 +531,7 @@ function setPaused(next: boolean): void {
     pushView();
   }
   emit(status());
-  rebuildMenu();
+  pushPanel();
 }
 
 function onShortcut(action: ShortcutAction): void {
@@ -598,26 +599,15 @@ function pushPanel(): void {
 
 function hidePanel(): void {
   if (panel && !panel.isDestroyed() && panel.isVisible()) panel.hide();
-  syncDockIcon();
-}
-
-/** macOS Dock icon: shown while the main window or the panel is visible; the tray stays either way. */
-function syncDockIcon(): void {
-  const visible = (w: BrowserWindow | null) => w !== null && !w.isDestroyed() && w.isVisible();
-  if (visible(mainWin) || visible(panel)) void app.dock?.show();
-  else app.dock?.hide();
 }
 
 function showPanel(): void {
   if (panel && !panel.isDestroyed()) {
-    void app.dock?.show();
     panel.show();
     panel.focus();
     pushPanel();
     return;
   }
-  // Shows in the Dock while open, so it is reachable when the tray item is hidden by the notch.
-  void app.dock?.show();
   let material = panelMaterial(process.platform, process.getSystemVersion());
   // FloatPanel.dc.html: 520x680, clamped to and placed inside the current display's work area.
   // A material the OS refuses falls back to the solid canvas colour.
@@ -658,7 +648,6 @@ function showPanel(): void {
   win.once("ready-to-show", () => win.show());
   win.on("closed", () => {
     if (panel === win) panel = null;
-    syncDockIcon();
   });
   void win.loadFile(path.join(here, "..", "static", "panel.html"), { query: { material } });
 }
@@ -673,7 +662,10 @@ const fromPanel = (e: Electron.IpcMainEvent) => panel !== null && !panel.isDestr
 const fromDock = (e: Electron.IpcMainEvent) => dockWin !== null && !dockWin.isDestroyed() && e.sender === dockWin.webContents;
 
 ipcMain.on("dock-action", (e, action: unknown) => {
-  if (fromDock(e) && isPanelAction(action)) onShortcut(action);
+  if (!fromDock(e) || !isPanelAction(action)) return;
+  onShortcut(action);
+  // End task in the dock brings the main window back, also after it was closed (hidden) during the session.
+  if (action === "end_task") showMain();
 });
 ipcMain.on("dock-collapse", (e, on: unknown) => {
   if (!fromDock(e) || typeof on !== "boolean") return;
@@ -728,15 +720,6 @@ ipcMain.on("panel-recording", (e, on: unknown) => {
   else registerShortcuts();
 });
 
-function trayImage(): Electron.NativeImage | string {
-  // Windows: a real .ico; macOS: a template image drawn in code.
-  if (process.platform === "win32") return path.join(here, "..", "static", "icon.ico");
-  const img = nativeImage.createFromBitmap(trayIconBitmap(16), { width: 16, height: 16, scaleFactor: 1 });
-  img.addRepresentation({ scaleFactor: 2, width: 32, height: 32, buffer: trayIconBitmap(32) });
-  img.setTemplateImage(true);
-  return img;
-}
-
 /**
  * Page connection from either transport. Losing one (unpair, navigation off, reload, crash, window
  * destroyed) resets session, buddy, dock and halos; the next hello re-syncs status.
@@ -759,7 +742,7 @@ function setConnection(source: "ws" | "page", on: boolean): void {
   syncSessionTimers();
   if (changed || !on) {
     pushView();
-    rebuildMenu();
+    pushPanel();
   }
 }
 
@@ -776,6 +759,8 @@ const bridgeHandlers: BridgeHandlers = {
     // A session start re-checks permissions, so one revoked since launch is noticed.
     const started = sessionStarted(session?.mode, next.mode);
     session = next;
+    if (started) sessionStartedAt = Date.now();
+    if (!next.mode) sessionStartedAt = null;
     if (started) permissionMonitor.check();
     // A new session (agent, mode or title change) clears the feed and the page's dock override.
     dock = reduceDock(dock, { type: "session", key: sessionKey(next) });
@@ -792,7 +777,7 @@ const bridgeHandlers: BridgeHandlers = {
 const isMainContents = (wc: Electron.WebContents | null | undefined) => !!wc && !!mainWin && !mainWin.isDestroyed() && wc === mainWin.webContents;
 
 /** Sender check for every bridge handler: main window, main frame, allowlisted origin. */
-function bridgeSender(e: Electron.IpcMainEvent) {
+function bridgeSender(e: { sender: Electron.WebContents; senderFrame: Electron.WebFrameMain | null }) {
   const frame = e.senderFrame;
   return {
     isMainWebContents: isMainContents(e.sender),
@@ -809,6 +794,20 @@ ipcMain.on(BRIDGE_CHANNELS.hello, (e) => {
 ipcMain.on(BRIDGE_CHANNELS.send, (e, message: unknown) => {
   if (!senderAllowed(bridgeSender(e), appList)) return;
   routeBridgeMessage(message, bridgeHandlers);
+});
+// openPermissionSettings(kind): main opens only the fixed pane for that kind (permissionSettings.mts).
+ipcMain.handle(BRIDGE_CHANNELS.permissionSettings, async (e, kind: unknown) => {
+  if (!senderAllowed(bridgeSender(e), appList)) return { ok: false, reason: "not_allowed" };
+  return openPermissionSettings(kind, {
+    platform: process.platform,
+    openExternal: (url) => shell.openExternal(url),
+    askForMicrophone: () => systemPreferences.askForMediaAccess("microphone"),
+    touchScreenCapture: () => desktopCapturer.getSources({ types: ["screen"], thumbnailSize: { width: 0, height: 0 } }),
+    refresh: () => {
+      permissionMonitor.check();
+      emit(status());
+    },
+  });
 });
 ipcMain.on(BRIDGE_CHANNELS.window, (e, action: unknown) => {
   if (!senderAllowed(bridgeSender(e), appList) || !isWindowAction(action)) return;
@@ -835,7 +834,6 @@ function applyWindowAction(action: WindowAction): void {
       else if (op === "restore") win.restore();
       else win.focus();
     }
-    syncDockIcon();
   };
   run(plan.ops);
 }
@@ -1000,23 +998,24 @@ function createMainWindow(): BrowserWindow {
   });
   win.on("resize", () => saveBoundsSoon(win));
   win.on("move", () => saveBoundsSoon(win));
-  win.on("show", syncDockIcon);
-  win.on("hide", syncDockIcon);
-  // Close hides (the tray and the companion stay); Quit is Cmd+Q or the tray menu.
+  // During a session close only hides: the page, the session and the dock or buddy keep running, End task
+  // restores the window. Without a session macOS keeps the app in the Dock (hidden), Windows quits.
   win.on("close", (e) => {
-    if (quitting) return;
+    const action = mainCloseAction({ quitting, platform: process.platform, sessionActive: sessionRunning() });
+    if (action === "allow") return;
     e.preventDefault();
+    if (action === "quit") {
+      app.quit();
+      return;
+    }
+    if (sessionRunning()) steppedAside = true;
     win.hide();
   });
   win.on("closed", () => {
     if (mainWin === win) mainWin = null;
     if (pageConnected) setConnection("page", false);
-    syncDockIcon();
   });
-  win.once("ready-to-show", () => {
-    win.show();
-    syncDockIcon();
-  });
+  win.once("ready-to-show", () => win.show());
   loadMain(win);
   return win;
 }
@@ -1030,8 +1029,14 @@ function showMain(): void {
   mainWin.show();
   mainWin.focus();
   steppedAside = false;
-  syncDockIcon();
 }
+
+/** A capture or teach session (or a voice session) is running in the page. */
+function sessionRunning(): boolean {
+  return session !== null && (session.mode !== null || session.voice_active === true);
+}
+
+const mainVisible = () => !!mainWin && !mainWin.isDestroyed() && mainWin.isVisible() && !mainWin.isMinimized();
 
 /** Microphone and display-capture only for the main window's allowlisted page; screen frames without a picker. */
 function installSessionGuards(): void {
@@ -1091,34 +1096,6 @@ function buildAppMenu(): void {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
-function rebuildMenu(): void {
-  pushPanel();
-  if (!tray) return;
-  const p = permissions();
-  const items: Electron.MenuItemConstructorOptions[] = [{ label: `Open ${PRODUCT_NAME}`, click: () => showMain() }];
-  if (pairing) {
-    const code = pairing.current();
-    items.push(
-      { label: serverError ? `Error: ${serverError}` : wsPaired ? "Paired with web app" : "Not paired", enabled: false },
-      { label: `Pairing code: ${code.slice(0, 3)} ${code.slice(3)}`, enabled: false },
-      { label: "New pairing code", click: () => pairing.rotate() },
-    );
-  }
-  items.push({ label: "Show panel", click: () => showPanel() }, { type: "separator" });
-  if (process.platform === "darwin") {
-    if (!p.accessibility) items.push({ label: "Grant Accessibility…", click: () => void shell.openExternal(SETTINGS.accessibility) });
-    if (!p.input) items.push({ label: "Check Input Monitoring…", click: () => void shell.openExternal(SETTINGS.input) });
-    if (!p.screen) items.push({ label: "Grant Screen Recording…", click: () => void shell.openExternal(SETTINGS.screen) });
-    if (!p.accessibility || !p.input || !p.screen) items.push({ type: "separator" });
-  }
-  items.push(
-    { label: "Pause sensing", type: "checkbox", checked: paused, click: (item) => setPaused(item.checked) },
-    { label: "Quit", click: () => app.quit() },
-  );
-  tray.setContextMenu(Menu.buildFromTemplate(items));
-  tray.setTitle(serverError ? "AI !" : paused ? "AI ‖" : paired ? "AI ●" : "AI");
-}
-
 async function startWsServer(): Promise<void> {
   if (!pairing) return;
   const port = parsePort(process.env.COMPANION_PORT);
@@ -1146,11 +1123,6 @@ async function boot(): Promise<void> {
   applyAppUrl();
   installSessionGuards();
   buildAppMenu();
-  tray = new Tray(trayImage());
-  tray.setToolTip(PRODUCT_NAME);
-  // Windows has no menu on left click: open the main window (the context menu stays on right click).
-  if (process.platform === "win32") tray.on("click", () => showMain());
-  rebuildMenu();
   try {
     dock = initialDock(parseDockPrefs(fs.readFileSync(dockPrefsPath(), "utf8")).collapsed);
   } catch {
@@ -1170,7 +1142,7 @@ async function boot(): Promise<void> {
     showPanel();
     await startWsServer();
   }
-  rebuildMenu();
+  pushPanel();
 
   timers.add(() => {
     const msg = aggregator.flush(Date.now());
@@ -1201,13 +1173,11 @@ if (!app.requestSingleInstanceLock()) {
   app.on("second-instance", () => showMain());
   // No <webview> anywhere.
   app.on("web-contents-created", (_e, wc) => wc.on("will-attach-webview", (ev) => ev.preventDefault()));
-  app.on("activate", () => showMain());
+  // No menu-bar item: the Dock icon (taskbar on Windows) opens the app, Cmd+Q / the app menu quits.
+  installLifecycle(app, { platform: process.platform, mainVisible, showMain, sessionActive: sessionRunning });
   // Coming back to the app re-checks permissions (one revoked in System Settings meanwhile).
   recheckOnActivate(app, () => {
     if (app.isReady()) permissionMonitor.check();
-  });
-  app.on("window-all-closed", () => {
-    // Tray app: stay alive without windows.
   });
   app.on("before-quit", () => {
     quitting = true;

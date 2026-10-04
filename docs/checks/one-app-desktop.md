@@ -3,11 +3,14 @@
 Run on a packaged build (`npm --prefix companion run package`) on macOS, and where noted on Windows.
 
 ## Install and first run
-- [ ] Open `AI Apprentice.app` (after `xattr -dr com.apple.quarantine`). Window title, Dock name, tray tooltip and About say `AI Apprentice`.
+- [ ] Open `AI Apprentice.app` (after `xattr -dr com.apple.quarantine`). Window title, Dock name and About say `AI Apprentice`. No menu-bar item appears.
 - [ ] The main window opens about 1280x820 on the configured control room URL (`APP_URL`, `app.config.json` or the stored setup URL). Resize and move it, quit, reopen: size and position are kept.
 - [ ] Unplug the external display the window was on, reopen: the window opens on the main display at the default size.
 - [ ] Launch the app a second time: no second instance, the first window comes forward.
-- [ ] Close the window: it hides, the Dock icon goes away, the tray stays. `Open AI Apprentice` in the tray brings it back. Cmd+Q quits.
+- [ ] Close the window (no session): the app stays in the Dock; clicking the Dock icon reopens the window. Cmd+Q quits.
+- [ ] Close the window during a session: the session, the side dock (or buddy in Teach) keep running; End task in the dock brings the window back.
+- [ ] Windows: closing the window with no session quits the app.
+- [ ] Missing permission, `Fix` in the page: the matching System Settings pane opens (microphone: the macOS prompt first); the log shows no `navigation blocked`.
 - [ ] `APP_URL=http://example.com` on launch: error page, no page loaded.
 - [ ] First run with no `APP_URL` and no stored URL: the local setup screen "Paste your AI Apprentice URL" shows; no network request to any remote page. An `http://` URL is refused with a message; an `https://` URL is saved (`app-url.json` in userData) and loaded.
 - [ ] Origin allowlist is exact: with `APP_URL` set to our preview, open `https://ai-apprentice.vercel.app` (third party) via a link: it opens in the system browser, no `window.apprentice`, no mic or capture. `COMPANION_ALLOWED_ORIGINS=https://*.example.com` logs `wildcard origin rejected`.
@@ -19,7 +22,7 @@ Run on a packaged build (`npm --prefix companion run package`) on macOS, and whe
 
 ## Bridge
 - [ ] DevTools (dev build) on the control room: `window.apprentice.version` is set. Navigate the window to another origin via a link: the link opens in the system browser instead.
-- [ ] No pairing code in the tray or panel by default. With `COMPANION_WS=1` the pairing code and WebSocket flow work as before.
+- [ ] No pairing code in the panel by default. With `COMPANION_WS=1` the pairing code and WebSocket flow work as before.
 - [ ] Reload the page during a Capture: dock and buddy clear, status arrives again after the reload.
 
 ## Capture and permissions
@@ -27,8 +30,8 @@ Run on a packaged build (`npm --prefix companion run package`) on macOS, and whe
 - [ ] Start training with the window in fullscreen: it leaves fullscreen and minimises; ending restores it.
 - [ ] Screen capture starts with no picker. Captured frames do not show the dock, buddy, halo or panel.
 - [ ] Display capture keeps delivering frames while the main window is minimised (backgroundThrottling off).
-- [ ] Screen Recording denied (`tccutil reset ScreenCapture app.aiapprentice.companion`, then deny): capture fails visibly in the page; the app does not crash; the tray shows `Grant Screen Recording…`.
+- [ ] Screen Recording denied (`tccutil reset ScreenCapture app.aiapprentice.companion`, then deny): capture fails visibly in the page; the app does not crash; the app shows Screen Recording missing and its `Fix` opens the Screen Recording pane.
 - [ ] Microphone: the first push-to-talk asks for the microphone with the app's usage text; the camera is never requested.
 
 ## Windows
-- [ ] `npm run package:win` installer installs `AI Apprentice`; left click on the tray opens the main window; capture works without a picker.
+- [ ] `npm run package:win` installer installs `AI Apprentice`; the taskbar icon opens the main window; capture works without a picker.
