@@ -3,9 +3,10 @@
 // Every step can be skipped ('Skip for now'); each mark is saved right away (POST /api/auth/onboarding), so leaving the
 // page keeps the progress and completes nothing. A failed save shows an error and still moves on.
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import NewAgentFlow, { type ExpertOption } from "@/components/agents/NewAgentFlow";
 import { createWorkspace, renameWorkspace } from "@/components/shell/menuActions";
+import { storedTheme } from "@/components/shell/ThemeToggle";
 import { buttonClass } from "@/components/ui";
 import type { Role } from "@/lib/auth/context";
 import { saveStep, startFirstTraining } from "@/lib/onboarding/client";
@@ -46,6 +47,9 @@ function Stepper({ active, state }: { active: OnboardingStep; state: OnboardingS
     </ol>
   );
 }
+
+/** The theme onboarding shows: the one stored by the user menu, else dark (the app is dark first). */
+export const onboardingTheme = (store: Parameters<typeof storedTheme>[0]) => storedTheme(store) ?? "dark";
 
 export type OnboardingWorkspace = { name: string; city: string | null; role: Role };
 
@@ -189,6 +193,11 @@ export default function OnboardingFlow({
   const [step, setStep] = useState<OnboardingStep>(startStep ?? resumeStep(initial));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // No AppShell (so no ThemeToggle) on this page: apply the stored theme here, dark when none is stored, so onboarding
+  // wears the app's dark tokens instead of falling back to the light OS preference.
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", onboardingTheme(window.localStorage));
+  }, []);
 
   const mark = async (s: OnboardingStep, m: StepMark, agentId?: string) => {
     setBusy(true);

@@ -38,8 +38,11 @@ E2E_EMAIL=... E2E_PASSWORD=... BASE_URL=https://<deployed-app> npm run e2e:live
 
 Each step is one test. A failed step restarts the browser, signs in again and the run continues.
 
-1. Sign in with email and password. If the app redirects to onboarding: Workspace (Continue), Desktop permissions
-   (Skip for now, desktop only), First agent (creates 'E2E Onboard' when the form shows), How training works (Later).
+1. Sign in with email and password. If the app redirects to onboarding (`e2e/live/onboarding.ts`): Workspace
+   (Continue), Desktop permissions (Skip for now, desktop only), First agent (creates 'E2E Onboard' when the form
+   shows), How training works (Next through the five cards, Later on the last). It resumes at whatever step is open and
+   does nothing for a user who finished onboarding. `e2e/live-onboarding.guard.test.ts` (Vitest) runs the walk against
+   a mocked page: fresh user, onboarded user, resumed user.
 2. Agents home: search, filter tabs (Ready to teach, Training, All), the chips.
 3. Create 'E2E Pip' with role, expert, first task; change the avatar in the studio and save.
 4. Every agent tab: Processes, Shortcuts, Guardrails, Learners, Settings.
@@ -72,6 +75,13 @@ Found by reading the code (the suite records them in the summary when it meets t
   (`src/app/api/workspace/route.ts` has POST only). Step 6 records this instead of renaming.
 - No way to delete a workspace: no control and no DELETE route. 'E2E Workspace' stays after the run; remove it in
   Supabase (table `workspaces`, and its memberships) until the app can.
+
+## First live run (2026-10-04 ~12:00)
+
+Against https://ai-apprentice-app.vercel.app with a fresh test user. Every step timed out in onboarding: the walk
+clicked Later on card 1 of 'How training works', but Later only shows on card 5. Fixed in T-0254 (Next through the
+cards). Not re-run against the deployed app yet. There is no local-mode (`npm run e2e`) onboarding spec; the seed
+user is past onboarding, so the mocked-page test above covers the path.
 
 ## Not run here
 

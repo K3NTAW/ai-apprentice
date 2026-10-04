@@ -76,3 +76,14 @@ describe("/onboarding", () => {
     expect(html).not.toContain("Skip for now");
   });
 });
+
+describe("onboarding theme", () => {
+  it("is dark unless the user stored light in the user menu", async () => {
+    const { onboardingTheme } = await import("@/components/onboarding/OnboardingFlow");
+    const store = (v: string | null) => ({ getItem: () => v, setItem: () => {} });
+    expect(onboardingTheme(store(null))).toBe("dark");
+    expect(onboardingTheme(store("system"))).toBe("dark");
+    expect(onboardingTheme(null)).toBe("dark");
+    expect(onboardingTheme(store("light"))).toBe("light");
+  });
+});

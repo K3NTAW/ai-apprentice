@@ -5,7 +5,8 @@
 import { expect, test as base, type Page } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
-import { creds, ONBOARDING_AGENT, scrub } from "./env";
+import { creds, scrub } from "./env";
+import { walkOnboarding } from "./onboarding";
 
 export const OUT_DIR = path.join("e2e", "live", "out");
 
@@ -22,31 +23,6 @@ export async function screenshot(page: Page, file: string) {
   const { email } = creds();
   if (email) mask.push(page.getByText(email));
   await page.screenshot({ path: path.join(OUT_DIR, file), fullPage: true, mask });
-}
-
-/** Walks every onboarding step: workspace (Continue), permissions (skipped, desktop only), first agent, training (Later). */
-export async function walkOnboarding(page: Page, shot: (name: string) => Promise<void>) {
-  const screen = page.locator('[data-screen="onboarding"]');
-  for (let i = 0; i < 6 && new URL(page.url()).pathname.startsWith("/onboarding"); i++) {
-    await expect(screen).toBeVisible();
-    const step = (await screen.getAttribute("data-step")) ?? "";
-    await shot(`onboarding ${step}`);
-    if (step === "workspace") await page.getByRole("button", { name: "Continue", exact: true }).click();
-    else if (step === "permissions") await page.getByRole("button", { name: "Skip for now" }).click();
-    else if (step === "agent") {
-      const name = page.locator("#na-name");
-      if (await name.isVisible()) {
-        await name.fill(ONBOARDING_AGENT);
-        await page.locator("#na-role").fill("E2E onboarding agent");
-        await page.locator("form").getByRole("button", { name: "Continue" }).click();
-        await expect(page.locator('[data-step="2"]')).toBeVisible();
-        await shot("onboarding agent created");
-        await page.getByRole("button", { name: "Continue", exact: true }).click();
-      } else await page.getByRole("button", { name: "Skip for now" }).click();
-    } else if (step === "training") await page.getByRole("button", { name: "Later" }).click();
-    else break;
-    await expect.poll(async () => `${new URL(page.url()).pathname}|${await screen.getAttribute("data-step").catch(() => null)}`).not.toBe(`/onboarding|${step}`);
-  }
 }
 
 /** Email + password sign-in on /login, then onboarding if the app redirects there. */
@@ -117,4 +93,4 @@ export function appGap(text: string) {
   test.info().annotations.push({ type: "app-gap", description: text });
 }
 
-export { expect };
+export { expect, walkOnboarding };
