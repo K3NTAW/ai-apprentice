@@ -75,5 +75,8 @@ AppOnly controls: the assertion is disabled/aria-disabled plus the reason text a
 
 2026-10-04, `npm run e2e` (Playwright 1.63.0, Google Chrome 154.0.8037.97, macOS): **40 passed**, 0 failed, 0 skipped.
 
+2026-10-04 (T-0247, after the shell and processes work), `npm run e2e`: **39 passed**, 0 failed, 0 skipped. Live specs
+ignored by the default config.
+
 Rollback: the e2e infra, specs and src fixes are separate commits. Dropping `e2e/`, `playwright.config.ts`, the `e2e`
 script and `@playwright/test` does not touch `src/`.
