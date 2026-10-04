@@ -87,7 +87,7 @@ export default function WorkspaceClient({ view }: { view: WorkspaceView }) {
           <span className="ui-lbl">Workspace</span>
           <select
             value={view.workspaceId}
-            disabled={busy}
+            disabled={busy} aria-busy={busy}
             onChange={(e) => void run("/api/workspace/active", "POST", { workspaceId: e.target.value })}
             className="rounded-full border border-[var(--ln2)] bg-[var(--s2)] px-3 py-1.5"
           >
@@ -135,7 +135,7 @@ export default function WorkspaceClient({ view }: { view: WorkspaceView }) {
                 {view.isOwner && !m.isSelf ? (
                   <button
                     type="button"
-                    disabled={busy}
+                    disabled={busy} aria-busy={busy}
                     onClick={() => void confirmThen(REMOVE_MEMBER_CONFIRM, () => run("/api/workspace/members", "DELETE", { userId: m.userId }))}
                     className={buttonClass("ghost", "sm")}
                   >
@@ -190,7 +190,7 @@ export default function WorkspaceClient({ view }: { view: WorkspaceView }) {
                 No email is sent. Tell the person to sign in at /login with this address; the invite is accepted at their
                 next sign-in.
               </p>
-              <button type="submit" disabled={busy} className={buttonClass("primary", "md", "self-start")}>
+              <button type="submit" disabled={busy} aria-busy={busy} className={buttonClass("primary", "md", "self-start")}>
                 Invite
               </button>
             </form>
@@ -216,7 +216,7 @@ export default function WorkspaceClient({ view }: { view: WorkspaceView }) {
                       </div>
                       <button
                         type="button"
-                        disabled={busy}
+                        disabled={busy} aria-busy={busy}
                         onClick={() => void confirmThen(REVOKE_INVITE_CONFIRM, () => run("/api/workspace/invites", "DELETE", { id: i.id }))}
                         className={buttonClass("ghost", "sm", "self-start")}
                       >

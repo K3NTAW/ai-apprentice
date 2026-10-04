@@ -192,7 +192,7 @@ export default function NewAgentFlow({
           </div>
           <div className="flex flex-wrap justify-between gap-3 pt-1">
             <Link className={buttonClass("ghost")} href="/agents">Cancel</Link>
-            <button type="submit" disabled={busy || !name.trim() || !role.trim()} className={buttonClass("primary")}>
+            <button type="submit" disabled={busy || !name.trim() || !role.trim()} aria-busy={busy} className={buttonClass("primary")}>
               Continue
             </button>
           </div>

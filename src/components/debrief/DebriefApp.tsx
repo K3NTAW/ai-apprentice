@@ -257,7 +257,7 @@ function DebriefInner({ sessionId, preview }: { sessionId: string; preview?: Deb
                   }}
                 >
                   <input autoFocus value={answer} onChange={(e) => setAnswer(e.target.value)} placeholder="Type your answer" className="ui-inp flex-1" />
-                  <button type="submit" disabled={view.busy || !answer.trim()} className={buttonClass("primary")}>
+                  <button type="submit" disabled={view.busy || !answer.trim()} aria-busy={view.busy} className={buttonClass("primary")}>
                     Answer
                   </button>
                 </form>

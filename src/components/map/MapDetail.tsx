@@ -5,6 +5,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Badge, buttonClass, Card } from "@/components/ui";
+import PendingButton from "@/components/ui/PendingButton";
 import { counts } from "@/lib/workmap/view";
 import WorkMapViewer from "./WorkMapViewer";
 import { MasteryLine } from "@/components/dashboard/Dashboard";
@@ -44,7 +45,6 @@ export function MapLearners({ rows }: { rows: MasteryRow[] | null }) {
 export default function MapDetail({ id, learners, previewSession }: { id: string; learners: MasteryRow[] | null; previewSession?: Session }) {
   const [session, setSession] = useState<Session | null>(previewSession ?? null);
   const [error, setError] = useState<string | null>(null);
-  const [building, setBuilding] = useState(false);
 
   useEffect(() => {
     if (previewSession) return;
@@ -65,7 +65,6 @@ export default function MapDetail({ id, learners, previewSession }: { id: string
   }, [id, previewSession]);
 
   const build = async () => {
-    setBuilding(true);
     setError(null);
     try {
       const res = await fetch("/api/workmap", {
@@ -78,8 +77,6 @@ export default function MapDetail({ id, learners, previewSession }: { id: string
       setSession((s) => (s ? { ...s, workmap } : s));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBuilding(false);
     }
   };
 
@@ -95,9 +92,9 @@ export default function MapDetail({ id, learners, previewSession }: { id: string
             All Work Maps
           </Link>
           <p className="text-[13px]" style={{ color: "var(--mu)" }}>This session has no Work Map yet.</p>
-          <button type="button" onClick={build} disabled={building} className={buttonClass("primary", "sm")}>
-            {building ? "Building…" : "Build Work Map"}
-          </button>
+          <PendingButton onAction={build} size="sm" pendingLabel="Building…">
+            Build Work Map
+          </PendingButton>
         </div>
       )}
       {session && wm && c && (

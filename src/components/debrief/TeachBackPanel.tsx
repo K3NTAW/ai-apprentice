@@ -38,7 +38,7 @@ export default function TeachBackPanel({ text, corrected, confirmed, busy, await
           <div className="flex flex-wrap" style={{ gap: 10, paddingTop: 4 }}>
             <button
               type="button"
-              disabled={busy}
+              disabled={busy} aria-busy={busy}
               onClick={() => onResult({ confirmed: true })}
               className={buttonClass("primary", "lg")}
             >
@@ -46,7 +46,7 @@ export default function TeachBackPanel({ text, corrected, confirmed, busy, await
             </button>
             <button
               type="button"
-              disabled={busy}
+              disabled={busy} aria-busy={busy}
               onClick={() => setOpen(true)}
               className={buttonClass("secondary", "lg")}
             >
@@ -76,7 +76,7 @@ export default function TeachBackPanel({ text, corrected, confirmed, busy, await
               />
               <button
                 type="submit"
-                disabled={busy || !correction.trim()}
+                disabled={busy || !correction.trim()} aria-busy={busy}
                 className={buttonClass("primary")}
               >
                 Send correction

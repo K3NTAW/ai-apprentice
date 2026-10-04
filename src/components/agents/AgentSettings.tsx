@@ -77,7 +77,7 @@ export default function AgentSettings({ agent, role }: { agent: Agent; role: Rol
             onChange={(e) => setAgentRole(e.target.value)}
           />
         </label>
-        <button type="submit" disabled={busy} className="self-start rounded-lg bg-accent px-3 py-1.5 text-accent-fg disabled:opacity-50">
+        <button type="submit" disabled={busy} aria-busy={busy} className="self-start rounded-lg bg-accent px-3 py-1.5 text-accent-fg disabled:opacity-50">
           Save
         </button>
       </form>
@@ -87,7 +87,7 @@ export default function AgentSettings({ agent, role }: { agent: Agent; role: Rol
       {canDeleteAgent(role) && (
         <button
           type="button"
-          disabled={busy}
+          disabled={busy} aria-busy={busy}
           onClick={() => void remove()}
           className="self-start rounded-lg border border-red-500/60 px-3 py-1.5 text-red-500 hover:bg-red-500/10 disabled:opacity-50"
         >
