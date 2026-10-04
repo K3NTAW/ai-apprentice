@@ -195,7 +195,7 @@ export function runStoreContract(name: string, makeStore: () => SessionStore | P
       expect(await store.deleteAgent("not-a-uuid")).toBe(false);
     });
 
-    it("links a session to an agent and clears the link when the agent is deleted", async () => {
+    it("links a session to an agent and deletes the session when the agent is deleted", async () => {
       const a = await store.createAgent({ name: "Senior Sales Person", role: "Sales", avatar });
       const s = await store.createSession({ kind: "capture", expert: "Sabine", agent_id: a.id });
       expect(s.agent_id).toBe(a.id);
@@ -207,9 +207,9 @@ export function runStoreContract(name: string, makeStore: () => SessionStore | P
         AgentNotFoundError,
       );
       await store.deleteAgent(a.id);
-      const kept = await store.getSession(s.id);
-      expect(kept?.agent_id).toBeUndefined();
-      expect(kept?.expert).toBe("Sabine");
+      expect(await store.getSession(s.id)).toBeNull();
+      expect((await store.listSessions()).some((x) => x.id === s.id)).toBe(false);
+      expect(await store.getSession(plain.id)).toMatchObject({ id: plain.id });
     });
 
     it("lists session digests newest first, without child rows", async () => {

@@ -27,16 +27,17 @@ export async function PATCH(req: Request, ctx: IdContext) {
   });
 }
 
-// Owner only. Frames (Storage, then rows), a report row with the teach sessions, the capture sessions, then the
-// agent (contract in src/lib/agents/admin.ts). Teach sessions stay with agent_id cleared.
+// Owner, or the user who created the agent. Everything of the agent goes: frame objects in Storage, every session
+// with its children, the agent with its settings, processes and versions (contract in src/lib/agents/admin.ts).
 export async function DELETE(_req: Request, ctx: IdContext) {
   return withMutation(["agents", "sessions"], async ({ ctx: rc }) => {
-    const denied = requireRole(rc, ["owner"]);
-    if (denied) return denied;
     const { id } = await ctx.params;
     if (!isValidAgentId(id)) return notFound(`agent not found: ${id}`);
+    const admin = agentAdminFor(rc);
     return adminErrors(async () => {
-      const res = await agentAdminFor(rc).deleteAgentWithData(id);
+      if (requireRole(rc, ["owner"]) && (await admin.creatorOf(id)) !== rc.userId)
+        return Response.json({ error: "forbidden", message: "Only the owner or the creator can delete this agent." }, { status: 403 });
+      const res = await admin.deleteAgentWithData(id);
       return res.deleted ? new Response(null, { status: 204 }) : notFound(`agent not found: ${id}`);
     });
   });

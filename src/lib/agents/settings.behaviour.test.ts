@@ -233,10 +233,8 @@ describe("delete contract", () => {
         { id: "c1", kind: "capture", created_by: "u1", started_at: "2026-10-01T08:00:00Z", ended_at: null },
         { id: "t1", kind: "teach", created_by: "u2", started_at: "2026-10-02T08:00:00Z", ended_at: "2026-10-02T09:00:00Z" },
       ]),
-      framesOf: wrap("framesOf", async () => [{ session_id: "c1", name: "f.jpg", path: "w/c1/f.jpg" }]),
+      frameObjectsOf: wrap("frameObjectsOf", async () => ["w/c1/f.jpg", "w/t1/g.jpg"]),
       removeObjects: wrap("removeObjects", async () => {}),
-      deleteFrameRows: wrap("deleteFrameRows", async () => {}),
-      upsertReport: wrap("upsertReport", async () => {}),
       deleteSessions: wrap("deleteSessions", async () => {}),
       deleteAgent: wrap("deleteAgent", async () => {}),
     };
@@ -244,25 +242,32 @@ describe("delete contract", () => {
   }
   const input = { workspaceId: "w", agentId: "a", userId: "owner" };
 
-  it("frames in Storage, frame rows, report with the teach sessions, capture sessions, then the agent", async () => {
+  it("frames in Storage, then every session (capture and teach), then the agent", async () => {
     const { port, log } = fakePort();
-    const upsert = vi.spyOn(port, "upsertReport");
-    expect(await deleteAgentData(port, input)).toEqual({ deleted: true, frames: 1, sessions: 1, kept_teach: 1 });
-    expect(log.slice(3)).toEqual(["removeObjects", "deleteFrameRows", "upsertReport", "deleteSessions", "deleteAgent"]);
-    expect(upsert.mock.calls[0][0].teach.map((t) => t.session_id)).toEqual(["t1"]);
+    const sessions = vi.spyOn(port, "deleteSessions");
+    expect(await deleteAgentData(port, input)).toEqual({ deleted: true, frames: 2, sessions: 2 });
+    expect(log.slice(3)).toEqual(["removeObjects", "deleteSessions", "deleteAgent"]);
+    expect(sessions.mock.calls[0][0]).toEqual(["c1", "t1"]);
   });
-  it("stops at the failing step and leaves the agent (retry repeats every step)", async () => {
-    const { port, log } = fakePort("upsertReport");
+  it("a Storage failure is logged and does not stop the row deletes", async () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { port, log } = fakePort("removeObjects");
+    expect(await deleteAgentData(port, input)).toMatchObject({ deleted: true });
+    expect(err).toHaveBeenCalled();
+    expect(log).toContain("deleteAgent");
+    err.mockRestore();
+  });
+  it("stops at a failing row step and leaves the agent (retry repeats every step)", async () => {
+    const { port, log } = fakePort("deleteSessions");
     const err = await deleteAgentData(port, input).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(DeleteAgentError);
-    expect((err as DeleteAgentError).step).toBe("report");
-    expect(log).not.toContain("deleteSessions");
+    expect((err as DeleteAgentError).step).toBe("sessions");
     expect(log).not.toContain("deleteAgent");
   });
   it("an already deleted agent answers deleted false without touching anything", async () => {
     const { port, log } = fakePort();
     port.agentName = async () => null;
-    expect(await deleteAgentData(port, input)).toEqual({ deleted: false, frames: 0, sessions: 0, kept_teach: 0 });
+    expect(await deleteAgentData(port, input)).toEqual({ deleted: false, frames: 0, sessions: 0 });
     expect(log).toEqual([]);
   });
 });

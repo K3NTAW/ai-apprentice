@@ -195,24 +195,24 @@ function updateAgent(id: string, patch: AgentPatch): Promise<Agent> {
   });
 }
 
-// Like on delete set null (agent_id): sessions stay, the link goes. The links are cleared inside the
-// agents write queue, so the next agents write only runs once they are gone.
+// Like on delete cascade (migration 20261004060000): the agent's sessions (folder with events, Q&A, transcript,
+// Work Map, teach progress and frames) and its processes, versions and their tombstones go with it. Runs inside
+// the agents write queue, so the next agents write only runs once everything is gone.
 function deleteAgent(id: string): Promise<boolean> {
   if (!isValidAgentId(id)) return Promise.resolve(false);
   return enqueue(AGENTS_QUEUE, async () => {
     const agents = await readAgents();
     const left = agents.filter((a) => a.id !== id);
     if (left.length === agents.length) return false;
+    // Read before the agent goes: readers drop a dangling agent_id.
+    const sessions = (await readSessions()).filter((s) => s.agent_id === id).map((s) => s.id);
     await writeAtomic(agentsFile(), left);
-    await deleteProcessesWhere((p) => p.agent_id === id);
-    for (const s of await readSessions()) {
-      if (s.agent_id !== id) continue;
-      await mutate(s.id, (x) => {
-        if (x.agent_id === id) delete x.agent_id;
-      }).catch((err) => {
-        if (!(err instanceof SessionNotFoundError)) throw err;
+    await deleteProcessesWhere((p) => p.agent_id === id, { tombstones: false });
+    for (const sid of sessions) await enqueue(sid, () => rm(sessionDir(sid), { recursive: true, force: true }));
+    if (sessions.length > 0)
+      await mutateProcesses((d) => {
+        d.tombstones = d.tombstones.filter((t) => !sessions.includes(t));
       });
-    }
     return true;
   });
 }
@@ -581,11 +581,11 @@ async function updateProcess(id: string, patch: ProcessPatch): Promise<Process> 
 }
 
 /** Deletes the matching processes and their versions, then clears sessions.process_id. Returns the deleted ids. */
-async function deleteProcessesWhere(match: (p: Process) => boolean): Promise<string[]> {
+async function deleteProcessesWhere(match: (p: Process) => boolean, opts = { tombstones: true }): Promise<string[]> {
   const gone = await mutateProcesses((d) => {
     const ids = d.processes.filter(match).map((p) => p.id);
     for (const v of d.versions)
-      if (v.version === 1 && v.source_session_id && ids.includes(v.process_id) && !d.tombstones.includes(v.source_session_id))
+      if (opts.tombstones && v.version === 1 && v.source_session_id && ids.includes(v.process_id) && !d.tombstones.includes(v.source_session_id))
         d.tombstones.push(v.source_session_id);
     d.processes = d.processes.filter((p) => !ids.includes(p.id));
     d.versions = d.versions.filter((v) => !ids.includes(v.process_id));

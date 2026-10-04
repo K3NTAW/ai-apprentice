@@ -816,9 +816,12 @@ export function createSupabaseStore(
       return toAgent(rows[0]);
     },
 
-    // sessions_agent_fkey (on delete set null (agent_id)) clears the link on the sessions.
+    // The agent's sessions go first, explicitly, so this holds before migration 20261004060000 (sessions_agent_fkey
+    // on delete cascade) too; their child rows cascade. processes and versions cascade from the agent row. Frame
+    // objects in Storage are removed by the delete route (src/lib/agents/admin.ts) before it calls this path.
     async deleteAgent(id) {
       if (!isValidAgentId(id)) return false;
+      check("delete sessions", await client.from("sessions").delete().eq("workspace_id", workspaceId).eq("agent_id", id));
       const res = await client.from("agents").delete().eq("id", id).eq("workspace_id", workspaceId).select("id");
       const rows = check("delete agents", res) as unknown[] | null;
       return !!rows && rows.length > 0;

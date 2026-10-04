@@ -49,6 +49,7 @@ vi.mock("@/lib/supabase/admin", () => ({ createSupabaseAdminClient: () => state.
 
 import { POST as sessionPost } from "../session/route";
 import { DELETE as agentDelete, GET as agentGet, PATCH as agentPatch } from "./[id]/route";
+import { GET as deletionGet } from "./[id]/deletion/route";
 import { GET as listGet, POST as createPost } from "./route";
 
 const avatar = { shape: "blob", face: "smile", color: "#3366FF", accent: "#FFCC00" };
@@ -137,21 +138,47 @@ describe("/api/agents", () => {
     expect((await agentPatch(req("PATCH", { name: "x" }), params(a.id))).status).toBe(403);
   });
 
-  it("deletes as owner only: capture sessions go, teach sessions stay with the link cleared", async () => {
+  it("deletes as owner or creator only: every session of the agent goes, capture and teach", async () => {
     const a = await (await createPost(req("POST", body))).json();
     const s = await (await sessionPost(req("POST", { kind: "capture", agent_id: a.id }))).json();
     const t = await (await sessionPost(req("POST", { kind: "teach", agent_id: a.id }))).json();
+    const plain = await (await sessionPost(req("POST", { kind: "teach" }))).json();
     expect(s.agent_id).toBe(a.id);
-    state.role = "expert";
-    const denied = await agentDelete(req("DELETE"), params(a.id));
-    expect(denied.status).toBe(403);
+    // An expert who did not create it, and a learner, are refused.
+    state.fake.tables.agents[0].created_by = OTHER;
+    for (const role of ["expert", "learner"]) {
+      state.role = role;
+      const denied = await agentDelete(req("DELETE"), params(a.id));
+      expect(denied.status).toBe(403);
+    }
+    expect(state.fake.tables.sessions).toHaveLength(3);
     state.role = "owner";
     expect((await agentDelete(req("DELETE"), params(a.id))).status).toBe(204);
     expect((await agentDelete(req("DELETE"), params(a.id))).status).toBe(404);
     expect((await agentGet(req("GET"), params(a.id))).status).toBe(404);
-    expect(state.fake.tables.sessions.map((r) => r.id)).toEqual([t.id]);
-    expect(state.fake.tables.sessions[0]).toMatchObject({ id: t.id, agent_id: null });
+    expect(state.fake.tables.sessions.map((r) => r.id)).toEqual([plain.id]);
+    expect(state.fake.tables.sessions.some((r) => r.id === s.id || r.id === t.id)).toBe(false);
   });
+
+  it("the deletion preview counts the agent's processes and sessions and says who may delete", async () => {
+    const a = await (await createPost(req("POST", body))).json();
+    await sessionPost(req("POST", { kind: "capture", agent_id: a.id }));
+    await sessionPost(req("POST", { kind: "teach", agent_id: a.id }));
+    await sessionPost(req("POST", { kind: "teach" }));
+    expect(await (await deletionGet(req("GET"), params(a.id))).json()).toEqual({ can_delete: true, processes: 0, sessions: 2 });
+    state.fake.tables.agents[0].created_by = OTHER;
+    state.role = "expert";
+    expect(await (await deletionGet(req("GET"), params(a.id))).json()).toMatchObject({ can_delete: false });
+  });
+
+  it("the creator may delete their agent without being owner", async () => {
+    state.role = "expert";
+    const a = await (await createPost(req("POST", body))).json();
+    expect(state.fake.tables.agents[0].created_by).toBe(USER);
+    expect((await agentDelete(req("DELETE"), params(a.id))).status).toBe(204);
+    expect(state.fake.tables.agents).toHaveLength(0);
+  });
+
 
   it("answers 404 for an agent of another workspace on every method", async () => {
     const id = await seed(WS_B, OTHER);

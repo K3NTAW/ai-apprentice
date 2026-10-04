@@ -1205,3 +1205,59 @@ describe("session teach migration", () => {
     expect(norm(commentText(rollback))).toContain("lossy");
   });
 });
+
+describe("agent delete cascade migration", () => {
+  const FILE = "20261004060000_agent_delete_cascade.sql";
+  const sql = readFileSync(path.join(MIGRATIONS, FILE), "utf8");
+  const rollback = readFileSync(path.join(ROLLBACKS, FILE.replace(/\.sql$/, ".down.sql")), "utf8");
+  const stmts = normStatements(sql);
+
+  // Last definition of every foreign key to public.agents across all migrations, in order.
+  function agentForeignKeys(): Map<string, string> {
+    const out = new Map<string, string>();
+    for (const file of migrationFiles) {
+      for (const s of normStatements(readFileSync(path.join(MIGRATIONS, file), "utf8"))) {
+        const drop = /^alter table public\.\w+ drop constraint if exists (\w+)$/.exec(s);
+        if (drop) out.delete(drop[1]);
+        const re = /constraint (\w+) foreign key \([^)]*\) references public\.agents \([^)]*\) on delete (cascade|set null(?: \(\w+\))?)/g;
+        for (const m of s.matchAll(re)) out.set(m[1], m[2]);
+      }
+    }
+    return out;
+  }
+
+  it("every agent-owned table cascades on agent delete; only deletion requests keep a nulled link", () => {
+    expect(Object.fromEntries(agentForeignKeys())).toEqual({
+      sessions_agent_fkey: "cascade",
+      processes_agent_fkey: "cascade",
+      agent_deletion_requests_agent_fkey: "set null (agent_id)",
+    });
+  });
+
+  it("session children, process versions and tombstones go with their parent", () => {
+    const all = migrationFiles.map((f) => normStatements(readFileSync(path.join(MIGRATIONS, f), "utf8")).join(";\n")).join(";\n");
+    for (const t of ["session_events", "session_transcript", "session_qa", "session_frames"])
+      expect(all).toMatch(new RegExp(`create table public\\.${t} \\([^;]*session_id text not null references public\\.sessions on delete cascade`));
+    expect(all).toContain("source_session_id text primary key references public.sessions on delete cascade");
+    expect(all).toContain("foreign key (workspace_id, process_id) references public.processes (workspace_id, id) on delete cascade");
+  });
+
+  it("the tombstone trigger skips processes deleted with their agent", () => {
+    const fn = stmts.find((s) => s.startsWith("create or replace function public.processes_tombstone()")) ?? "";
+    expect(fn).toContain("security definer");
+    expect(fn).toContain("set search_path = ''");
+    expect(fn).toContain("exists (select 1 from public.agents a where a.workspace_id = old.workspace_id and a.id = old.agent_id)");
+  });
+
+  it("rollback restores on delete set null (agent_id) and the previous tombstone trigger", () => {
+    expect(check9Rollback(sql, rollback)).toEqual([]);
+    const down = normStatements(rollback);
+    const drop = down.findIndex((s) => s === "alter table if exists public.sessions drop constraint if exists sessions_agent_fkey");
+    const add = down.findIndex((s) => s.includes("add constraint sessions_agent_fkey") && s.endsWith("on delete set null (agent_id)"));
+    expect(drop).toBeGreaterThanOrEqual(0);
+    expect(add).toBeGreaterThan(drop);
+    const fn = down.find((s) => s.startsWith("create or replace function public.processes_tombstone()")) ?? "";
+    expect(fn).not.toContain("public.agents");
+    expect(fn).toContain("set search_path = ''");
+  });
+});

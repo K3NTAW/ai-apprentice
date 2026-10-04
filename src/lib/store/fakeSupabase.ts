@@ -4,7 +4,9 @@
 // (42501 on writes to an invisible session), the sessions insert policy (created_by = auth.uid()), the
 // session_frames.storage_path prefix check, timestamptz output strings and the storage not-found error shape.
 // Agents: RLS by workspace, the insert policy (created_by = auth.uid()), the sessions (workspace_id, agent_id)
-// foreign key (23503) and its on delete set null (agent_id). Not modelled: triggers (updated_at, guards).
+// foreign key (23503) and its on delete cascade (migration 20261004060000). Deleting sessions deletes their child
+// rows (events, transcript, Q&A, frames, tombstones). Storage list(prefix) answers the object names under it.
+// Not modelled: triggers (updated_at, guards).
 // Embedded counts on sessions (select "*,session_events(count)"): [{ count }] of the visible child rows.
 // Processes: RLS by workspace, no insert policy on processes or process_versions (direct inserts answer 42501),
 // the cascades (agent -> processes -> versions) and sessions.process_id on delete set null.
@@ -237,7 +239,7 @@ export class FakeSupabase {
   }
 
   rowVisible(table: string, row: Row): boolean {
-    if (BY_WORKSPACE.has(table)) return this.visibleWorkspaces.has(row.workspace_id as string);
+    if (BY_WORKSPACE.has(table) || table === "agent_reports") return this.visibleWorkspaces.has(row.workspace_id as string);
     return this.sessionVisible(row.session_id);
   }
 
@@ -269,12 +271,28 @@ export class FakeSupabase {
   /** processes_agent_fkey and process_versions_process_fkey on delete cascade, sessions_process_fkey set null. */
   cascadeProcesses(rows: Row[]): void {
     const gone = new Set(rows.map((r) => r.id));
+    // processes_tombstone: only while the source session and the agent still exist.
     for (const r of rows)
-      if (r.source_session_id != null && !this.tables.processes_tombstones.some((t) => t.source_session_id === r.source_session_id))
+      if (
+        r.source_session_id != null &&
+        this.tables.sessions.some((s) => s.id === r.source_session_id) &&
+        this.tables.agents.some((a) => a.id === r.agent_id) &&
+        !this.tables.processes_tombstones.some((t) => t.source_session_id === r.source_session_id)
+      )
         this.tables.processes_tombstones.push({ source_session_id: r.source_session_id, workspace_id: r.workspace_id, deleted_at: pgTs(new Date().toISOString()) });
     this.tables.processes = this.tables.processes.filter((p) => !gone.has(p.id));
     this.tables.process_versions = this.tables.process_versions.filter((v) => !gone.has(v.process_id));
     for (const r of this.tables.sessions) if (gone.has(r.process_id)) r.process_id = null;
+  }
+
+  /** References public.sessions on delete cascade; processes and versions set null. */
+  cascadeSessions(rows: Row[]): void {
+    const gone = new Set(rows.map((r) => r.id));
+    for (const t of ["session_events", "session_transcript", "session_qa", "session_frames"])
+      this.tables[t] = this.tables[t].filter((r) => !gone.has(r.session_id));
+    this.tables.processes_tombstones = this.tables.processes_tombstones.filter((r) => !gone.has(r.source_session_id));
+    for (const t of ["processes", "process_versions"])
+      for (const r of this.tables[t]) if (gone.has(r.source_session_id)) r.source_session_id = null;
   }
 
   normalise(table: string, row: Row, insert = true): Row {
@@ -326,6 +344,18 @@ export class FakeSupabase {
           const bytes = this.objects.get(p);
           if (!bytes || !this.visibleWorkspaces.has(ws)) return { data: null, error: notFound };
           return { data: new Blob([new Uint8Array(bytes)]), error: null };
+        },
+        list: async (prefix: string, opts?: { limit?: number; offset?: number }) => {
+          checkOpts("list", opts, ["limit", "offset"]);
+          const failure = this.takeFailure("storage");
+          if (failure) return { data: null, error: failure };
+          if (!this.visibleWorkspaces.has(prefix.split("/")[0])) return { data: [], error: null };
+          const names = [...this.objects.keys()]
+            .filter((p) => p.startsWith(`${prefix}/`) && !p.slice(prefix.length + 1).includes("/"))
+            .map((p) => p.slice(prefix.length + 1))
+            .sort();
+          const offset = opts?.offset ?? 0;
+          return { data: names.slice(offset, offset + (opts?.limit ?? 100)).map((name) => ({ name })), error: null };
         },
         remove: async (paths: string[]) => {
           const failure = this.takeFailure("storage");
@@ -600,9 +630,12 @@ class FakeQuery {
       this.fake.tables[this.table] = all.filter((r) => !out.includes(r));
       if (this.table === "agents") {
         const gone = new Set(out.map((r) => r.id));
-        for (const r of this.fake.tables.sessions) if (gone.has(r.agent_id)) r.agent_id = null;
+        const sessions = this.fake.tables.sessions.filter((r) => gone.has(r.agent_id));
+        this.fake.tables.sessions = this.fake.tables.sessions.filter((r) => !sessions.includes(r));
+        this.fake.cascadeSessions(sessions);
         this.fake.cascadeProcesses(this.fake.tables.processes.filter((p) => gone.has(p.agent_id)));
       }
+      if (this.table === "sessions") this.fake.cascadeSessions(out);
       if (this.table === "processes") this.fake.cascadeProcesses(out);
       return this.finish(out);
     }

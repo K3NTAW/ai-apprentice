@@ -77,7 +77,7 @@ describe("purge after 24 h", () => {
           { id: "fresh", ...run({ ended_at: at(200) }) },
         ];
       },
-      framesOf: async (ids) => ids.map((id) => ({ session_id: id, name: "f.jpg", path: `${id}/f.jpg` })),
+      frameObjectsOf: async (ids) => ids.map((id) => `${id}/f.jpg`),
       removeObjects: async (paths) => void calls.push(`objects:${paths.join(",")}`),
       deleteSessions: async (ids) => void calls.push(`sessions:${ids.join(",")}`),
     };

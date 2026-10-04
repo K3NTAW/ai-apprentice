@@ -167,20 +167,22 @@ describe("file backend agent links", () => {
     expect(summary?.agent_id).toBeUndefined();
   });
 
-  it("deleteAgent clears session links in the same write queue as the agent removal", async () => {
+  it("deleteAgent deletes its sessions in the same write queue as the agent removal", async () => {
     const a = await fileStore.createAgent({ name: "Doomed", role: "R", avatar });
     const keep = await fileStore.createAgent({ name: "Kept", role: "R", avatar });
     const linked = await Promise.all([1, 2, 3].map(() => createSession({ kind: "capture", agent_id: a.id })));
+    await saveFrame(linked[0].id, 1, Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
     const other = await createSession({ kind: "capture", agent_id: keep.id });
     const deleted = fileStore.deleteAgent(a.id);
-    // Queued behind the delete: when it lands, the links must already be gone from disk.
+    // Queued behind the delete: when it lands, the sessions must already be gone from disk.
     await fileStore.updateAgent(keep.id, { name: "Kept 2" });
-    for (const s of linked) expect(JSON.parse(await sessionJson(s.id)).agent_id).toBeUndefined();
+    for (const s of linked) await expect(access(path.join(dir, "sessions", s.id))).rejects.toThrow();
     expect(JSON.parse(await sessionJson(other.id)).agent_id).toBe(keep.id);
     expect(await deleted).toBe(true);
     expect(await fileStore.getAgent(a.id)).toBeNull();
     expect(await fileStore.deleteAgent(a.id)).toBe(false);
   });
+
 });
 
 describe("frames route", () => {

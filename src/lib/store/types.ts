@@ -125,7 +125,7 @@ export interface SessionStore {
   createAgent(input: AgentInput): Promise<Agent>;
   /** Throws AgentNotFoundError when missing or outside the workspace. */
   updateAgent(id: string, patch: AgentPatch): Promise<Agent>;
-  /** False when missing or outside the workspace. Sessions keep their history; their agent_id is cleared. */
+  /** False when missing or outside the workspace. Its sessions (with their child rows), processes and versions go too. */
   deleteAgent(id: string): Promise<boolean>;
   // Processes. Supabase throws ProcessesUnavailableError while migration 20261004030000_processes is not applied.
   // Ids are UUIDs; a malformed id reads as missing. A process of another workspace is missing.

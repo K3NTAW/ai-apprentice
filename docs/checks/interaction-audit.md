@@ -262,7 +262,7 @@ dead (no action, fails the guard).
 | /agents/preview/[id]?tab=settings | a | Teach a new employee | Opens /learn | works |
 | /agents/preview/[id]?tab=settings | a | Train | Opens /capture | works |
 | /agents/preview/[id]?tab=settings | button | Ask about guardrails first | Runs 'Ask about guardrails first' in place | works |
-| /agents/preview/[id]?tab=settings | button | Delete agent | Runs 'Delete agent' in place | works |
+| /agents/preview/[id]?tab=settings | button | Delete agent | Owner or creator only; the confirm names the N processes and M training sessions, the delete removes everything of the agent and refreshes the sidebar recents | works |
 | /agents/preview/[id]?tab=settings | button | Learn keyboard shortcuts | Runs 'Learn keyboard shortcuts' in place | works |
 | /agents/preview/[id]?tab=settings | button | Redact IBANs and phone numbers | Runs 'Redact IBANs and phone numbers' in place | works |
 | /agents/preview/[id]?tab=settings | button | Redact names and email addresses | Runs 'Redact names and email addresses' in place | works |

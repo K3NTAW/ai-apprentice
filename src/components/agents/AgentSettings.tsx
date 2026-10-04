@@ -2,7 +2,8 @@
 // Agent settings tab, 1:1 with the settings tab of docs/design/canvas/Agent.dc.html (AgentSettings.dc.html imports it):
 // Identity, Questions while training, Privacy, Delete <agent>. Identity saves with PATCH /api/agents/[id] on blur or
 // Save; every other control saves its own key with PATCH /api/agents/[id]/settings (merge patch).
-// Owners and experts edit; Privacy is owner only. Owners delete (typed name), everyone else requests deletion.
+// Owners and experts edit; Privacy is owner only. The owner or the agent's creator deletes (typed name, the confirm
+// names what goes, from GET /api/agents/[id]/deletion); everyone else requests deletion.
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
@@ -24,13 +25,19 @@ import type { Role } from "@/lib/auth/context";
 import { AGENT_EXPERT_NAME_MAX, AGENT_NAME_MAX, AGENT_ROLE_MAX, type Agent } from "@/lib/types";
 
 export const canEditAgent = (role: Role | null) => role === "owner" || role === "expert";
-export const canDeleteAgent = (role: Role | null) => role === "owner";
+/** Owner, or the user who created the agent (the DELETE /api/agents/[id] rule). */
+export const canDeleteAgent = (role: Role | null, isCreator = false) => role === "owner" || isCreator;
 export const canEditPrivacy = (role: Role | null) => role === "owner";
 /** Owner Delete asks for the typed agent name (see the dialog below). */
-export const DELETE_CONFIRM = "Delete this agent? Type its name to confirm. Teach results are kept as a report.";
+export const DELETE_CONFIRM = "Delete this agent? Type its name to confirm. Everything of it is deleted.";
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+/** The confirm names what goes. */
+export const deleteConfirmText = (processes: number, sessions: number) =>
+  `This deletes the agent, its ${plural(processes, "process", "processes")} and ${plural(sessions, "training session", "training sessions")}. This cannot be undone.`;
+export type DeletionPreview = { can_delete: boolean; processes: number; sessions: number };
 export const SPEEDS = [0.8, 0.9, 1, 1.1, 1.2] as const;
 export const deleteText = (name: string, workMaps: number) =>
-  `Removes ${name}, its ${workMaps} Work Map${workMaps === 1 ? "" : "s"} and all screen moments. Learner progress is kept as a report. This needs the workspace owner's approval.`;
+  `Removes ${name}, its ${workMaps} Work Map${workMaps === 1 ? "" : "s"}, every training and teach session with its screen moments, and all learner progress. Only the owner or the agent's creator can delete it.`;
 
 const ROW: CSSProperties = {
   display: "flex",
@@ -246,12 +253,31 @@ export default function AgentSettings({ agent, role, workMaps = 0 }: { agent: Ag
   const [confirming, setConfirming] = useState(false);
   const [typed, setTyped] = useState("");
   const [delNotice, setDelNotice] = useState<Notice>(null);
+  const [preview, setPreview] = useState<DeletionPreview | null>(null);
+  const mayDelete = canDeleteAgent(role, preview?.can_delete === true);
+
+  useEffect(() => {
+    let live = true;
+    fetch(`${base}/deletion`, { headers: { accept: "application/json" } })
+      .then((res) => (res.ok ? (res.json() as Promise<DeletionPreview>) : null))
+      .then((p) => {
+        if (live && p) setPreview(p);
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [base]);
 
   async function remove() {
     setBusy(true);
     try {
       const res = await fetch(base, { method: "DELETE" });
-      if (res.ok) router.push("/agents");
+      // refresh re-renders the layout too, so the sidebar recents and counts drop the agent's sessions.
+      if (res.ok) {
+        router.push("/agents");
+        router.refresh();
+      }
       else setDelNotice({ ok: false, text: await errorText(res, "Could not delete") });
     } catch {
       setDelNotice({ ok: false, text: "Could not delete. Check the connection." });
@@ -356,7 +382,7 @@ export default function AgentSettings({ agent, role, workMaps = 0 }: { agent: Ag
         <p className="text-[13px]" style={{ color: "var(--mu)" }}>
           {deleteText(agent.name, workMaps)}
         </p>
-        {canDeleteAgent(role) ? (
+        {mayDelete ? (
           <Button variant="danger" size="sm" className="self-start" aria-label="Delete agent" disabled={busy} onClick={() => setConfirming(true)}>
             Delete
           </Button>
@@ -370,9 +396,12 @@ export default function AgentSettings({ agent, role, workMaps = 0 }: { agent: Ag
             <h3 id="del-title" className="text-sm font-medium">
               Type {agent.name} to delete it
             </h3>
+            <p className="text-[13px]" style={{ color: "var(--mu)" }} data-testid="delete-confirm-text">
+              {preview ? deleteConfirmText(preview.processes, preview.sessions) : "Counting what will be deleted…"}
+            </p>
             <Input aria-label="Agent name" value={typed} onChange={(e) => setTyped(e.target.value)} autoFocus />
             <div className="flex" style={{ gap: 8 }}>
-              <Button variant="danger" size="sm" disabled={busy || !canConfirmDelete(typed, agent.name)} onClick={() => void remove()}>
+              <Button variant="danger" size="sm" disabled={busy || !preview || !canConfirmDelete(typed, agent.name)} onClick={() => void remove()}>
                 Delete {agent.name}
               </Button>
               <Button variant="ghost" size="sm" onClick={() => { setConfirming(false); setTyped(""); }}>

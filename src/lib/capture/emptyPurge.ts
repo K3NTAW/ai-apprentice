@@ -10,7 +10,7 @@ import { EMPTY_MIN_EVENTS, EMPTY_PURGE_MS, isAnswered, isEmptyCapture, isPurgeab
 
 export const EMPTY_PURGE_BATCH = 200;
 
-export type DeletePort = Pick<DataPort, "framesOf" | "removeObjects" | "deleteSessions">;
+export type DeletePort = Pick<DataPort, "frameObjectsOf" | "removeObjects" | "deleteSessions">;
 export type EmptyPurgePort = DeletePort & {
   /** Empty capture runs (isEmptyCapture) that ended at or before cutoffMs, at most limit, with their facts. */
   candidates(cutoffMs: number, limit: number): Promise<(RunFacts & { id: string })[]>;
@@ -18,11 +18,11 @@ export type EmptyPurgePort = DeletePort & {
 
 const chunks = <T>(xs: T[], n: number) => Array.from({ length: Math.ceil(xs.length / n) }, (_, i) => xs.slice(i * n, i * n + n));
 
-/** Frames from Storage, then the session rows. */
+/** Frame objects from Storage (listed by session prefix, as the agent delete does), then the session rows. */
 export async function deleteSessionsWithFrames(port: DeletePort, ids: string[]): Promise<void> {
   if (ids.length === 0) return;
-  const frames = await port.framesOf(ids);
-  for (const batch of chunks(frames.map((f) => f.path), STORAGE_BATCH)) await port.removeObjects(batch);
+  const paths = await port.frameObjectsOf(ids);
+  for (const batch of chunks(paths, STORAGE_BATCH)) await port.removeObjects(batch);
   await port.deleteSessions(ids);
 }
 
@@ -37,7 +37,7 @@ export async function purgeEmptySessions(port: EmptyPurgePort, nowMs: number, li
 export function fileEmptyPurgePort(): EmptyPurgePort {
   const data = fileDataPort();
   return {
-    framesOf: data.framesOf,
+    frameObjectsOf: data.frameObjectsOf,
     removeObjects: data.removeObjects,
     deleteSessions: data.deleteSessions,
     async candidates(cutoffMs, limit) {
@@ -85,7 +85,7 @@ export function supabaseEmptyPurgePort(db: SupabaseClient, opts: { pageSize?: nu
       .order("id", { ascending: true })
       .range(from, from + page - 1);
   return {
-    framesOf: data.framesOf,
+    frameObjectsOf: data.frameObjectsOf,
     removeObjects: data.removeObjects,
     async deleteSessions(ids) {
       if (ids.length === 0) return;

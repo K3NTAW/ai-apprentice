@@ -32,7 +32,7 @@ describe("agent settings tab", () => {
     for (const o of ["7 days", "30 days", "90 days", "365 days"]) expect(out).toContain(`>${o}</option>`);
     expect(out).toContain(deleteText("Pip", 6).replace("'", "&#x27;"));
     expect(deleteText("Pip", 6)).toBe(
-      "Removes Pip, its 6 Work Maps and all screen moments. Learner progress is kept as a report. This needs the workspace owner's approval.",
+      "Removes Pip, its 6 Work Maps, every training and teach session with its screen moments, and all learner progress. Only the owner or the agent's creator can delete it.",
     );
   });
 

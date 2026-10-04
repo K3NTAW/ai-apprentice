@@ -1,20 +1,23 @@
 // Agent settings, deletion requests, delete with data and frame retention. Server only.
-// File backend: data/agent_settings.json, data/agent_deletion_requests.json, data/agent_reports.json.
-// Supabase backend: agents.settings, public.agent_deletion_requests, public.agent_reports
+// File backend: data/agent_settings.json, data/agent_deletion_requests.json, data/agent_reports.json (legacy, no
+// longer written: a delete removes the agent's report). Supabase backend: agents.settings,
+// public.agent_deletion_requests, public.agent_reports
 // (supabase/migrations/20261004010000_agent_settings.sql).
 //
 // Until that migration is applied, settings reads answer the defaults with available: false and every write throws
 // SettingsUnavailableError. Only the undefined column / function / table errors count as "not applied".
 //
-// Delete contract (owner Delete and owner Approve run the same deleteAgentWithData):
-//  1. frames of every session of the agent: Storage objects first, then the session_frames rows;
-//  2. the report row (agent_reports, one per agent, upsert) keeps the teach sessions (learner progress);
-//  3. the capture sessions (the Work Maps) are deleted; teach sessions stay, their agent_id goes null;
-//  4. the agent row. Deletion requests keep agent_name, their agent_id goes null.
-// Any step that fails throws DeleteAgentError and leaves later steps undone; a retry repeats every step safely.
+// Delete contract (owner Delete and owner Approve run the same deleteAgentWithData). Everything of the agent goes:
+//  1. the frame objects of every session of the agent (capture, debrief, teach), listed by session prefix and
+//     removed in batches. A Storage error is logged and does not stop the delete: rows are the source of truth,
+//     a later retention run can sweep leftover objects;
+//  2. every session of the agent with its events, Q&A, transcript, frame rows, Work Map and teach progress;
+//  3. the agent row with its settings, its processes and their versions (supabase: on delete cascade, migration
+//     20261004060000_agent_delete_cascade). Deletion requests keep agent_name, their agent_id goes null.
+// A row step that fails throws DeleteAgentError and leaves later steps undone; a retry repeats every step safely.
 // An agent that is already gone answers { deleted: false } (Approve then just records the decision).
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { RequestContext } from "@/lib/auth/context";
@@ -32,7 +35,7 @@ export class SettingsUnavailableError extends Error {
 }
 
 export class DeleteAgentError extends Error {
-  constructor(readonly step: "storage" | "frames" | "report" | "sessions" | "agent", cause: unknown) {
+  constructor(readonly step: "sessions" | "agent", cause: unknown) {
     super(`delete agent failed at ${step}: ${cause instanceof Error ? cause.message : JSON.stringify(cause)}`);
     this.name = "DeleteAgentError";
   }
@@ -68,8 +71,9 @@ export type DeletionRequest = {
   decided_by: string | null;
   decided_at: string | null;
 };
-export type DeleteResult = { deleted: boolean; frames: number; sessions: number; kept_teach: number };
+export type DeleteResult = { deleted: boolean; frames: number; sessions: number };
 export type TeachRecord = { session_id: string; created_by: string | null; started_at: string; ended_at: string | null };
+/** Written by the earlier delete contract (teach sessions kept); a delete now removes the agent's row. */
 export type AgentReport = {
   workspace_id: string;
   agent_id: string;
@@ -90,6 +94,8 @@ export interface AgentAdmin {
   /** pending -> approved or declined. Throws RequestNotFoundError when missing or already decided. */
   decide(id: string, status: "approved" | "declined"): Promise<DeletionRequest>;
   deleteAgentWithData(agentId: string): Promise<DeleteResult>;
+  /** The user who created the agent; null when unknown (file backend, deleted user) or missing. */
+  creatorOf(agentId: string): Promise<string | null>;
 }
 
 // ---------------------------------------------------------------------------
@@ -102,11 +108,12 @@ export type SessionRef = { id: string; kind: "capture" | "teach"; created_by: st
 export type DataPort = {
   agentName(agentId: string): Promise<string | null>;
   sessionsOf(agentId: string): Promise<SessionRef[]>;
-  framesOf(sessionIds: string[]): Promise<FrameRef[]>;
+  /** Every stored frame object of these sessions (listed by session prefix, not by rows). */
+  frameObjectsOf(sessionIds: string[]): Promise<string[]>;
   removeObjects(paths: string[]): Promise<void>;
-  deleteFrameRows(frames: FrameRef[]): Promise<void>;
-  upsertReport(report: AgentReport): Promise<void>;
+  /** The sessions with all their child rows. */
   deleteSessions(ids: string[]): Promise<void>;
+  /** The agent row with its settings, processes and versions. */
   deleteAgent(agentId: string): Promise<void>;
 };
 
@@ -123,29 +130,23 @@ async function step<T>(name: DeleteAgentError["step"], fn: () => Promise<T>): Pr
 
 export async function deleteAgentData(
   port: DataPort,
-  input: { workspaceId: string; agentId: string; userId: string | null; now?: () => Date },
+  input: { workspaceId: string; agentId: string; userId: string | null },
 ): Promise<DeleteResult> {
   const name = await port.agentName(input.agentId);
-  if (name === null) return { deleted: false, frames: 0, sessions: 0, kept_teach: 0 };
-  const sessions = await port.sessionsOf(input.agentId);
-  const frames = await port.framesOf(sessions.map((s) => s.id));
-  for (const batch of chunks(frames.map((f) => f.path), STORAGE_BATCH)) await step("storage", () => port.removeObjects(batch));
-  await step("frames", () => port.deleteFrameRows(frames));
-  const teach = sessions.filter((s) => s.kind === "teach");
-  await step("report", () =>
-    port.upsertReport({
-      workspace_id: input.workspaceId,
-      agent_id: input.agentId,
-      agent_name: name,
-      deleted_by: input.userId,
-      deleted_at: (input.now?.() ?? new Date()).toISOString(),
-      teach: teach.map((s) => ({ session_id: s.id, created_by: s.created_by, started_at: s.started_at, ended_at: s.ended_at })),
-    }),
-  );
-  const capture = sessions.filter((s) => s.kind === "capture").map((s) => s.id);
-  await step("sessions", () => port.deleteSessions(capture));
+  if (name === null) return { deleted: false, frames: 0, sessions: 0 };
+  const ids = (await port.sessionsOf(input.agentId)).map((s) => s.id);
+  const paths = await port.frameObjectsOf(ids).catch((err: unknown) => {
+    console.error(`delete agent ${input.agentId}: listing frames failed, continuing`, err);
+    return [] as string[];
+  });
+  for (const batch of chunks(paths, STORAGE_BATCH)) {
+    await port.removeObjects(batch).catch((err: unknown) => {
+      console.error(`delete agent ${input.agentId}: removing ${batch.length} frames failed, continuing`, err);
+    });
+  }
+  await step("sessions", () => port.deleteSessions(ids));
   await step("agent", () => port.deleteAgent(input.agentId));
-  return { deleted: true, frames: frames.length, sessions: capture.length, kept_teach: teach.length };
+  return { deleted: true, frames: paths.length, sessions: ids.length };
 }
 
 // ---------------------------------------------------------------------------
@@ -260,20 +261,18 @@ export function fileDataPort(): DataPort & RetentionPort {
         .filter((s) => s.agent_id === agentId)
         .map((s) => ({ id: s.id, kind: s.kind, created_by: s.created_by ?? null, started_at: s.started_at, ended_at: s.ended_at ?? null }));
     },
-    async framesOf(ids) {
-      const want = new Set(ids);
-      return (await fileSessions())
-        .filter((s) => want.has(s.id))
-        .flatMap((s) => (s.frames ?? []).map((f) => ({ session_id: s.id, name: f.name, path: framePath(s.id, f.name) })));
+    // The frames folder of each session (data/sessions/<id>/frames), not the session.json list.
+    async frameObjectsOf(ids) {
+      const out: string[] = [];
+      for (const id of ids) {
+        const names = await readdir(path.join(dataDir(), "sessions", id, "frames")).catch(() => [] as string[]);
+        for (const name of names) out.push(framePath(id, name));
+      }
+      return out;
     },
     removeObjects,
     deleteFrameRows,
-    async upsertReport(report) {
-      await serial(async () => {
-        const all = await readJson<AgentReport[]>("agent_reports.json", []);
-        await writeJson("agent_reports.json", [...all.filter((r) => r.agent_id !== report.agent_id), report]);
-      });
-    },
+    // fileStore.deleteAgent removes the agent's sessions too (and their process tombstones); this covers the list.
     async deleteSessions(ids) {
       for (const id of ids) await rm(path.join(dataDir(), "sessions", id), { recursive: true, force: true });
     },
@@ -283,6 +282,9 @@ export function fileDataPort(): DataPort & RetentionPort {
         const all = await readJson<Record<string, unknown>>("agent_settings.json", {});
         delete all[agentId];
         await writeJson("agent_settings.json", all);
+        const reports = await readJson<AgentReport[]>("agent_reports.json", []);
+        if (reports.some((r) => r.agent_id === agentId))
+          await writeJson("agent_reports.json", reports.filter((r) => r.agent_id !== agentId));
         const reqs = await readJson<DeletionRequest[]>("agent_deletion_requests.json", []);
         await writeJson(
           "agent_deletion_requests.json",
@@ -362,6 +364,9 @@ export function fileAgentAdmin(ctx: Pick<RequestContext, "workspaceId" | "userId
     deleteAgentWithData(agentId) {
       return deleteAgentData(port, { workspaceId: ctx.workspaceId, agentId, userId: ctx.userId });
     },
+    async creatorOf() {
+      return null;
+    },
   };
   return admin;
 }
@@ -381,9 +386,13 @@ function must<T>(what: string, res: PgResult<T>): T {
 }
 
 const BUCKET = "frames";
+const LIST_PAGE = 1000;
 
 /** Admin (service role) port scoped to one workspace. Callers check the role first. */
-export function supabaseDataPort(db: SupabaseClient, workspaceId: string): DataPort {
+export function supabaseDataPort(
+  db: SupabaseClient,
+  workspaceId: string,
+): DataPort & Pick<RetentionPort, "removeObjects" | "deleteFrameRows"> {
   return {
     async agentName(agentId) {
       const row = must(
@@ -402,13 +411,20 @@ export function supabaseDataPort(db: SupabaseClient, workspaceId: string): DataP
           .eq("agent_id", agentId),
       ) as SessionRef[];
     },
-    async framesOf(ids) {
-      if (ids.length === 0) return [];
-      const rows = must(
-        "select session_frames",
-        await db.from("session_frames").select("session_id,name,storage_path").in("session_id", ids),
-      ) as { session_id: string; name: string; storage_path: string }[];
-      return rows.map((r) => ({ session_id: r.session_id, name: r.name, path: r.storage_path }));
+    // Objects live at <workspaceId>/<sessionId>/<name>: list each session prefix, page by page.
+    async frameObjectsOf(ids) {
+      const out: string[] = [];
+      for (const id of ids) {
+        const prefix = `${workspaceId}/${id}`;
+        for (let offset = 0; ; offset += LIST_PAGE) {
+          const res = await db.storage.from(BUCKET).list(prefix, { limit: LIST_PAGE, offset });
+          if (res.error) throw res.error;
+          const names = (res.data ?? []).map((o) => o.name);
+          out.push(...names.map((n) => `${prefix}/${n}`));
+          if (names.length < LIST_PAGE) break;
+        }
+      }
+      return out;
     },
     async removeObjects(paths) {
       const res = await db.storage.from(BUCKET).remove(paths);
@@ -421,14 +437,14 @@ export function supabaseDataPort(db: SupabaseClient, workspaceId: string): DataP
         must("delete session_frames", await db.from("session_frames").delete().eq("session_id", id).in("name", names));
       }
     },
-    async upsertReport(report) {
-      must("upsert agent_reports", await db.from("agent_reports").upsert(report, { onConflict: "agent_id" }));
-    },
+    // Child rows (events, transcript, Q&A, frames, tombstones) go with on delete cascade.
     async deleteSessions(ids) {
-      if (ids.length === 0) return;
-      must("delete sessions", await db.from("sessions").delete().eq("workspace_id", workspaceId).in("id", ids));
+      for (const batch of chunks(ids, STORAGE_BATCH))
+        must("delete sessions", await db.from("sessions").delete().eq("workspace_id", workspaceId).in("id", batch));
     },
+    // Settings are a column; processes and versions cascade. A report of the earlier contract goes too.
     async deleteAgent(agentId) {
+      must("delete agent_reports", await db.from("agent_reports").delete().eq("workspace_id", workspaceId).eq("agent_id", agentId));
       must("delete agents", await db.from("agents").delete().eq("workspace_id", workspaceId).eq("id", agentId));
     },
   };
@@ -521,6 +537,13 @@ export function supabaseAgentAdmin(
     },
     deleteAgentWithData(agentId) {
       return deleteAgentData(supabaseDataPort(adminClient(), ws), { workspaceId: ws, agentId, userId: ctx.userId });
+    },
+    async creatorOf(agentId) {
+      const row = must(
+        "select agents.created_by",
+        await user.from("agents").select("created_by").eq("workspace_id", ws).eq("id", agentId).maybeSingle(),
+      ) as { created_by: string | null } | null;
+      return row?.created_by ?? null;
     },
   };
   return admin;
