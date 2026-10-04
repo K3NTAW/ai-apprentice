@@ -6,6 +6,7 @@ import PageMessage from "@/components/agents/PageMessage";
 import AppShell from "@/components/shell/AppShell";
 import { canCapture } from "@/components/shell/ShellHeader";
 import { getRequestContext } from "@/lib/auth/context";
+import { loadExpertOptions } from "./experts";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +24,7 @@ export default async function NewAgentPage() {
           </Link>
           <h1 className="ui-t1">New agent</h1>
         </div>
-        <NewAgentFlow />
+        <NewAgentFlow experts={await loadExpertOptions(result.ctx)} />
       </main>
     </AppShell>
   );

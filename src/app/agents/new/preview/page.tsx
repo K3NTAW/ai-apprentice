@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { memberName } from "@/components/agents/model";
+import { expertOption } from "@/components/agents/model";
 import NewAgentFlow from "@/components/agents/NewAgentFlow";
 import AppShell from "@/components/shell/AppShell";
 import { previewWorkspace } from "@/lib/fixtures/workspace";
@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 export default async function NewAgentPreviewPage({ searchParams }: { searchParams: Promise<{ step?: string }> }) {
   if (appMode() !== "local") notFound();
   const later = (await searchParams).step === "2";
-  const experts = previewWorkspace.members.filter((m) => m.role !== "learner").map((m) => ({ label: m.label, name: memberName(m.label) }));
+  const experts = previewWorkspace.members.filter((m) => m.role !== "learner").map(expertOption);
   return (
     <AppShell>
       <main className="flex flex-col gap-7 px-4 pt-9 pb-14 sm:px-10">
@@ -27,7 +27,7 @@ export default async function NewAgentPreviewPage({ searchParams }: { searchPara
           initialAgentId={later ? "pip" : null}
           initialName="Pip"
           initialRole="Senior AP Clerk"
-          initialExpert="Sabine Keller · sabine.keller@example.com"
+          initialExpert={{ name: experts[0]?.name ?? "Sabine Keller", userId: experts[0]?.userId }}
           initialFirstTask="Coding incoming supplier invoices, including capex or opex and the second approval for the Czech subsidiary."
           experts={experts}
         />

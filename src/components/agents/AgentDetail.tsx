@@ -103,7 +103,7 @@ function Processes({ rows, agentId, role }: { rows: ProcessRow[]; agentId: strin
   );
 }
 
-function Guardrails({ rows }: { rows: GuardrailRow[] }) {
+function Guardrails({ rows, agentId }: { rows: GuardrailRow[]; agentId: string }) {
   if (rows.length === 0) return <Empty>No guardrails yet. They come from the agent&apos;s confirmed Work Maps.</Empty>;
   const n = (k: GuardrailRow["kind"]) => rows.filter((g) => g.kind === k).length;
   return (
@@ -115,8 +115,8 @@ function Guardrails({ rows }: { rows: GuardrailRow[] }) {
           <Badge kind="exception">Exception {n("exception")}</Badge>
           <Badge kind="stop_and_ask">Stop and ask {n("stop_and_ask")}</Badge>
         </div>
-        {/* existing per-session export (GET /api/export), for the agent's first confirmed Work Map */}
-        <a className={buttonClass("secondary", "sm")} href={`/api/export?session_id=${encodeURIComponent(rows[0].sessionId)}`} download>
+        {/* agent-level export (GET /api/export?agent_id): every confirmed Work Map, one section per process */}
+        <a className={buttonClass("secondary", "sm")} href={`/api/export?agent_id=${encodeURIComponent(agentId)}`} download={`guardrails-${agentId}.md`}>
           <svg className="ui-ic" viewBox="0 0 24 24" style={{ width: 16, height: 16 }} aria-hidden="true">
             <path d="M12 4v11M7 10l5 5 5-5M5 20h14" />
           </svg>
@@ -290,7 +290,7 @@ export default function AgentDetail(props: AgentDetailProps) {
               <ShortcutsTab rows={props.shortcuts} expert={agent.expert_name ?? "the expert"} />
             </div>
           ))}
-        {tab === "guardrails" && <Guardrails rows={props.guardrails} />}
+        {tab === "guardrails" && <Guardrails rows={props.guardrails} agentId={agent.id} />}
         {tab === "learners" && <Learners rows={props.learners} />}
         {tab === "settings" && <AgentSettings agent={agent} role={role} />}
       </section>

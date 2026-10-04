@@ -10,7 +10,7 @@
 import { z } from "zod";
 import { agentStats, type AgentStats } from "@/lib/agents/stats";
 import type { CreatedBy, DashboardMember } from "@/lib/dashboard/summary";
-import type { Agent, Guardrail, Session } from "@/lib/types";
+import { AGENT_EXPERT_NAME_MAX, type Agent, type Guardrail, type Session } from "@/lib/types";
 import { countsLine, formatT, formatZurich } from "@/lib/workmap/view";
 
 export const AGENT_TABS = ["processes", "shortcuts", "guardrails", "learners", "settings"] as const;
@@ -312,4 +312,22 @@ export function expertInitials(value: string): string {
 export function memberName(label: string): string {
   const local = label.split("@")[0];
   return local.split(/[._-]+/).filter(Boolean).map((p) => p[0]!.toUpperCase() + p.slice(1)).join(" ") || label;
+}
+
+/** A workspace member offered by the expert picker: label is the address or short id shown as a hint. */
+export type ExpertOption = { userId: string; name: string; label: string; initial: string };
+/** The expert as held by the new agent flow: a picked member carries its user id, a typed name does not. */
+export type ExpertPick = { name: string; userId?: string };
+
+/** Picker option from a member label; the name is the email local part, cut to AGENT_EXPERT_NAME_MAX (never the address). */
+export function expertOption(member: { userId: string; label: string }): ExpertOption {
+  const name = (member.label.includes("@") ? memberName(member.label) : member.label).slice(0, AGENT_EXPERT_NAME_MAX).trim();
+  return { userId: member.userId, name, label: member.label, initial: expertInitials(name) };
+}
+
+/** The input value as the expert: an exact option name is that member (name plus user id), anything else is kept as typed. */
+export function pickExpert(value: string, options: readonly ExpertOption[]): ExpertPick {
+  const name = value.slice(0, AGENT_EXPERT_NAME_MAX);
+  const member = options.find((o) => o.name === name.trim());
+  return member ? { name: member.name, userId: member.userId } : { name };
 }

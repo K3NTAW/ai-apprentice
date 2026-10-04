@@ -14,7 +14,7 @@ const instrumentSerif = localFont({
   variable: "--font-instrument-serif",
 });
 
-// ?theme=light|dark forces the theme (headless design compare shots); a static script, no user input is echoed.
+// Local mode only: ?theme=light|dark forces the theme (headless design compare shots); a static script, no user input is echoed.
 const THEME_PARAM = `(function(){var t=new URLSearchParams(location.search).get("theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)})()`;
 
 const FONT_CLASS = `${GeistSans.variable} ${GeistMono.variable} ${instrumentSerif.variable}`;
@@ -28,12 +28,13 @@ export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   await connection();
-  const misconfigured = appMode() === "misconfigured";
+  const mode = appMode();
+  const misconfigured = mode === "misconfigured";
+  const themeOverride = mode === "local";
+  // The override script sets data-theme on <html> before hydration, so only <html> suppresses the warning, and only then.
   return (
-    <html lang="en" className={FONT_CLASS} suppressHydrationWarning>
-      <head>
-        <script dangerouslySetInnerHTML={{ __html: THEME_PARAM }} />
-      </head>
+    <html lang="en" className={FONT_CLASS} suppressHydrationWarning={themeOverride || undefined}>
+      <head>{themeOverride && <script dangerouslySetInnerHTML={{ __html: THEME_PARAM }} />}</head>
       <body className="antialiased">
         {misconfigured && (
           <div role="alert" className="border-b border-amber-300 bg-amber-50 px-8 py-2 text-sm text-amber-900">

@@ -8,18 +8,39 @@ import { previewAgents } from "@/lib/fixtures/agents";
 import { previewSessionsFull } from "@/lib/fixtures/preview";
 import AgentDetail, { type AgentDetailProps } from "./AgentDetail";
 import LearnView from "./LearnView";
-import { agentGuardrails, agentShortcuts, captureHref, learnAgents, learnProcesses, learnTraining, type ShortcutRow } from "./model";
+import { agentGuardrails, agentShortcuts, captureHref, expertOption, learnAgents, learnProcesses, learnTraining, pickExpert, type ShortcutRow } from "./model";
+import { AGENT_EXPERT_NAME_MAX } from "@/lib/types";
 import NewAgentFlow, { expertInitials, memberName } from "./NewAgentFlow";
 import ShortcutsTab, { shortcutApps } from "./ShortcutsTab";
 
 describe("new agent: first task and expert picker", () => {
   it("step 1 has the 'First task to learn' textarea and the expert picker with an avatar chip", () => {
-    const html = renderToStaticMarkup(<NewAgentFlow experts={[{ label: "sabine.keller@example.com", name: "Sabine Keller" }]} initialFirstTask="Code invoices" />);
+    const html = renderToStaticMarkup(<NewAgentFlow experts={[expertOption({ userId: "u-sabine", label: "sabine.keller@example.com" })]} initialFirstTask="Code invoices" />);
     expect(html).toContain("First task to learn");
     expect(html).toMatch(/<textarea[^>]*id="na-first"[^>]*>Code invoices<\/textarea>/);
     expect(html).toContain('data-testid="expert-chip"');
     expect(html).toContain('list="na-experts"');
-    expect(html).toContain('value="Sabine Keller · sabine.keller@example.com"');
+    expect(html).toContain('<option value="Sabine Keller" label="sabine.keller@example.com">');
+  });
+  it("a typed name containing '·' is kept intact; a picked member is name plus user id", () => {
+    const options = [expertOption({ userId: "u-sabine", label: "sabine.keller@example.com" })];
+    expect(pickExpert("Anna · Finance", options)).toEqual({ name: "Anna · Finance" });
+    expect(pickExpert("Sabine Keller", options)).toEqual({ name: "Sabine Keller", userId: "u-sabine" });
+    const html = renderToStaticMarkup(<NewAgentFlow experts={options} initialExpert={{ name: "Anna · Finance" }} />);
+    expect(html).toContain('value="Anna · Finance"');
+    expect(html).toContain("learns from <span");
+    expect(html).toContain(">Anna · Finance</span>");
+    const picked = renderToStaticMarkup(<NewAgentFlow experts={options} initialExpert={pickExpert("Sabine Keller", options)} />);
+    expect(picked).toContain('data-expert-user-id="u-sabine"');
+  });
+  it("a long member name is cut to AGENT_EXPERT_NAME_MAX without the address", () => {
+    const local = "a".repeat(AGENT_EXPERT_NAME_MAX + 20);
+    const o = expertOption({ userId: "u-long", label: `${local}@example.com` });
+    expect(o.name.length).toBeLessThanOrEqual(AGENT_EXPERT_NAME_MAX);
+    expect(o.name).not.toContain("@");
+    expect(o.name).not.toContain("example");
+    expect(pickExpert(o.name, [o])).toEqual({ name: o.name, userId: "u-long" });
+    expect(pickExpert("x".repeat(AGENT_EXPERT_NAME_MAX + 5), [o]).name).toHaveLength(AGENT_EXPERT_NAME_MAX);
   });
   it("initials and member names", () => {
     expect(expertInitials("Sabine Keller · sabine.keller@example.com")).toBe("SK");
@@ -62,7 +83,7 @@ describe("agent tabs", () => {
     expect(html).toContain("Confirmed");
     expect(html).toContain('data-testid="play-icon"');
     expect(html).toContain("Export guardrails");
-    expect(html).toContain("/api/export?session_id=pip-1");
+    expect(html).toContain("/api/export?agent_id=pip");
   });
   it("shortcuts: per-app filter chips", () => {
     const rows: ShortcutRow[] = [

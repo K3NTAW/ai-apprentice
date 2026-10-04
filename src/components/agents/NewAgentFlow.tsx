@@ -10,9 +10,9 @@ import { Badge, buttonClass } from "@/components/ui";
 import { DEFAULT_AVATAR } from "@/lib/avatar/render";
 import { AGENT_EXPERT_NAME_MAX, AGENT_NAME_MAX, AGENT_ROLE_MAX } from "@/lib/types";
 import AgentAvatar from "./AgentAvatar";
-import { captureHref, expertInitials } from "./model";
+import { captureHref, expertInitials, pickExpert, type ExpertOption, type ExpertPick } from "./model";
 
-export { expertInitials, memberName } from "./model";
+export { expertInitials, memberName, type ExpertOption, type ExpertPick } from "./model";
 
 const STEP_LABELS = ["Details", "Avatar", "Install and train"] as const;
 const muted = { color: "var(--mu)" } as const;
@@ -53,34 +53,33 @@ function Stepper({ active }: { active: 1 | 2 | 3 }) {
   );
 }
 
-export type ExpertOption = { label: string; name: string };
-
 export default function NewAgentFlow({
   initialAgentId = null,
   initialName = "",
   initialFirstTask = "",
-  initialExpert = "",
+  initialExpert = { name: "" },
   initialRole = "",
   experts = [],
 }: {
   initialAgentId?: string | null;
   initialName?: string;
   initialFirstTask?: string;
-  initialExpert?: string;
+  initialExpert?: ExpertPick;
   initialRole?: string;
   experts?: ExpertOption[];
 } = {}) {
   const [name, setName] = useState(initialName);
   const [role, setRole] = useState(initialRole);
-  const [expert, setExpert] = useState(initialExpert);
+  const [expert, setExpert] = useState<ExpertPick>(initialExpert);
   // The first task stays client-side: it becomes the ?task title of the Capture link.
   const [firstTask, setFirstTask] = useState(initialFirstTask);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [agentId, setAgentId] = useState<string | null>(initialAgentId);
 
-  // A picked member shows as 'Name · email'; only the name is stored.
-  const expertName = (v: string) => v.split("·")[0].trim().slice(0, AGENT_EXPERT_NAME_MAX);
+  // A picked member is held as name plus user id; a typed name is kept as typed. The agent stores the name.
+  const expertName = expert.name.trim();
+  const picked = expert.userId ? experts.find((o) => o.userId === expert.userId) : undefined;
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
@@ -93,7 +92,7 @@ export default function NewAgentFlow({
         body: JSON.stringify({
           name: name.trim(),
           role: role.trim(),
-          ...(expertName(expert) ? { expert_name: expertName(expert) } : {}),
+          ...(expertName ? { expert_name: expertName } : {}),
           avatar: DEFAULT_AVATAR,
         }),
       });
@@ -166,21 +165,22 @@ export default function NewAgentFlow({
                 className="absolute top-2 left-2.5 inline-flex size-7 items-center justify-center rounded-full text-[11px] font-semibold"
                 style={{ background: "var(--s3)", color: "var(--tx)" }}
               >
-                {expertInitials(expert || "?")}
+                {picked?.initial ?? expertInitials(expertName || "?")}
               </span>
               <input
                 id="na-expert"
                 className="ui-inp"
                 style={{ paddingLeft: 48 }}
                 list="na-experts"
-                value={expert}
-                maxLength={AGENT_EXPERT_NAME_MAX + 80}
+                value={expert.name}
+                data-expert-user-id={expert.userId}
+                maxLength={AGENT_EXPERT_NAME_MAX}
                 placeholder="Pick a workspace member or type a name"
-                onChange={(e) => setExpert(e.target.value)}
+                onChange={(e) => setExpert(pickExpert(e.target.value, experts))}
               />
               <datalist id="na-experts">
                 {experts.map((o) => (
-                  <option key={o.label} value={`${o.name} · ${o.label}`} />
+                  <option key={o.userId} value={o.name} label={o.label} />
                 ))}
               </datalist>
             </div>
@@ -208,7 +208,7 @@ export default function NewAgentFlow({
               <span className="ui-t2">{name.trim() || "Agent name"}</span>
               <span style={muted}>{role.trim() || "Role it will fill"}</span>
               <span className="text-sm" style={muted}>
-                learns from <span style={{ color: "var(--tx)" }}>{expertName(expert) || "the expert"}</span>
+                learns from <span style={{ color: "var(--tx)" }}>{expertName || "the expert"}</span>
               </span>
             </div>
             <Badge kind="pending" className="ml-1 self-start">Not trained yet</Badge>
