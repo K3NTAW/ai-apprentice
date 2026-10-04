@@ -3,15 +3,21 @@
 // Session refresh per the Supabase SSR guide: https://supabase.com/docs/guides/auth/server-side/nextjs
 //
 // Every page except '/', /login/* and /auth/* (/auth/callback, /auth/reset, /auth/confirmed, /auth/signout) is protected.
-// One Auth round trip per page request at most: /api/* (route handlers run requireContext and answer 401 themselves),
-// router prefetches and static assets skip getUser. A page request refreshes the session once and forwards the
-// verified user (signed header, see lib/auth/forwardedUser) so getRequestContext does not call getUser again.
+// One Auth round trip per request at most. Only /api/* (route handlers run requireContext and answer 401 themselves)
+// and /_next/* (plus the matcher's excluded files) skip getUser. Client headers never skip it: a router prefetch
+// (next-router-prefetch, purpose, sec-purpose, x-middleware-prefetch) is a page request like any other, refreshes
+// the session once and is redirected when signed out; a page path ending in .js or .css is still a page.
+// A page request forwards the verified user (signed header, see lib/auth/forwardedUser) so getRequestContext does
+// not call getUser again.
+// Server-Timing on pages: ctx-auth (the proxy getUser, the only one per page), db (store time in the proxy: none,
+// so 0; the render's memberships read is logged with PERF_LOG=1) and total (proxy start to response).
 // An Auth outage is not distinguished from a missing session: getUser throwing or returning an error fails closed
 // (redirect to /login).
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { FORWARDED_USER_HEADER, signForwardedUser } from "@/lib/auth/forwardedUser";
 import { safeNext } from "@/lib/auth/redirect";
+
 import { appMode, publicSupabaseEnv } from "@/lib/supabase/env";
 
 function segments(pathname: string): string[] {
@@ -32,23 +38,13 @@ function isApiPath(pathname: string): boolean {
 
 type PendingCookie = { name: string; value: string; options: CookieOptions };
 
-/** Next.js router prefetches (link viewport and hover prefetch, RSC prefetch) and browser speculative loads. */
-export function isPrefetchRequest(request: NextRequest): boolean {
-  const h = request.headers;
-  return (
-    h.get("next-router-prefetch") === "1" ||
-    h.has("x-middleware-prefetch") ||
-    h.get("purpose") === "prefetch" ||
-    /\bprefetch\b/.test(h.get("sec-purpose") ?? "")
-  );
-}
-
-const STATIC_ASSET = /\.(?:svg|png|jpg|jpeg|gif|webp|avif|ico|css|js|map|txt|xml|woff|woff2|ttf|otf)$/;
-function isStaticAsset(pathname: string): boolean {
-  return pathname.startsWith("/_next/") || STATIC_ASSET.test(pathname);
+/** Next internals only. A file extension on any other path proves nothing (the matcher excludes real files). */
+function isNextAsset(pathname: string): boolean {
+  return pathname.startsWith("/_next/");
 }
 
 export async function proxy(request: NextRequest): Promise<NextResponse> {
+  const start = performance.now();
   // Never trust a client-sent forwarded user: strip it from every request before anything else.
   const requestHeaders = new Headers(request.headers);
   requestHeaders.delete(FORWARDED_USER_HEADER);
@@ -72,9 +68,8 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     });
   }
 
-  // No Auth round trip here: route handlers run requireContext (401 when signed out), a prefetch is followed by
-  // the real navigation (the page resolves the user itself), and static assets carry no user data.
-  if (isApi || isPrefetchRequest(request) || isStaticAsset(pathname)) return pass();
+  // No Auth round trip here: route handlers run requireContext (401 when signed out); Next assets carry no user data.
+  if (isApi || isNextAsset(pathname)) return pass();
 
   // Page request: refresh the session once (Supabase SSR guide) and forward the verified user to the render.
   let pendingCookies: PendingCookie[] = [];
@@ -98,11 +93,12 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   try {
     const { data, error } = await supabase.auth.getUser();
     signedIn = !error && !!data?.user;
-    if (signedIn && data.user) requestHeaders.set(FORWARDED_USER_HEADER, signForwardedUser(data.user));
+    const signed = signedIn && data.user ? signForwardedUser(data.user) : null;
+    if (signed) requestHeaders.set(FORWARDED_USER_HEADER, signed);
   } catch {
     signedIn = false;
   }
-  const timing = `proxy-auth;dur=${(performance.now() - t0).toFixed(1)}`;
+  const ctxAuth = performance.now() - t0;
 
   const out =
     signedIn || isPublic
@@ -110,7 +106,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
       : NextResponse.redirect(new URL(`/login?next=${encodeURIComponent(safeNext(pathname + search))}`, url.origin));
   for (const { name, value, options } of pendingCookies) out.cookies.set(name, value, options);
   for (const [k, v] of Object.entries(pendingHeaders)) out.headers.set(k, v);
-  out.headers.append("Server-Timing", timing);
+  out.headers.append("Server-Timing", serverTiming({ "ctx-auth": ctxAuth, db: 0, total: performance.now() - start }));
   return out;
 }
 
@@ -121,3 +117,8 @@ export const config = {
     "/((?!_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|avif|ico|css|js|map|txt|xml|woff|woff2|ttf|otf)$).*)",
   ],
 };
+
+const serverTiming = (t: Record<string, number>) =>
+  Object.entries(t)
+    .map(([n, ms]) => `${n};dur=${ms.toFixed(1)}`)
+    .join(", ");

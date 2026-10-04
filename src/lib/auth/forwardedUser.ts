@@ -2,29 +2,44 @@
 // getRequestContext does not call getUser a second time in the same request.
 // Trust: the proxy deletes any incoming header of this name before it sets its own, and the value is an HMAC over
 // the user and a short expiry, so a client-sent value (or a request that bypassed the proxy) never verifies.
-// Key: FORWARDED_USER_SECRET, else derived from SUPABASE_SERVICE_ROLE_KEY, else a random per-process key
-// (then a render on another instance just falls back to getUser).
-import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+// Key: FORWARDED_USER_SECRET, else derived from SUPABASE_SERVICE_ROLE_KEY (set on Vercel anyway). With neither, one
+// warning on the first request and nothing is forwarded: the render calls getUser itself (two getUser per page request).
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
 export const FORWARDED_USER_HEADER = "x-aa-verified-user";
 export const FORWARDED_USER_TTL_MS = 30_000;
 
 export type ForwardedUser = { id: string; email: string | null; email_confirmed_at: string | null };
 
-let processKey: Buffer | null = null;
-function key(): Buffer {
+function key(): Buffer | null {
   const secret = process.env.FORWARDED_USER_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (secret) return createHash("sha256").update(`aa-forwarded-user:${secret}`).digest();
-  processKey ??= randomBytes(32);
-  return processKey;
+  return secret ? createHash("sha256").update(`aa-forwarded-user:${secret}`).digest() : null;
 }
 
-const sign = (payload: string) => createHmac("sha256", key()).update(payload).digest("base64url");
+let warned = false;
+/**
+ * Logs once per process when no key is configured. Runs on the first sign (the first proxied page request after
+ * startup), not at import: a console call at import time trips Next's patched console outside a request.
+ */
+export function warnIfNoForwardedUserKey(): void {
+  if (warned || key()) return;
+  warned = true;
+  console.warn(
+    "forwardedUser: neither FORWARDED_USER_SECRET nor SUPABASE_SERVICE_ROLE_KEY is set; the proxy does not forward the verified user and pages call getUser twice.",
+  );
+}
+
+const sign = (k: Buffer, payload: string) => createHmac("sha256", k).update(payload).digest("base64url");
 
 export function signForwardedUser(
   user: { id: string; email?: string | null; email_confirmed_at?: string | null },
   now = Date.now(),
-): string {
+): string | null {
+  const k = key();
+  if (!k) {
+    warnIfNoForwardedUserKey();
+    return null;
+  }
   const body: ForwardedUser & { exp: number } = {
     id: user.id,
     email: user.email ?? null,
@@ -32,15 +47,16 @@ export function signForwardedUser(
     exp: now + FORWARDED_USER_TTL_MS,
   };
   const payload = Buffer.from(JSON.stringify(body)).toString("base64url");
-  return `${payload}.${sign(payload)}`;
+  return `${payload}.${sign(k, payload)}`;
 }
 
-/** The forwarded user, or null when the value is missing, malformed, expired or not signed with our key. */
+/** The forwarded user, or null when no key is configured or the value is missing, malformed, expired or not signed with our key. */
 export function verifyForwardedUser(value: string | null | undefined, now = Date.now()): ForwardedUser | null {
-  if (!value) return null;
+  const k = key();
+  if (!value || !k) return null;
   const [payload, sig, extra] = value.split(".");
   if (!payload || !sig || extra !== undefined) return null;
-  const expected = Buffer.from(sign(payload));
+  const expected = Buffer.from(sign(k, payload));
   const got = Buffer.from(sig);
   if (expected.length !== got.length || !timingSafeEqual(expected, got)) return null;
   try {

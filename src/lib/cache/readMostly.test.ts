@@ -34,7 +34,7 @@ const fakeStore = vi.hoisted(() => ({
 vi.mock("@/lib/store", async (orig) => ({ ...(await orig<typeof import("@/lib/store")>()), getStore: () => fakeStore }));
 vi.mock("@/lib/dashboard/load", () => ({ loadDashboardInput: async () => ({ sessions: [], members: [], createdBy: {} }) }));
 
-import { withMutation } from "@/app/api/session/_http";
+import { withApi, withMutation } from "@/app/api/session/_http";
 import type { RequestContext } from "@/lib/auth/context";
 import { recentSessions } from "@/components/shell/AppShell";
 import { cachedMemberships } from "@/lib/auth/context";
@@ -130,26 +130,39 @@ describe("mutations revalidate the tags", () => {
     for (const m of found) expect(`${m[2]}${m[3]}`, m[1]).toBe('withMutation["agents"]');
   });
 
-  it("session writes expire 'sessions' (sidebar recents and agent stats)", () => {
-    for (const rel of [
-      "session/route.ts",
-      "session/[id]/events/route.ts",
-      "session/[id]/transcript/route.ts",
-      "session/[id]/qa/route.ts",
-      "session/[id]/off-record/route.ts",
-      "session/[id]/end/route.ts",
-      "vision/route.ts",
-      "workmap/route.ts",
-      "workmap/confirm/route.ts",
-    ]) {
+  it("session create, end and confirm expire 'sessions' (sidebar recents and agent stats)", () => {
+    for (const rel of ["session/route.ts", "session/[id]/end/route.ts", "workmap/confirm/route.ts"]) {
       const found = writers(src(rel));
       expect(found.length, rel).toBeGreaterThan(0);
       for (const m of found) expect(`${m[2]}${m[3]}`, rel).toBe('withMutation["sessions"]');
     }
   });
 
+  it("capture writes (events, transcript, qa, vision frames, off-record, workmap) do not expire any cache", () => {
+    for (const rel of [
+      "session/[id]/events/route.ts",
+      "session/[id]/transcript/route.ts",
+      "session/[id]/qa/route.ts",
+      "session/[id]/off-record/route.ts",
+      "vision/route.ts",
+      "workmap/route.ts",
+    ]) {
+      const found = writers(src(rel));
+      expect(found.length, rel).toBeGreaterThan(0);
+      for (const m of found) expect(`${m[2]}${m[3] ?? ""}`, rel).toBe("withApi");
+    }
+  });
+
+  it("a capture write after a cached sidebar read leaves the sidebar cache in place", async () => {
+    s.ctx = ctx("u1", "w1");
+    await withApi(async () => Response.json({ ok: true }));
+    expect(s.revalidated).toEqual([]);
+  });
+
   it("membership changes expire 'memberships' (bootstrap, member removal)", () => {
-    expect(src("auth/bootstrap/route.ts")).toContain('revalidateScopes(["memberships"], ctx)');
+    // bootstrapAfterSignIn (shared by /api/auth/bootstrap and /auth/callback) expires them for every caller.
+    expect(src("auth/bootstrap/route.ts")).toContain("bootstrapAfterSignIn(ctx.supabase, ctx.userId)");
+    expect(readFileSync(path.join(process.cwd(), "src/lib/auth/signIn.ts"), "utf8")).toContain('revalidateScopes(["memberships"]');
     expect(src("workspace/members/route.ts")).toContain('revalidateScopes(["memberships"], { userId: input.userId');
   });
 });

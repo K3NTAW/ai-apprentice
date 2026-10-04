@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
   mode: "supabase" as "local" | "supabase" | "misconfigured",
@@ -113,6 +113,11 @@ beforeEach(() => {
   state.proxyGetUser = 0;
   state.proxyUser = null;
   vi.mocked(createSupabaseServerClient).mockClear();
+  vi.stubEnv("FORWARDED_USER_SECRET", "test-forwarded-secret");
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
 });
 
 describe("one getUser per page request (proxy plus context)", () => {
@@ -135,10 +140,10 @@ describe("one getUser per page request (proxy plus context)", () => {
   it("a forged, tampered or expired header is ignored: the context calls getUser itself", async () => {
     const client = fakeClient({ user: { id: USER }, members: { data: [memberRow(WS_A, "A")], error: null } });
     state.client = client;
-    const good = signForwardedUser({ id: "someone-else" });
+    const good = signForwardedUser({ id: "someone-else" })!;
     const [payload] = good.split(".");
     const tampered = `${Buffer.from(JSON.stringify({ id: "attacker", exp: Date.now() + 1e6 })).toString("base64url")}.${good.split(".")[1]}`;
-    for (const v of ["attacker", `${payload}.bad`, tampered, signForwardedUser({ id: "old" }, Date.now() - 60_000)]) {
+    for (const v of ["attacker", `${payload}.bad`, tampered, signForwardedUser({ id: "old" }, Date.now() - 60_000)!]) {
       state.headers = { [FORWARDED_USER_HEADER]: v };
       client.auth.getUser.mockClear();
       const r = await getRequestContext();
@@ -150,10 +155,34 @@ describe("one getUser per page request (proxy plus context)", () => {
   it("requireContext (route handlers) never trusts the forwarded header", async () => {
     const client = fakeClient({ user: null });
     state.client = client;
-    state.headers = { [FORWARDED_USER_HEADER]: signForwardedUser({ id: USER }) };
+    state.headers = { [FORWARDED_USER_HEADER]: signForwardedUser({ id: USER })! };
     const res = await requireContext();
     expect(res instanceof Response && res.status).toBe(401);
     expect(client.auth.getUser).toHaveBeenCalledTimes(1);
+  });
+
+  it("no FORWARDED_USER_SECRET and no service role key: nothing is forwarded, the page costs two getUser", async () => {
+    vi.stubEnv("FORWARDED_USER_SECRET", "");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "");
+    state.proxyUser = { id: USER };
+    const client = fakeClient({ user: { id: USER }, members: { data: [memberRow(WS_A, "A")], error: null } });
+    state.client = client;
+    forward(await proxy(new NextRequest("http://app.test/agents")));
+    expect(state.headers).toEqual({});
+    const r = await getRequestContext();
+    expect(r).toMatchObject({ kind: "ok", ctx: { userId: USER } });
+    expect(state.proxyGetUser + client.auth.getUser.mock.calls.length).toBe(2);
+  });
+
+  it("the service role key alone is enough to forward (Vercel): one getUser", async () => {
+    vi.stubEnv("FORWARDED_USER_SECRET", "");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "service-placeholder");
+    state.proxyUser = { id: USER };
+    const client = fakeClient({ user: { id: USER }, members: { data: [memberRow(WS_A, "A")], error: null } });
+    state.client = client;
+    forward(await proxy(new NextRequest("http://app.test/agents")));
+    await getRequestContext();
+    expect(state.proxyGetUser + client.auth.getUser.mock.calls.length).toBe(1);
   });
 
   it("an /api request costs one getUser: the proxy skips it, requireContext runs it", async () => {

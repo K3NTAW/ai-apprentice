@@ -8,7 +8,6 @@
 import { NextResponse } from "next/server";
 import { WS_COOKIE, wsCookieOptions } from "@/lib/auth/cookies";
 import { requireContext } from "@/lib/auth/context";
-import { revalidateScopes } from "@/lib/cache/readMostly";
 import { PASSWORD_LOGIN_DEFAULT_NEXT } from "@/lib/auth/passwordLogin";
 import { safeNext } from "@/lib/auth/redirect";
 import { bootstrapAfterSignIn } from "@/lib/auth/signIn";
@@ -43,9 +42,7 @@ export async function POST(request: Request): Promise<Response> {
 
   const boot = await bootstrapAfterSignIn(ctx.supabase, ctx.userId);
   if (!boot.ok) return fail("workspace_setup_failed", 500);
-  // Bootstrap may accept invites: expire this user's cached memberships and the member list of the joined workspaces.
-  revalidateScopes(["memberships"], ctx);
-  if (boot.wsCookie) revalidateScopes(["members"], { userId: ctx.userId, workspaceId: boot.wsCookie });
+  // bootstrapAfterSignIn expired this user's cached memberships and the joined workspace's member list.
 
   const res = NextResponse.json({ redirect: next });
   if (boot.wsCookie) res.cookies.set(WS_COOKIE, boot.wsCookie, wsCookieOptions());

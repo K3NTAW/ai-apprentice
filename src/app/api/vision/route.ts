@@ -5,7 +5,7 @@ import { MAX_FRAME_BODY_BYTES } from "@/lib/perception/frame";
 import { redactScreenEvent } from "@/lib/perception/redactEvent";
 import { describeFrame } from "@/lib/perception/vision";
 import { consumeUsage } from "@/lib/usage";
-import { type Api, requireCreatorOrOwner, withMutation } from "../session/_http";
+import { type Api, requireCreatorOrOwner, withApi } from "../session/_http";
 
 export const runtime = "nodejs";
 // Vercel function limit: 60 s fits the plan (model calls can take tens of seconds).
@@ -26,7 +26,7 @@ function bad(error: string) {
 // Order: requireContext, the daily vision cap (one per frame, 429 daily_limit), validate the body, creator-or-owner, then saveFrame through the workspace store
 // (Storage in supabase mode, no local disk). SessionNotFoundError answers 404 via handle().
 export async function POST(req: Request): Promise<Response> {
-  return withMutation(["sessions"], (api) => visionFor(api, req));
+  return withApi((api) => visionFor(api, req));
 }
 
 async function visionFor(api: Api, req: Request): Promise<Response> {

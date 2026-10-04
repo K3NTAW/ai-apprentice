@@ -2,6 +2,7 @@
 import type { z } from "zod";
 import { type RequestContext, requireContext } from "@/lib/auth/context";
 import { revalidateScopes, type Scope } from "@/lib/cache/readMostly";
+import { serverTiming } from "@/lib/perf";
 import {
   getStore,
   InvalidOffRecordRangeError,
@@ -69,11 +70,32 @@ export function storeFor(ctx: RequestContext): SessionStore {
 export async function withApi(fn: (api: Api) => Promise<Response>): Promise<Response> {
   const t0 = performance.now();
   const ctx = await requireContext();
-  const auth = performance.now() - t0;
-  if (ctx instanceof Response) return withServerTiming(ctx, { auth });
-  const t1 = performance.now();
-  const res = await handle(() => fn({ ctx, store: storeFor(ctx) }));
-  return withServerTiming(res, { auth, db: performance.now() - t1 });
+  const ctxAuth = performance.now() - t0;
+  if (ctx instanceof Response) return withServerTiming(ctx, { "ctx-auth": ctxAuth, db: 0, total: ctxAuth });
+  const db = { ms: 0 };
+  const res = await handle(() => fn({ ctx, store: timedStore(storeFor(ctx), db) }));
+  return withServerTiming(res, { "ctx-auth": ctxAuth, db: db.ms, total: performance.now() - t0 });
+}
+
+/** The store with the time of every async call added to acc.ms (calls that overlap are each counted). */
+export function timedStore(store: SessionStore, acc: { ms: number }): SessionStore {
+  return new Proxy(store, {
+    get(target, prop, receiver) {
+      const value = Reflect.get(target, prop, receiver);
+      if (typeof value !== "function") return value;
+      return (...args: unknown[]) => {
+        const t = performance.now();
+        const out = value.apply(target, args);
+        if (!(out instanceof Promise)) {
+          acc.ms += performance.now() - t;
+          return out;
+        }
+        return out.finally(() => {
+          acc.ms += performance.now() - t;
+        });
+      };
+    },
+  });
 }
 
 /**
@@ -89,13 +111,11 @@ export async function withMutation(scopes: Scope[], fn: (api: Api) => Promise<Re
 }
 
 /**
- * Server-Timing (ms): auth is requireContext (getUser plus memberships), db is the handler body, which store
- * queries dominate. A response with immutable headers is copied first.
+ * Server-Timing (ms): ctx-auth is requireContext (getUser plus memberships), db is the sum of the store calls,
+ * total is requireContext start to response. A response with immutable headers is copied first.
  */
 export function withServerTiming(res: Response, timings: Record<string, number>): Response {
-  const value = Object.entries(timings)
-    .map(([name, ms]) => `${name};dur=${ms.toFixed(1)}`)
-    .join(", ");
+  const value = serverTiming(timings);
   try {
     res.headers.append("Server-Timing", value);
     return res;

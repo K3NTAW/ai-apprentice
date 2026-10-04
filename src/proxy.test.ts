@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { unstable_doesMiddlewareMatch } from "next/experimental/testing/server";
 import { NextRequest } from "next/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
   mode: "supabase" as "local" | "supabase" | "misconfigured",
@@ -57,6 +57,11 @@ beforeEach(() => {
   state.refresh = false;
   state.getUserCalls = 0;
   vi.mocked(createServerClient).mockClear();
+  vi.stubEnv("FORWARDED_USER_SECRET", "test-forwarded-secret");
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
 });
 
 const passes = (res: Response) => res.headers.get("x-middleware-next") === "1";
@@ -183,18 +188,59 @@ describe("auth round trips (performance 2)", () => {
     new NextRequest(new URL(path, "http://app.test"), { headers });
   const forwarded = (res: Response) => res.headers.get(`x-middleware-request-${FORWARDED_USER_HEADER}`);
 
-  it("no getUser for RSC and router prefetch requests", async () => {
-    state.user = { id: "u" };
-    const prefetches: Record<string, string>[] = [
-      { "next-router-prefetch": "1", rsc: "1" },
-      { purpose: "prefetch" },
-      { "sec-purpose": "prefetch;prerender" },
-      { "x-middleware-prefetch": "1" },
-    ];
+  const prefetches: Record<string, string>[] = [
+    { "next-router-prefetch": "1", rsc: "1" },
+    { "next-router-prefetch": "1" },
+    { purpose: "prefetch" },
+    { "sec-purpose": "prefetch;prerender" },
+    { "sec-purpose": "prefetch" },
+    { "x-middleware-prefetch": "1" },
+  ];
+
+  it("a page request with any prefetch header and no session is redirected to /login", async () => {
     for (const h of prefetches) {
-      expect(passes(await proxy(withHeaders("/agents", h))), JSON.stringify(h)).toBe(true);
+      const res = await proxy(withHeaders("/agents", h));
+      expect(res.status, JSON.stringify(h)).toBe(307);
+      expect(loginTarget(res)?.path, JSON.stringify(h)).toBe("/login");
+      expect(forwarded(res), JSON.stringify(h)).toBeNull();
     }
+    expect(state.getUserCalls).toBe(prefetches.length);
+  });
+
+  it("a signed-in prefetch costs one getUser (the session refresh) and forwards the user", async () => {
+    state.user = { id: "u" };
+    for (const h of prefetches) {
+      const res = await proxy(withHeaders("/agents", h));
+      expect(passes(res), JSON.stringify(h)).toBe(true);
+      expect(verifyForwardedUser(forwarded(res))?.id).toBe("u");
+    }
+    expect(state.getUserCalls).toBe(prefetches.length);
+  });
+
+  it("paths outside /_next/ ending in .js, .css, .txt and similar stay protected", async () => {
+    for (const p of ["/app-route.js", "/agents/x.css", "/robots-private.txt", "/capture/a.map", "/teach/b.xml", "/a.png"]) {
+      const res = await proxy(req(p));
+      expect(res.status, p).toBe(307);
+      expect(loginTarget(res)?.path, p).toBe("/login");
+    }
+  });
+
+  it("/_next/ assets skip the Auth call", async () => {
+    for (const p of ["/_next/static/chunk.js", "/_next/data/x.json"]) expect(passes(await proxy(req(p))), p).toBe(true);
     expect(state.getUserCalls).toBe(0);
+  });
+
+  it("getUser calls in the proxy per request: page 1, prefetch 1, /api 0, /_next 0", async () => {
+    state.user = { id: "u" };
+    const count = async (r: NextRequest) => {
+      state.getUserCalls = 0;
+      await proxy(r);
+      return state.getUserCalls;
+    };
+    expect(await count(req("/agents"))).toBe(1);
+    expect(await count(withHeaders("/agents", { "next-router-prefetch": "1", rsc: "1" }))).toBe(1);
+    expect(await count(req("/api/session"))).toBe(0);
+    expect(await count(req("/_next/static/a.js"))).toBe(0);
   });
 
   it("no getUser for /api/*, signed in or not", async () => {
@@ -209,7 +255,18 @@ describe("auth round trips (performance 2)", () => {
     expect(passes(res)).toBe(true);
     expect(state.getUserCalls).toBe(1);
     expect(verifyForwardedUser(forwarded(res))?.id).toBe("u1");
-    expect(res.headers.get("server-timing")).toMatch(/proxy-auth;dur=/);
+  });
+
+  it("Server-Timing on page responses lists ctx-auth, db and total (signed in and redirected)", async () => {
+    const names = (res: Response) =>
+      (res.headers.get("server-timing") ?? "").split(",").map((e) => e.trim().split(";")[0]);
+    state.user = { id: "u1" };
+    expect(names(await proxy(req("/agents")))).toEqual(["ctx-auth", "db", "total"]);
+    state.user = null;
+    const out = await proxy(req("/agents"));
+    expect(out.status).toBe(307);
+    expect(names(out)).toEqual(["ctx-auth", "db", "total"]);
+    expect(out.headers.get("server-timing")).toMatch(/^ctx-auth;dur=\d+\.\d, db;dur=0\.0, total;dur=\d+\.\d$/);
   });
 
   it("strips a client-sent forwarded-user header on every path", async () => {
