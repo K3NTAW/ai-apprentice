@@ -7,10 +7,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint src",
+    "lint": "eslint src e2e",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:companion": "npm --prefix companion ci && npm --prefix companion test && npm --prefix companion run build"
+    "test:companion": "npm --prefix companion ci && npm --prefix companion test && npm --prefix companion run build",
+    "e2e": "playwright test"
   },
   "dependencies": {
     "@elevenlabs/react": "^1.16.0",
@@ -23,6 +24,7 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^26.6.4",
     "@types/react": "^19.3.0",
