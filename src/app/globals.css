@@ -224,6 +224,7 @@ body {
   .ui-ev { display: grid; grid-template-columns: 64px 92px minmax(0,1fr) auto; gap: 14px; align-items: center; padding: 12px 20px; border-top: 1px solid var(--ln); }
   .ui-app { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--mu); }
   .ui-red { display: inline-flex; align-items: center; height: 20px; padding: 0 6px; border-radius: 5px; background: repeating-linear-gradient(135deg, var(--s3) 0 4px, var(--s2) 4px 8px); color: var(--mu); font-size: 11px; font-family: var(--font-mono); }
+  .ui-ev .ui-kc { min-width: 22px; height: 22px; padding: 0 6px; border-radius: 6px; font-size: 12px; }
   .ui-app > i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
 
   /* Shell (Sidebar.dc.html, Shell.dc.html) */

@@ -77,6 +77,11 @@ const APP_COLORS: [RegExp, string][] = [
   [/word|pages|docs/i, "var(--ac)"],
 ];
 
+/** Short app tag as in the canvas table ('Excel', 'Outlook', 'Chrome'). */
+export function appTag(app: string): string {
+  return app.replace(/^(Microsoft|Google|Apple|Adobe)\s+/i, "");
+}
+
 export function appColor(app: string): string {
   return APP_COLORS.find(([re]) => re.test(app))?.[1] ?? "var(--fa)";
 }
@@ -141,7 +146,7 @@ export default function CaptureConsole(p: CaptureConsoleProps) {
             {crumb}
           </span>
           <div className="flex flex-wrap items-center" style={{ gap: 12 }}>
-            <h1 className="ui-t1">{p.agentName ? `Training ${p.agentName}` : "Capture"}</h1>
+            <h1 className="ui-t1" style={{ fontSize: 32 }}>{p.agentName ? `Training ${p.agentName}` : "Capture"}</h1>
             {p.running &&
               (p.offRecord ? (
                 <span className="ui-bdg ui-k-pend">Off the record</span>
@@ -208,7 +213,7 @@ export default function CaptureConsole(p: CaptureConsoleProps) {
                   </span>
                 )}
               </div>
-              <p className="ui-t2" data-testid="last-question">
+              <p className="ui-t2" style={{ fontSize: 22, lineHeight: 1.25 }} data-testid="last-question">
                 {p.lastQuestion ?? "None yet"}
               </p>
               {p.lastAnswer && (
@@ -258,7 +263,7 @@ export default function CaptureConsole(p: CaptureConsoleProps) {
                   <li key={e.id}>
                     <FeedRow
                       time={mmss(e.t)}
-                      app={app}
+                      app={appTag(app)}
                       color={appColor(app)}
                       trailing={e.type === "shortcut_used" && e.chord ? <Chord keys={chordKeys(e.chord)} /> : undefined}
                     >

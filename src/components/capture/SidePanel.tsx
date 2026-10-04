@@ -63,11 +63,13 @@ export default function SidePanel(p: SidePanelProps) {
       className={p.hideControls ? "flex flex-col gap-3 text-sm" : "flex w-80 shrink-0 flex-col gap-3 border-l border-line bg-panel p-3 text-sm"}
       data-testid="side-panel"
     >
+      {(p.running || !p.hideControls) && (
       <div className="flex items-center gap-2">
         <span data-testid="presence" className={`h-3 w-3 rounded-full ${DOT[p.status]}`} />
         <span className="font-medium capitalize">{p.status}</span>
         {p.running && <span className="ml-auto text-xs text-muted">{p.textMode ? "text mode" : "voice"}</span>}
       </div>
+      )}
 
       {p.offRecord && (
         <div role="status" className="ui-bdg ui-k-rd self-start">

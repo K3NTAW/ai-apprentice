@@ -93,8 +93,8 @@ describe("capture console", () => {
     // live events: newest first, coloured app tag, keycaps for shortcuts
     const rows = html.split('class="ui-ev"').slice(1);
     expect(rows).toHaveLength(f.feed.length);
-    expect(rows[0]).toContain("Google Chrome");
-    expect(html).toContain('<i style="background:#3FCF8E"></i>Microsoft Excel');
+    expect(rows[0]).toContain("supplier 20418 opened in Google Chrome");
+    expect(html).toContain('<i style="background:#3FCF8E"></i>Excel<');
     expect(html).toMatch(/<span class="ui-kc">⌘<\/span><span class="ui-kc">⇧<\/span><span class="ui-kc">L<\/span>/);
     // right: questions so far with the three tiles and the next-question line
     expect(html).toMatch(/>2<\/div><div[^>]*>Steps seen</);
