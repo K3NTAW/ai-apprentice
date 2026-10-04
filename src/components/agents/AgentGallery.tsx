@@ -1,12 +1,24 @@
-// Agent gallery (Gallery.dc.html, GalleryEmpty.dc.html): one card per agent plus the '+ New agent' card.
+"use client";
+// Agent gallery (Gallery.dc.html, GalleryEmpty.dc.html): header row with search and '+ New agent', the filter
+// tabs (All, Ready to teach, Training), one card per agent plus the dashed '+ New agent' card.
 // The light and phone variants (GalleryLight, GalleryPhone) are the same markup under data-theme="light" and the
 // narrow breakpoint; no separate route.
 import Link from "next/link";
-import { buttonClass } from "@/components/ui";
+import { useState } from "react";
+import { Badge, buttonClass, Segmented } from "@/components/ui";
+import { COMPANION_README } from "@/components/capture/CompanionCard";
 import AgentAvatar from "./AgentAvatar";
-import { statText, type GalleryCard } from "./model";
+import { EMPTY_AVATAR, filterCards, statText, type GalleryCard, type GalleryFilter } from "./model";
 
 export const cardClass = "ui-card flex flex-col";
+
+export function PlusIcon({ size = 18 }: { size?: number }) {
+  return (
+    <svg className="ui-ic" viewBox="0 0 24 24" style={{ width: size, height: size }} aria-hidden="true">
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
 
 export function Stats({ stats }: { stats: GalleryCard["stats"] }) {
   const items: [string, number | null][] = [
@@ -30,14 +42,31 @@ export function Stats({ stats }: { stats: GalleryCard["stats"] }) {
 export function AgentCard({ card, href = card.href }: { card: GalleryCard; href?: string }) {
   return (
     <li>
-      <Link href={href} className={`${cardClass} h-full gap-4 p-4 hover:border-[var(--ln2)]`}>
-        <span className="flex h-44 items-center justify-center rounded-[12px]" style={{ background: "var(--stage)" }}>
+      <Link href={href} className={`${cardClass} h-full gap-4 p-4 hover:border-[var(--ln2)]`} data-testid="agent-card">
+        <span className="relative flex h-44 items-center justify-center rounded-[12px]" style={{ background: "var(--stage)" }}>
+          <Badge kind={card.ready ? "confirmed" : "accent"} className="absolute top-3 left-3">
+            {card.ready ? "Ready to teach" : "Training"}
+          </Badge>
+          <span className="absolute top-[13px] right-3 text-xs" style={{ color: "var(--fa)" }}>{card.last}</span>
           <AgentAvatar avatar={card.avatar} size={124} />
         </span>
         <span className="flex flex-col gap-1 px-1">
           <span className="ui-t2">{card.name}</span>
           <span className="text-[15px]" style={{ color: "var(--mu)" }}>{card.role}</span>
-          <span className="mt-1 text-sm" style={{ color: "var(--mu)" }}>{card.expert}</span>
+          {card.expertName ? (
+            <span className="mt-1 flex items-center gap-2 text-[13px]">
+              <span
+                aria-hidden="true"
+                className="inline-flex flex-none items-center justify-center rounded-full text-[10px] font-semibold"
+                style={{ width: 22, height: 22, background: "var(--s3)", color: "var(--tx)" }}
+              >
+                {card.initials}
+              </span>
+              <span style={{ color: "var(--mu)" }}>learns from</span> {card.expertName}
+            </span>
+          ) : (
+            <span className="mt-1 text-[13px]" style={{ color: "var(--mu)" }}>{card.expert}</span>
+          )}
         </span>
         <Stats stats={card.stats} />
       </Link>
@@ -54,27 +83,29 @@ const EMPTY_STEPS = [
 export function GalleryEmpty({ canCreate }: { canCreate: boolean }) {
   return (
     <div className="ui-card flex flex-col items-center gap-5 px-8 py-16 text-center" data-screen="gallery-empty">
+      <AgentAvatar avatar={EMPTY_AVATAR} size={140} />
       <div className="flex max-w-[480px] flex-col gap-2">
         <h2 className="ui-t2">No agents yet</h2>
         <p className="text-[15px]" style={{ color: "var(--mu)" }}>
           An agent learns from one expert while they work. Start with the person whose know-how you would miss most if they left tomorrow.
         </p>
-        <p className="text-sm" style={{ color: "var(--fa)" }}>
-          An agent learns one job from an expert while they do their real work, and asks at the right moments.
-          <br />
-          A new employee then picks the agent, and it teaches them the job and stops them before a guardrail breaks.
-        </p>
       </div>
-      {canCreate && (
-        <Link href="/agents/new" className={buttonClass("primary")}>
-          Create your first agent
-        </Link>
-      )}
-      <div className="mt-4 grid w-full max-w-[720px] gap-3 sm:grid-cols-3">
+      <div className="flex flex-wrap justify-center gap-2.5">
+        {canCreate && (
+          <Link href="/agents/new" className={buttonClass("primary")}>
+            <PlusIcon />
+            Create your first agent
+          </Link>
+        )}
+        <a href={COMPANION_README} target="_blank" rel="noreferrer" className={buttonClass("secondary")}>
+          Install the companion
+        </a>
+      </div>
+      <div className="mt-4 grid w-full max-w-[720px] gap-3 [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
         {EMPTY_STEPS.map(([n, title, text]) => (
           <div key={n} className="flex flex-col gap-1 rounded-[12px] p-4 text-left" style={{ background: "var(--s2)" }}>
             <span className="ui-mono text-xs" style={{ color: "var(--fa)" }}>{n}</span>
-            <span className="text-sm font-semibold">{title}</span>
+            <span className="text-[13px] font-semibold">{title}</span>
             <span className="text-xs" style={{ color: "var(--mu)" }}>{text}</span>
           </div>
         ))}
@@ -83,32 +114,90 @@ export function GalleryEmpty({ canCreate }: { canCreate: boolean }) {
   );
 }
 
-export default function AgentGallery({ cards, canCreate }: { cards: GalleryCard[]; canCreate: boolean }) {
+export default function AgentGallery({
+  cards,
+  canCreate,
+  initialSearch = "",
+  initialFilter = "all",
+}: {
+  cards: GalleryCard[];
+  canCreate: boolean;
+  /** Tests: the initial search text and filter tab. */
+  initialSearch?: string;
+  initialFilter?: GalleryFilter;
+}) {
+  const [search, setSearch] = useState(initialSearch);
+  const [filter, setFilter] = useState<GalleryFilter>(initialFilter);
+  const shown = filterCards(cards, search, filter);
+  const ready = cards.filter((c) => c.ready).length;
   return (
-    <section className="flex flex-col gap-5" data-screen="gallery">
-      <div className="flex flex-wrap items-baseline gap-3">
-        <h2 className="ui-t2">Agents</h2>
-        <span className="text-sm" style={{ color: "var(--fa)" }}>Each one learns from one expert</span>
+    <section className="flex flex-col gap-7" data-screen="gallery">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-baseline gap-3">
+          <h2 className="ui-t2">Agents</h2>
+          <span className="text-[13px]" style={{ color: "var(--fa)" }}>Each one learns from one expert</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div className="relative w-[240px] max-w-full">
+            <svg className="ui-ic absolute" viewBox="0 0 24 24" style={{ left: 13, top: 12, width: 16, height: 16, color: "var(--fa)" }} aria-hidden="true">
+              <circle cx="11" cy="11" r="7" />
+              <path d="m20 20-3.5-3.5" />
+            </svg>
+            <label htmlFor="agent-search" className="sr-only">Search agents</label>
+            <input
+              id="agent-search"
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search agents or experts"
+              className="ui-inp"
+              style={{ height: 40, borderRadius: 999, borderColor: "var(--ln)", padding: "0 14px 0 38px" }}
+            />
+          </div>
+          {canCreate && (
+            <Link href="/agents/new" className={buttonClass("primary")} data-testid="new-agent-button">
+              <PlusIcon />
+              New agent
+            </Link>
+          )}
+        </div>
       </div>
       {cards.length === 0 ? (
         <GalleryEmpty canCreate={canCreate} />
       ) : (
-        <ul className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr))]">
-          {cards.map((c) => (
-            <AgentCard key={c.id} card={c} />
-          ))}
-          {canCreate && (
-            <li>
-              <Link
-                href="/agents/new"
-                className={`${cardClass} ui-card-dashed h-full min-h-[380px] items-center justify-center gap-3.5 bg-transparent p-4 text-center`}
-              >
-                <span className="ui-t3">+ New agent</span>
-                <span className="max-w-[220px] text-sm" style={{ color: "var(--mu)" }}>Name it, give it a face, then train it on real work.</span>
-              </Link>
-            </li>
-          )}
-        </ul>
+        <div className="flex flex-col gap-5">
+          <Segmented
+            label="Filter agents"
+            active={filter}
+            onSelect={(id) => setFilter(id as GalleryFilter)}
+            items={[
+              { id: "all", label: "All", count: cards.length },
+              { id: "ready", label: "Ready to teach", count: ready },
+              { id: "training", label: "Training", count: cards.length - ready },
+            ]}
+          />
+          <ul className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr))]">
+            {shown.map((c) => (
+              <AgentCard key={c.id} card={c} />
+            ))}
+            {canCreate && (
+              <li>
+                <Link
+                  href="/agents/new"
+                  data-testid="new-agent-card"
+                  className={`${cardClass} ui-card-dashed h-full min-h-[380px] items-center justify-center gap-3.5 bg-transparent p-4 text-center`}
+                >
+                  <span className="inline-flex items-center justify-center rounded-full" style={{ width: 56, height: 56, background: "var(--s2)", color: "var(--ac2)" }}>
+                    <PlusIcon size={24} />
+                  </span>
+                  <span className="ui-t3">New agent</span>
+                  <span className="max-w-[220px] text-[13px]" style={{ color: "var(--mu)" }}>Name it, give it a face, then train it on real work.</span>
+                </Link>
+              </li>
+            )}
+          </ul>
+          {shown.length === 0 && <p className="text-[13px]" style={{ color: "var(--mu)" }}>No agent matches that search.</p>}
+        </div>
       )}
     </section>
   );

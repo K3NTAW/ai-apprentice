@@ -5,9 +5,10 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import AgentGallery from "@/components/agents/AgentGallery";
 import AgentsHome from "@/components/agents/AgentsHome";
 import { AGENT_A, AGENT_B, SESSIONS } from "@/components/agents/fixtures";
-import { galleryCards } from "@/components/agents/model";
+import { filterCards, galleryCards, initials, lastText } from "@/components/agents/model";
 import { greeting, HOME_PLACEHOLDER, HOME_RESULT_CAP, homeAction, homeIndex, NO_MATCH_TEXT, searchHome } from "@/lib/agents/home";
 
 const root = fileURLToPath(new URL("../../..", import.meta.url));
@@ -57,7 +58,8 @@ describe("agents home", () => {
   it("'start a session' routes to Capture with the selected agent (first card by default)", () => {
     expect(homeAction("start a session", index, "agent-a")).toEqual({ kind: "start", href: "/capture?agent=agent-a" });
     const html = render();
-    expect(html).toMatch(/href="\/capture\?agent=agent-b"[^>]*>Start a session</);
+    // Presentational: Start is the '+' button in the box (aria-label), no longer a text button.
+    expect(html).toMatch(/<a[^>]*href="\/capture\?agent=agent-b"[^>]*aria-label="Start a session"[^>]*data-testid="home-start"/);
     expect(cards[0].id).toBe("agent-b");
   });
 
@@ -72,17 +74,96 @@ describe("agents home", () => {
   it("gallery cards carry the canvas elements", () => {
     const html = render();
     expect(html).toContain("Each one learns from one expert");
-    for (const t of ["Senior Sales Person", "learns from Sabine", "Processes", "Shortcuts", "Guardrails", "Learners"]) expect(html).toContain(t);
+    for (const t of ["Senior Sales Person", "learns from</span> Sabine", "Processes", "Shortcuts", "Guardrails", "Learners"]) expect(html).toContain(t);
     expect(html).toContain("Name it, give it a face, then train it on real work.");
     expect(html).toContain('href="/agents/agent-a"');
   });
 
   it("empty state matches GalleryEmpty.dc.html", () => {
     const html = render({ cards: [], index: [] });
-    for (const t of ["No agents yet", "Start with the person whose know-how you would miss most if they left tomorrow.", "Create your first agent", "Name it", "Give it a face", "Train it"]) {
+    for (const t of ["No agents yet", "Start with the person whose know-how you would miss most if they left tomorrow.", "Create your first agent", "Install the companion", "Name it", "Give it a face", "Train it"]) {
       expect(html).toContain(t);
     }
     expect(render({ cards: [], index: [], canCreate: false })).not.toContain("Create your first agent");
+  });
+});
+
+describe("agents home F2 (Gallery.dc.html 1:1)", () => {
+  const count = (html: string, needle: string) => html.split(needle).length - 1;
+
+  it("input box controls: plus (start), agent picker pill, mic and round send", () => {
+    const html = render();
+    expect(html).toContain('data-testid="home-start"');
+    expect(html).toContain('data-testid="home-agent-picker"');
+    expect(html).toMatch(/data-testid="home-agent-picker"[^]*AP Clerk[^]*<select aria-label="Agent"/);
+    expect(html).toContain('aria-label="Speak"');
+    expect(html).toMatch(/<button type="submit" aria-label="Send"/);
+    const viewer = render({ canCreate: false });
+    expect(viewer).not.toContain('data-testid="home-start"');
+    expect(viewer).toContain('aria-label="Send"');
+  });
+
+  it("chip row routes to Capture, Learn, Work Maps and the workspace", () => {
+    const chips = render().split('data-testid="home-chips"')[1].split("</nav>")[0];
+    expect(chips).toMatch(/href="\/capture\?agent=agent-b"[^]*Train AP Clerk/);
+    expect(chips).toMatch(/href="\/learn\?agent=agent-b"[^]*Teach a new employee/);
+    expect(chips).toMatch(/href="\/map"[^]*Open a Work Map/);
+    expect(chips).toMatch(/href="\/workspace"[^]*Invite an expert/);
+    expect(render({ canCreate: false })).not.toContain("Train AP Clerk");
+  });
+
+  it("search filters cards by name, role or expert", () => {
+    expect(filterCards(cards, "sabine", "all").map((c) => c.id)).toEqual(["agent-a"]);
+    expect(filterCards(cards, "invoices", "all").map((c) => c.id)).toEqual(["agent-b"]);
+    expect(filterCards(cards, "  ", "all")).toHaveLength(2);
+    const html = renderToStaticMarkup(<AgentGallery cards={cards} canCreate initialSearch="sabine" />);
+    expect(html).toContain('placeholder="Search agents or experts"');
+    expect(count(html, 'data-testid="agent-card"')).toBe(1);
+    expect(html).toContain('href="/agents/agent-a"');
+    expect(html).not.toContain('href="/agents/agent-b"');
+    expect(renderToStaticMarkup(<AgentGallery cards={cards} canCreate initialSearch="payroll" />)).toContain("No agent matches that search.");
+  });
+
+  it("filter tabs count Ready to teach (a confirmed Work Map) and Training", () => {
+    const html = renderToStaticMarkup(<AgentGallery cards={cards} canCreate />);
+    expect(html).toContain(">All 2</button>");
+    expect(html).toContain(">Ready to teach 1</button>");
+    expect(html).toContain(">Training 1</button>");
+    expect(filterCards(cards, "", "ready").map((c) => c.id)).toEqual(["agent-a"]);
+    expect(filterCards(cards, "", "training").map((c) => c.id)).toEqual(["agent-b"]);
+    const training = renderToStaticMarkup(<AgentGallery cards={cards} canCreate initialFilter="training" />);
+    expect(count(training, 'data-testid="agent-card"')).toBe(1);
+    expect(training).toContain('href="/agents/agent-b"');
+  });
+
+  it("cards carry status, last trained, expert initials and mono stats", () => {
+    const a = cards.find((c) => c.id === "agent-a")!;
+    expect(a).toMatchObject({ ready: true, expertName: "Sabine", initials: "S", last: "Trained 2026-10-03" });
+    expect(initials("Sabine Keller")).toBe("SK");
+    expect(initials(null)).toBe("?");
+    expect(lastText(null)).toBe("Not trained yet");
+    const html = render();
+    expect(html).toContain("Ready to teach</span>");
+    expect(html).toContain("Training</span>");
+    expect(html).toContain("Trained 2026-10-03");
+    expect(html).toContain('class="ui-t3 ui-mono"');
+  });
+
+  it("'+ New agent' button and dashed card for creators only", () => {
+    const html = render();
+    expect(html).toMatch(/href="\/agents\/new"[^>]*data-testid="new-agent-button"/);
+    expect(html).toMatch(/data-testid="new-agent-card"[^>]*ui-card-dashed/);
+    const viewer = render({ canCreate: false });
+    expect(viewer).not.toContain("new-agent-button");
+    expect(viewer).not.toContain("new-agent-card");
+  });
+
+  it("docs/checks/design-visual-agents.md lists the compare pair and data-only differences", () => {
+    const doc = readFileSync(join(root, "docs/checks/design-visual-agents.md"), "utf8");
+    expect(doc).toContain("docs/design/compare/agents-app.png");
+    expect(doc).toContain("docs/design/compare/agents-canvas.png");
+    expect(doc).toContain("## Remaining differences (data only)");
+    for (const f of ["agents-app.png", "agents-canvas.png"]) expect(readFileSync(join(root, "docs/design/compare", f)).length).toBeGreaterThan(1000);
   });
 });
 

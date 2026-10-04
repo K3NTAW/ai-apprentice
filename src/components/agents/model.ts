@@ -45,28 +45,70 @@ export const statText = (n: number | null) => (n === null ? "none yet" : String(
 export const expertLine = (agent: Pick<Agent, "expert_name">) =>
   agent.expert_name?.trim() ? `learns from ${agent.expert_name.trim()}` : "no expert named yet";
 
+/** Expert initials for the card's 'learns from' dot: first letters of the first two words, else "?". */
+export function initials(name: string | null | undefined): string {
+  const parts = (name ?? "").trim().split(/\s+/).filter(Boolean);
+  return parts.length ? parts.slice(0, 2).map((p) => p[0].toUpperCase()).join("") : "?";
+}
+
+/** 'Trained 2026-10-02' (Europe/Zurich date of the last capture), or 'Not trained yet'. */
+export function lastText(lastTrained: string | null): string {
+  const t = lastTrained ? Date.parse(lastTrained) : NaN;
+  if (Number.isNaN(t)) return "Not trained yet";
+  return `Trained ${new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Zurich" }).format(new Date(t))}`;
+}
+
 export type GalleryCard = {
   id: string;
   name: string;
   role: string;
   expert: string;
+  /** The expert's name, or null when none is named yet. */
+  expertName: string | null;
+  initials: string;
+  /** Ready to teach: at least one confirmed Work Map; otherwise the agent is still in training. */
+  ready: boolean;
+  last: string;
   avatar: Agent["avatar"];
   stats: AgentStats;
   href: string;
 };
 
+/** The empty gallery's avatar (GalleryEmpty.dc.html). */
+export const EMPTY_AVATAR = { shape: "round", face: "calm", color: "#8E95A3", accent: "#62A9F3" } as const;
+
+export type GalleryFilter = "all" | "ready" | "training";
+
+/** Gallery search (name, role or expert, case-insensitive) and the filter tab. */
+export function filterCards(cards: readonly GalleryCard[], query: string, filter: GalleryFilter): GalleryCard[] {
+  const q = query.trim().toLowerCase();
+  return cards.filter(
+    (c) =>
+      (filter === "all" || (filter === "ready") === c.ready) &&
+      (!q || [c.name, c.role, c.expertName ?? ""].some((t) => t.toLowerCase().includes(q))),
+  );
+}
+
 export function galleryCards(agents: readonly Agent[], sessions: readonly Session[]): GalleryCard[] {
   return [...agents]
     .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id))
-    .map((a) => ({
-      id: a.id,
-      name: a.name,
-      role: a.role,
-      expert: expertLine(a),
-      avatar: a.avatar,
-      stats: agentStats(a.id, sessions),
-      href: agentHref(a.id),
-    }));
+    .map((a) => {
+      const stats = agentStats(a.id, sessions);
+      const expertName = a.expert_name?.trim() || null;
+      return {
+        id: a.id,
+        name: a.name,
+        role: a.role,
+        expert: expertLine(a),
+        expertName,
+        initials: initials(expertName),
+        ready: stats.processes > 0,
+        last: lastText(stats.last_trained),
+        avatar: a.avatar,
+        stats,
+        href: agentHref(a.id),
+      };
+    });
 }
 
 const confirmedOf = (agentId: string, sessions: readonly Session[]) =>

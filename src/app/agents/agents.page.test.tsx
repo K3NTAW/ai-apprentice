@@ -17,22 +17,22 @@ describe("agent gallery", () => {
 
   it("renders the cards, the stats and the '+ New agent' card", () => {
     const html = renderToStaticMarkup(<AgentGallery cards={galleryCards([AGENT_A], SESSIONS)} canCreate />);
-    for (const text of ["Senior Sales Person", "Prepares and sends quotes", "learns from Sabine", "Processes", "Shortcuts", "Guardrails", "Learners"]) {
+    for (const text of ["Senior Sales Person", "Prepares and sends quotes", "learns from</span> Sabine", "Processes", "Shortcuts", "Guardrails", "Learners"]) {
       expect(html).toContain(text);
     }
     expect(html).toContain('href="/agents/agent-a"');
     expect(html).toContain('href="/agents/new"');
-    expect(html).toContain("+ New agent");
+    expect(html).toContain('data-testid="new-agent-card"');
     expect(html).toContain("none yet");
     expect(html).toContain('src="data:image/svg+xml;base64,');
-    expect(html).not.toContain("An agent learns one job");
+    expect(html).not.toContain("No agents yet");
   });
 
-  it("empty state explains the idea in two lines; learners get no create card", () => {
+  it("empty state is the GalleryEmpty.dc.html layout; learners get no create card", () => {
     const html = renderToStaticMarkup(<AgentGallery cards={[]} canCreate={false} />);
-    expect(html).toContain("An agent learns one job from an expert");
-    expect(html).toContain("A new employee then picks the agent");
-    expect(html).not.toContain("+ New agent");
+    expect(html).toContain("An agent learns from one expert while they work.");
+    expect(html).toContain("Install the companion");
+    expect(html).not.toContain("New agent");
   });
 
   it("null shortcuts show 'none yet'", () => {

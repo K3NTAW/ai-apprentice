@@ -257,3 +257,52 @@ export function Quote({ children, size = 34, className }: { children: ReactNode;
     </q>
   );
 }
+
+/** Segmented filter (canvas .seg): pill group, the active segment raised on --s1. */
+export function Segmented({
+  label,
+  items,
+  active,
+  onSelect,
+}: {
+  label: string;
+  items: { id: string; label: string; count?: number }[];
+  active: string;
+  onSelect?: (id: string) => void;
+}) {
+  return (
+    <div
+      role="tablist"
+      aria-label={label}
+      className="inline-flex self-start"
+      style={{ padding: 3, borderRadius: 999, background: "var(--s2)", border: "1px solid var(--ln)" }}
+    >
+      {items.map((t) => {
+        const on = t.id === active;
+        return (
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            aria-selected={on}
+            data-filter={t.id}
+            onClick={() => onSelect?.(t.id)}
+            className="ui-seg-btn cursor-pointer border-0 text-[13px] font-medium"
+            style={{
+              height: 30,
+              padding: "0 14px",
+              borderRadius: 999,
+              fontFamily: "inherit",
+              background: on ? "var(--s1)" : "none",
+              color: on ? "var(--tx)" : "var(--mu)",
+              boxShadow: on ? "0 0 0 1px var(--ln2)" : undefined,
+            }}
+          >
+            {t.label}
+            {t.count !== undefined && ` ${t.count}`}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
