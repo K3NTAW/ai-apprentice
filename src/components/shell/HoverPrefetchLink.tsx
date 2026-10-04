@@ -5,19 +5,28 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ComponentProps } from "react";
 
+/** The app router, or null outside one (static render in tests): the link then just navigates. */
+function useOptionalRouter() {
+  try {
+    return useRouter();
+  } catch {
+    return null;
+  }
+}
+
 export default function HoverPrefetchLink({ href, onMouseEnter, onFocus, ...rest }: ComponentProps<typeof Link> & { href: string }) {
-  const router = useRouter();
+  const router = useOptionalRouter();
   return (
     <Link
       {...rest}
       href={href}
       prefetch={false}
       onMouseEnter={(e) => {
-        router.prefetch(href);
+        router?.prefetch(href);
         onMouseEnter?.(e);
       }}
       onFocus={(e) => {
-        router.prefetch(href);
+        router?.prefetch(href);
         onFocus?.(e);
       }}
     />

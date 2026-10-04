@@ -185,12 +185,13 @@ describe("auth round trips (performance 2)", () => {
 
   it("no getUser for RSC and router prefetch requests", async () => {
     state.user = { id: "u" };
-    for (const h of [
+    const prefetches: Record<string, string>[] = [
       { "next-router-prefetch": "1", rsc: "1" },
       { purpose: "prefetch" },
       { "sec-purpose": "prefetch;prerender" },
       { "x-middleware-prefetch": "1" },
-    ]) {
+    ];
+    for (const h of prefetches) {
       expect(passes(await proxy(withHeaders("/agents", h))), JSON.stringify(h)).toBe(true);
     }
     expect(state.getUserCalls).toBe(0);

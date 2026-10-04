@@ -98,7 +98,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   try {
     const { data, error } = await supabase.auth.getUser();
     signedIn = !error && !!data?.user;
-    if (signedIn) requestHeaders.set(FORWARDED_USER_HEADER, signForwardedUser(data.user));
+    if (signedIn && data.user) requestHeaders.set(FORWARDED_USER_HEADER, signForwardedUser(data.user));
   } catch {
     signedIn = false;
   }
