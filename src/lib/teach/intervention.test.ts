@@ -1,9 +1,13 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ScreenEvent } from "@/lib/types";
 import { EMAIL_FLOW_EVENTS, EMAIL_FLOW_WORKMAP, SLIDE_FLOW_EVENTS, SLIDE_FLOW_WORKMAP } from "./fixtures";
 import {
   COOLDOWN_MS,
   DECIDE_MAX_PER_MINUTE,
+  DECIDE_RECENT_EVENTS,
+  DECIDE_TIMEOUT_MS,
+  eventAmount,
+  requiredCode,
   NOT_PAIRED_NOTICE,
   createInterventionEngine,
   limitRule,
@@ -140,5 +144,103 @@ describe("intervention engine", () => {
     const s = setup({ workmap: SLIDE_FLOW_WORKMAP });
     expect(await s.feed(SLIDE_FLOW_EVENTS[0])).toBeNull();
     expect(await s.feed(SLIDE_FLOW_EVENTS[1])).toMatchObject({ expert: "Marco", source: "rule" });
+  });
+});
+
+describe("Teach stop fixes (P0-3)", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("parses the required code from 'coded 0400', 'capex (0400)', 'to 0400' and a lone '0400'", () => {
+    for (const rule of [
+      "Equipment over 5,000 EUR must be coded 0400",
+      "Equipment over 5,000 EUR is capex (0400)",
+      "Equipment over 5,000 EUR goes to 0400",
+      "Equipment over 5,000 EUR must be booked as capex 0400",
+      "Equipment over 5,000 EUR: 0400",
+      "Cost center 0400 for equipment over 5'000 CHF",
+    ])
+      expect(requiredCode(rule)).toBe("0400");
+    expect(requiredCode("Discount over 10% needs approval")).toBeUndefined();
+    expect(requiredCode("Over 5,000 EUR stop and ask")).toBeUndefined();
+  });
+
+  it("reads the case amount from any amount label, defensively", () => {
+    const base = { id: "x", t: 1, source: "vision" as const, type: "record_opened" as const, entity: { kind: "record", id: "PR-7" } };
+    expect(eventAmount({ ...base, field: "Total (EUR)", to: "7,200" })).toBe(7200);
+    expect(eventAmount({ ...base, amount: "EUR 7,200" } as never)).toBe(7200);
+    expect(eventAmount({ ...base, amount: 7200 } as never)).toBe(7200);
+    expect(eventAmount({ ...base, labels: { Supplier: "ACME", Amount: "7'200.00" } } as never)).toBe(7200);
+    expect(eventAmount({ ...base, label: "Amount", value: "7,200" } as never)).toBe(7200);
+    expect(eventAmount({ ...base, amount: "n/a", labels: ["x"], label: 3 } as never)).toBeNull();
+    expect(eventAmount({ ...base, field: "subject", to: "Order 4711" })).toBeNull();
+  });
+
+  it("opening a 7,200 record and setting cost center 4711 stops deterministically with no network call", async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    const step = EMAIL_FLOW_WORKMAP.steps[2];
+    const workmap = {
+      ...EMAIL_FLOW_WORKMAP,
+      steps: EMAIL_FLOW_WORKMAP.steps.map((x) =>
+        x.n === step.n
+          ? {
+              ...x,
+              screen_moment: { ...x.screen_moment, entity: "purchase record", field: "cost center" },
+              guardrails: [{ ...x.guardrails[0], rule: "Equipment over 5,000 EUR is capex (0400)" }],
+            }
+          : x,
+      ),
+    };
+    const s = setup({ workmap, decide: async () => 0.9 });
+    const opened: ScreenEvent = {
+      id: "r1",
+      t: 1,
+      source: "vision",
+      type: "record_opened",
+      app: "Microsoft Excel",
+      entity: { kind: "purchase record", id: "PR-7" },
+      amount: "EUR 7,200",
+    } as ScreenEvent;
+    await s.feed(opened);
+    const iv = await s.feed({
+      id: "r2",
+      t: 5,
+      source: "vision",
+      type: "field_changed",
+      app: "Microsoft Excel",
+      entity: { kind: "purchase record", id: "PR-7" },
+      field: "cost center",
+      from: "",
+      to: "4711",
+    });
+    expect(iv).not.toBeNull();
+    expect(iv!.source).toBe("rule");
+    expect(iv!.pending).toMatchObject({ amount: 7200, to: "4711" });
+    expect(s.decide).not.toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("decide waits 6 s and gets the last 8 events, oldest first", async () => {
+    expect(DECIDE_TIMEOUT_MS).toBe(6000);
+    expect(DECIDE_RECENT_EVENTS).toBe(8);
+    vi.useFakeTimers();
+    try {
+      const s = setup({ decide: () => new Promise<number>(() => {}) });
+      const filler = Array.from({ length: 10 }, (_, i): ScreenEvent => ({ ...open, id: `f${i}`, t: i }));
+      for (const e of filler) await s.feed(e);
+      await s.feed({ ...amount, to: "seven thousand two hundred" });
+      const asked = s.feed(wrongCode);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(s.decide).toHaveBeenCalledTimes(1);
+      const recent = s.decide.mock.calls[0][1].recent;
+      expect(recent.map((e) => e.id)).toEqual(["f3", "f4", "f5", "f6", "f7", "f8", "f9", amount.id, wrongCode.id].slice(-8));
+      await vi.advanceTimersByTimeAsync(5999);
+      expect(s.engine.stats().decideFailures).toBe(0);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await asked).toBeNull();
+      expect(s.engine.stats()).toMatchObject({ decideFailures: 1, lastDecideError: "decide timeout" });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

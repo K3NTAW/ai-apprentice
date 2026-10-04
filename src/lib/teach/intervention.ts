@@ -10,7 +10,9 @@ import type { StepMatch } from "./stepMatch";
 /** Event types that change a value or state; the event also needs a field and a `to` that differs from `from`. */
 export const VALUE_CHANGE_TYPES = ["field_changed", "status_changed", "text_entered"] as const satisfies readonly (typeof SCREEN_EVENT_TYPES)[number][];
 
-export const DECIDE_TIMEOUT_MS = 2500;
+export const DECIDE_TIMEOUT_MS = 6000;
+/** Recent screen events sent with each decide call, oldest first. */
+export const DECIDE_RECENT_EVENTS = 8;
 export const INTERVENE_PROBABILITY = 0.6;
 export const DECIDE_MAX_PER_MINUTE = 6;
 /** Minimum gap between two decide calls for the same step and field (debounce of fast edits). */
@@ -31,7 +33,7 @@ export type PendingChange = {
 
 export type TeachDecide = (
   question: "violates_guardrail",
-  state: { pending: PendingChange; guardrails: Guardrail[] },
+  state: { pending: PendingChange; guardrails: Guardrail[]; recent: ScreenEvent[] },
 ) => Promise<number>;
 
 export type HaloSink = { showHalo(id: string, rect: Rect, text?: string): boolean; clearHalo(id?: string): boolean };
@@ -109,8 +111,57 @@ export function limitRule(g: Guardrail): LimitRule | null {
   if (!m) return null;
   const limit = parseAmount(m[1]);
   if (limit === null) return null;
-  const req = g.rule.match(/\b(?:coded|code|cost cent(?:er|re)|account)\s+([A-Z0-9][A-Z0-9-]{2,})\b/i);
-  return { limit, unit: m[2] ? "percent" : "money", required: req?.[1] };
+  return { limit, unit: m[2] ? "percent" : "money", required: requiredCode(g.rule) };
+}
+
+// A code token: at least 3 chars with a digit, not part of a formatted number ("5,000" is no code).
+const CODE = String.raw`(?<![\w'’,.])([A-Z]*\d[A-Z0-9-]{2,}|[A-Z0-9-]*\d[A-Z0-9-]*)(?![\w'’]|[,.]\d)`;
+
+/**
+ * The code a limit rule requires: "coded 0400", "cost center 0400", "capex (0400)", "to 0400", "as 0400",
+ * else a lone code like "... 0400". Amounts and percentages ("5,000", "10%") are never codes.
+ */
+export function requiredCode(rule: string): string | undefined {
+  const isCode = (c: string | undefined) => !!c && c.replace(/\D/g, "").length >= 3 && !/^[\d]{1,3}$/.test(c);
+  for (const re of [
+    new RegExp(String.raw`\b(?:coded|code|cost cent(?:er|re)|account|booked)\s+(?:as\s+|to\s+)?(?:[a-z]+\s+)?\(?` + CODE, "i"),
+    new RegExp(String.raw`\(\s*` + CODE + String.raw`\s*\)`, "i"),
+    new RegExp(String.raw`\b(?:to|as|into|under)\s+` + CODE, "i"),
+  ]) {
+    const m = rule.match(re);
+    if (m && isCode(m[1])) return m[1];
+  }
+  const lone = [...rule.matchAll(new RegExp(CODE + "(?!\\s*%)", "gi"))].map((m) => m[1]).filter((c) => isCode(c) && /^0|[A-Z-]/i.test(c));
+  return lone.length ? lone[lone.length - 1] : undefined;
+}
+
+/**
+ * The case amount an event reports, or null. Read defensively: a field or label naming an amount ("amount",
+ * "Total (EUR)") with its value, or a separate amount on the event (vision adds it when a record opens).
+ */
+export function eventAmount(event: ScreenEvent): number | null {
+  const x = event as ScreenEvent & Record<string, unknown>;
+  const read = (v: unknown): number | null =>
+    typeof v === "number" ? (Number.isFinite(v) ? v : null) : typeof v === "string" ? parseAmount(v) : null;
+  for (const k of ["amount", "case_amount", "total"]) {
+    const v = read(x[k]);
+    if (v !== null) return v;
+  }
+  for (const k of ["labels", "fields", "values"]) {
+    const o = x[k];
+    if (!o || typeof o !== "object" || Array.isArray(o)) continue;
+    for (const [label, value] of Object.entries(o as Record<string, unknown>)) {
+      if (!AMOUNT_FIELD.test(label)) continue;
+      const v = read(value);
+      if (v !== null) return v;
+    }
+  }
+  if (typeof x.label === "string" && AMOUNT_FIELD.test(x.label)) {
+    const v = read(x.value ?? event.to);
+    if (v !== null) return v;
+  }
+  if (event.field && AMOUNT_FIELD.test(event.field) && event.to !== undefined) return parseAmount(event.to);
+  return null;
 }
 
 export function isValueChange(e: ScreenEvent): e is ScreenEvent & { field: string; to: string } {
@@ -151,6 +202,7 @@ export function createInterventionEngine(opts: InterventionOptions) {
   const current = new Map<string, string>();
   const calls: number[] = [];
   let caseAmount: number | null = null;
+  const recent: ScreenEvent[] = [];
   let seq = 0;
   const stats: InterventionStats = { interventions: 0, active: 0, decideCalls: 0, decideFailures: 0, lastDecideError: null, capped: false };
 
@@ -189,7 +241,7 @@ export function createInterventionEngine(opts: InterventionOptions) {
       const timeout = new Promise<never>((_, reject) => {
         timer = setTimeout(() => reject(new Error("decide timeout")), timeoutMs);
       });
-      const asked = Promise.resolve().then(() => opts.decide("violates_guardrail", { pending, guardrails }));
+      const asked = Promise.resolve().then(() => opts.decide("violates_guardrail", { pending, guardrails, recent: [...recent] }));
       asked.catch(() => {}); // a late rejection after the timeout must not surface as unhandled
       const raw = await Promise.race([asked, timeout]);
       const p = Number.isFinite(raw) ? Math.min(1, Math.max(0, raw)) : 0;
@@ -237,10 +289,10 @@ export function createInterventionEngine(opts: InterventionOptions) {
 
   /** Feed one screen event with its step match (null when it matched no step). */
   async function onEvent(event: ScreenEvent, match: StepMatch | null): Promise<Intervention | null> {
-    if (event.field && AMOUNT_FIELD.test(event.field) && event.to !== undefined) {
-      const a = parseAmount(event.to);
-      if (a !== null) caseAmount = a;
-    }
+    const a = eventAmount(event);
+    if (a !== null) caseAmount = a;
+    recent.push(event);
+    if (recent.length > DECIDE_RECENT_EVENTS) recent.splice(0, recent.length - DECIDE_RECENT_EVENTS);
     for (const [id, iv] of active) {
       const sameField = iv.entity === event.entity.id && iv.field === event.field;
       if (sameField && event.to !== undefined && event.to !== iv.to) clear(id, "resolved");
