@@ -224,6 +224,7 @@ body {
   .ui-bub-expert { border-radius: var(--r-bubble) var(--r-bubble) 6px var(--r-bubble); background: var(--s3); border-color: transparent; color: var(--tx); font-size: 21px; line-height: 1.2; }
 
   .ui-halo { position: absolute; border-radius: var(--r-halo); box-shadow: 0 0 0 2.5px var(--halo), 0 0 0 9px rgba(255,122,69,.22), 0 0 40px 12px rgba(255,122,69,.32); animation: aa-halo var(--motion-halo); pointer-events: none; }
+  .ui-wv { width: 4px; border-radius: 2px; background: var(--ac2); display: inline-block; animation: aa-wv 1s ease-in-out infinite; }
   .ui-rec { width: 8px; height: 8px; border-radius: 50%; background: var(--rd); display: inline-block; flex: none; animation: aa-pulse var(--motion-pulse); }
 
   .ui-ev { display: grid; grid-template-columns: 64px 92px minmax(0,1fr) auto; gap: 14px; align-items: center; padding: 12px 20px; border-top: 1px solid var(--ln); }
@@ -254,3 +255,5 @@ body {
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; }
 }
+
+@keyframes aa-wv { 50% { transform: scaleY(.4); } }

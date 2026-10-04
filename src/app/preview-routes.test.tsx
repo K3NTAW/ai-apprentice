@@ -17,6 +17,7 @@ vi.mock("@/lib/supabase/env", async (orig) => ({ ...(await orig<object>()), appM
 
 import NewAgentPreview from "./agents/new/preview/page";
 import DebriefPreview from "./debrief/preview/page";
+import MapPreviewPage from "./map/preview/page";
 import TeachPreviewPage from "./teach/preview/page";
 
 const sp = (o: Record<string, string> = {}) => ({ searchParams: Promise.resolve(o) });
@@ -33,6 +34,7 @@ describe("preview routes", () => {
     await expect(NewAgentPreview(sp({ step: "2" }))).rejects.toThrow("NEXT_NOT_FOUND");
     await expect(DebriefPreview(sp())).rejects.toThrow("NEXT_NOT_FOUND");
     expect(() => TeachPreviewPage()).toThrow("NEXT_NOT_FOUND");
+    expect(() => MapPreviewPage()).toThrow("NEXT_NOT_FOUND");
   });
 
   it("debrief in progress (local): follow-up question, live answer, understanding per step", async () => {

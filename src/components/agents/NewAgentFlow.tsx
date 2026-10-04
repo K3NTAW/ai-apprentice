@@ -10,7 +10,9 @@ import { Badge, buttonClass } from "@/components/ui";
 import { DEFAULT_AVATAR } from "@/lib/avatar/render";
 import { AGENT_EXPERT_NAME_MAX, AGENT_NAME_MAX, AGENT_ROLE_MAX } from "@/lib/types";
 import AgentAvatar from "./AgentAvatar";
-import { captureHref } from "./model";
+import { captureHref, expertInitials } from "./model";
+
+export { expertInitials, memberName } from "./model";
 
 const STEP_LABELS = ["Details", "Avatar", "Install and train"] as const;
 const muted = { color: "var(--mu)" } as const;
@@ -53,28 +55,24 @@ function Stepper({ active }: { active: 1 | 2 | 3 }) {
 
 export type ExpertOption = { label: string; name: string };
 
-/** Initials for the expert chip: 'Sabine Keller' -> SK, 'marco.bianchi@example.com' -> MB. */
-export function expertInitials(value: string): string {
-  const base = value.split("·")[0].split("@")[0].trim();
-  const parts = base.split(/[\s._-]+/).filter(Boolean);
-  return parts.slice(0, 2).map((p) => p[0]!.toUpperCase()).join("") || "?";
-}
-
-/** Display name from a member label: 'sabine.keller@example.com' -> 'Sabine Keller'. */
-export function memberName(label: string): string {
-  const local = label.split("@")[0];
-  return local.split(/[._-]+/).filter(Boolean).map((p) => p[0]!.toUpperCase() + p.slice(1)).join(" ") || label;
-}
-
 export default function NewAgentFlow({
   initialAgentId = null,
   initialName = "",
   initialFirstTask = "",
+  initialExpert = "",
+  initialRole = "",
   experts = [],
-}: { initialAgentId?: string | null; initialName?: string; initialFirstTask?: string; experts?: ExpertOption[] } = {}) {
+}: {
+  initialAgentId?: string | null;
+  initialName?: string;
+  initialFirstTask?: string;
+  initialExpert?: string;
+  initialRole?: string;
+  experts?: ExpertOption[];
+} = {}) {
   const [name, setName] = useState(initialName);
-  const [role, setRole] = useState("");
-  const [expert, setExpert] = useState("");
+  const [role, setRole] = useState(initialRole);
+  const [expert, setExpert] = useState(initialExpert);
   // The first task stays client-side: it becomes the ?task title of the Capture link.
   const [firstTask, setFirstTask] = useState(initialFirstTask);
   const [busy, setBusy] = useState(false);
@@ -190,7 +188,7 @@ export default function NewAgentFlow({
           </div>
           <div>
             <label className="ui-lbl" htmlFor="na-first">First task to learn</label>
-            <textarea id="na-first" className="ui-inp" rows={3} value={firstTask} maxLength={200} placeholder="Coding incoming supplier invoices" onChange={(e) => setFirstTask(e.target.value)} />
+            <textarea id="na-first" className="ui-inp" style={{ height: "auto", paddingTop: 10, paddingBottom: 10 }} rows={3} value={firstTask} maxLength={200} placeholder="Coding incoming supplier invoices" onChange={(e) => setFirstTask(e.target.value)} />
           </div>
           <div className="flex flex-wrap justify-between gap-3 pt-1">
             <Link className={buttonClass("ghost")} href="/agents">Cancel</Link>

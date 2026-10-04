@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import NewAgentFlow, { memberName } from "@/components/agents/NewAgentFlow";
+import { memberName } from "@/components/agents/model";
+import NewAgentFlow from "@/components/agents/NewAgentFlow";
 import AppShell from "@/components/shell/AppShell";
 import { previewWorkspace } from "@/lib/fixtures/workspace";
 import { appMode } from "@/lib/supabase/env";
@@ -25,6 +26,8 @@ export default async function NewAgentPreviewPage({ searchParams }: { searchPara
         <NewAgentFlow
           initialAgentId={later ? "pip" : null}
           initialName="Pip"
+          initialRole="Senior AP Clerk"
+          initialExpert="Sabine Keller · sabine.keller@example.com"
           initialFirstTask="Coding incoming supplier invoices, including capex or opex and the second approval for the Czech subsidiary."
           experts={experts}
         />

@@ -3,7 +3,8 @@ import AgentDetail from "@/components/agents/AgentDetail";
 import { agentGuardrails, agentLearners, agentProcesses, agentShortcuts, parseTab } from "@/components/agents/model";
 import AppShell from "@/components/shell/AppShell";
 import { agentStats } from "@/lib/agents/stats";
-import { previewAgents, previewCreatedBy, previewMembers, previewSessions } from "@/lib/fixtures/agents";
+import { previewAgents, previewCreatedBy, previewMembers } from "@/lib/fixtures/agents";
+import { previewSessionsFull as previewSessions } from "@/lib/fixtures/preview";
 import { appMode } from "@/lib/supabase/env";
 
 export const dynamic = "force-dynamic";

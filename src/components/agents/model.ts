@@ -300,3 +300,16 @@ export function teachSourceError(agentId: string, source: Pick<Session, "kind" |
   if (source.agent_id !== agentId) return "This Work Map belongs to a different agent. Pick the process again from Learn.";
   return null;
 }
+
+/** Initials for the expert chip: 'Sabine Keller' -> SK, 'marco.bianchi@example.com' -> MB. */
+export function expertInitials(value: string): string {
+  const base = value.split("·")[0].split("@")[0].trim();
+  const parts = base.split(/[\s._-]+/).filter(Boolean);
+  return parts.slice(0, 2).map((p) => p[0]!.toUpperCase()).join("") || "?";
+}
+
+/** Display name from a member label: 'sabine.keller@example.com' -> 'Sabine Keller'. */
+export function memberName(label: string): string {
+  const local = label.split("@")[0];
+  return local.split(/[._-]+/).filter(Boolean).map((p) => p[0]!.toUpperCase() + p.slice(1)).join(" ") || label;
+}

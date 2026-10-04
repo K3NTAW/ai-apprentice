@@ -37,6 +37,21 @@ export const pipWorkMap: WorkMap = {
   ],
 };
 
+// Step-level shortcuts as the agent page Shortcuts tab reads them (chord, app, what, why).
+const STEP_SHORTCUTS: Record<number, { chord: string; app: string; what: string; why?: string }[]> = {
+  1: [
+    { chord: "Cmd+Shift+F", app: "Outlook", what: "Search the mailbox", why: "I always look for the same number twice." },
+    { chord: "Cmd+Tab", app: "Browser", what: "Switch to the PDF" },
+  ],
+  2: [{ chord: "Cmd+F", app: "Excel", what: "Find the invoice number", why: "Alpen billed December twice last year." }],
+  4: [
+    { chord: "Cmd+C", app: "Excel", what: "Copy the cost center" },
+    { chord: "Tab", app: "Excel", what: "Next field", why: "Faster than the mouse, and I never miss a field." },
+  ],
+  7: [{ chord: "Cmd+S", app: "Excel", what: "Save the ledger" }],
+};
+for (const st of pipWorkMap.steps) if (STEP_SHORTCUTS[st.n]) Object.assign(st, { shortcuts: STEP_SHORTCUTS[st.n] });
+
 /** previewSessions with pip-1 carrying the full invoice Work Map. */
 export const previewSessionsFull: Session[] = previewSessions.map((x) => (x.id === "pip-1" ? { ...x, workmap: pipWorkMap } : x));
 

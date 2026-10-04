@@ -73,7 +73,7 @@ describe("agent tabs", () => {
     expect(shortcutApps(rows)).toEqual([{ app: "Excel", n: 2 }, { app: "Outlook", n: 1 }]);
     const html = renderToStaticMarkup(<ShortcutsTab rows={rows} expert="Sabine" />);
     for (const t of ["All apps", "Excel 2", "Outlook 1", 'aria-label="Filter by app"']) expect(html).toContain(t);
-    expect(agentShortcuts("pip", previewSessionsFull)).toEqual([]);
+    expect(shortcutApps(agentShortcuts("pip", previewSessionsFull)).map((a) => a.app)).toEqual(["Outlook", "Browser", "Excel"]);
   });
 });
 

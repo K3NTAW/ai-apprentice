@@ -40,12 +40,14 @@ export function MapLearners({ rows }: { rows: MasteryRow[] | null }) {
   );
 }
 
-export default function MapDetail({ id, learners }: { id: string; learners: MasteryRow[] | null }) {
-  const [session, setSession] = useState<Session | null>(null);
+/** previewSession: local preview route only (design compare); nothing is fetched. */
+export default function MapDetail({ id, learners, previewSession }: { id: string; learners: MasteryRow[] | null; previewSession?: Session }) {
+  const [session, setSession] = useState<Session | null>(previewSession ?? null);
   const [error, setError] = useState<string | null>(null);
   const [building, setBuilding] = useState(false);
 
   useEffect(() => {
+    if (previewSession) return;
     let cancelled = false;
     (async () => {
       try {
@@ -60,7 +62,7 @@ export default function MapDetail({ id, learners }: { id: string; learners: Mast
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, previewSession]);
 
   const build = async () => {
     setBuilding(true);

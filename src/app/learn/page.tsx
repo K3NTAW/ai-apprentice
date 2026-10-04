@@ -1,8 +1,7 @@
 // Learn: a new employee picks an agent with a confirmed process, then a process; Teach starts with ?agent&session.
 import { redirect } from "next/navigation";
 import LearnView from "@/components/agents/LearnView";
-import { learnAgents, learnProcesses, learnTraining, parseId } from "@/components/agents/model";
-import { memberName } from "@/components/agents/NewAgentFlow";
+import { learnAgents, learnProcesses, learnTraining, memberName, parseId } from "@/components/agents/model";
 import PageMessage from "@/components/agents/PageMessage";
 import AppShell from "@/components/shell/AppShell";
 import { getRequestContext } from "@/lib/auth/context";

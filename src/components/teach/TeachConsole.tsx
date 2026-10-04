@@ -82,15 +82,16 @@ export function submitComposer(input: { value: string }, onSend: (text: string) 
   return true;
 }
 
-export function ChatThread({ lines, intervention }: { lines: TeachLine[]; intervention: Intervention | null }) {
+export function ChatThread({ lines, intervention, tutorName = "Tutor" }: { lines: TeachLine[]; intervention: Intervention | null; tutorName?: string }) {
   return (
     <div className="flex flex-col" style={{ padding: "20px 22px", gap: 12 }} data-testid="chat-thread" role="log" aria-label="Tutor transcript">
       {lines.length === 0 && <p className="text-[13px]" style={{ color: "var(--fa)" }}>The tutor&apos;s questions and your answers appear here.</p>}
       {lines.map((l) =>
         l.speaker === "tutor" ? (
-          <div key={l.id} className="ui-bub" data-speaker="tutor">
+          // Teach.dc.html: tutor lines are plain text under the name, only the learner's answers are bubbles.
+          <div key={l.id} data-speaker="tutor" style={{ maxWidth: "88%" }}>
             <span className="block text-xs" style={{ color: "var(--mu)" }}>
-              Tutor
+              {tutorName}
             </span>
             {l.text}
           </div>
@@ -111,7 +112,7 @@ export function ChatThread({ lines, intervention }: { lines: TeachLine[]; interv
       {intervention && (
         <div className="ui-bub" data-speaker="stop" style={{ padding: "10px 14px", borderRadius: 16, background: "var(--cos)" }}>
           <span className="block text-xs" style={{ color: "var(--co)" }}>
-            Tutor · stop moment
+            {tutorName} · stop moment
           </span>
           {intervention.say}
         </div>
@@ -230,7 +231,7 @@ export default function TeachConsole(p: TeachConsoleProps) {
           <div className="flex flex-wrap items-center" style={{ gap: 12 }}>
             <h1 className="ui-t1">{p.workmap?.task ?? "Teach"}</h1>
             {p.running && (
-              <span className="ui-bdg ui-k-ok" style={{ gap: 8 }} data-testid="live-badge">
+              <span className="ui-bdg ui-bdg-nd ui-k-ok" style={{ gap: 8 }} data-testid="live-badge">
                 <span className="ui-rec" style={{ background: "var(--gr)" }} />
                 {p.paused ? "Paused" : "Teaching on your screen"}
               </span>
@@ -323,10 +324,10 @@ export default function TeachConsole(p: TeachConsoleProps) {
               <div className="flex flex-wrap items-center justify-between" style={{ padding: "16px 22px", borderBottom: "1px solid var(--ln)", gap: 10 }}>
                 <h2 className="ui-t3">Tutor transcript</h2>
                 <span className="text-xs" style={{ color: "var(--fa)" }}>
-                  {p.textMode ? "Typed, no voice" : "Spoken by the tutor, captions here"}
+                  {p.textMode ? "Typed, no voice" : `Spoken by ${p.agentName ?? "the tutor"}, captions here`}
                 </span>
               </div>
-              <ChatThread lines={p.transcript} intervention={iv} />
+              <ChatThread lines={p.transcript} intervention={iv} tutorName={p.agentName ?? "Tutor"} />
               {p.running && <Composer enabled={!sendError} error={sendError} onSend={p.onAnswer} />}
             </Card>
           </div>

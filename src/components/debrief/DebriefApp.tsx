@@ -149,6 +149,11 @@ function DebriefInner({ sessionId, preview }: { sessionId: string; preview?: Deb
           <h1 className="ui-t1">Debrief</h1>
           {view?.workmap && <span style={{ color: "var(--mu)" }}>{view.workmap.task}</span>}
         </div>
+        {view && phase !== "confirmed" && (
+          <Link className={buttonClass("ghost")} href={`/map/${encodeURIComponent(sessionId)}`}>
+            Finish later
+          </Link>
+        )}
       </header>
 
       {error && <p role="alert" className="text-[13px]" style={{ color: "var(--rd)" }}>{error}</p>}
@@ -188,7 +193,7 @@ function DebriefInner({ sessionId, preview }: { sessionId: string; preview?: Deb
           {view && !inTeachBack && phase !== "building" && view.question && (
             <section className="ui-card flex flex-col" style={{ padding: 28, gap: 22, background: "var(--stage)" }} data-testid="debrief-question">
               <div className="flex flex-wrap items-center justify-between" style={{ gap: 12 }}>
-                <span className="ui-bdg ui-k-ac">
+                <span className="ui-bdg ui-bdg-nd ui-k-ac">
                   {followUp}
                   <span style={{ opacity: 0.7 }}> (max {view.maxFollowUps})</span>
                 </span>
@@ -218,6 +223,26 @@ function DebriefInner({ sessionId, preview }: { sessionId: string; preview?: Deb
                   </span>
                   {liveAnswer.text}
                   <span style={{ color: "var(--mu)" }}>…</span>
+                </div>
+              )}
+              {!textMode && (
+                // Voice mode: the expert answers out loud; the session listens until a 2 s pause.
+                <div className="flex flex-wrap items-center" style={{ gap: 14 }} data-testid="listening" role="status">
+                  <span className={buttonClass("primary", "lg")} style={{ cursor: "default" }}>
+                    <svg className="ui-ic" viewBox="0 0 24 24" aria-hidden="true">
+                      <rect x="9" y="3" width="6" height="11" rx="3" />
+                      <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+                    </svg>
+                    Listening
+                  </span>
+                  <span className="inline-flex items-center" style={{ gap: 3, height: 28 }} aria-hidden="true">
+                    {[10, 22, 16, 26, 12, 20, 8].map((h, i) => (
+                      <span key={i} className="ui-wv" style={{ height: h, animationDelay: `${i / 10}s` }} />
+                    ))}
+                  </span>
+                  <span className="text-[13px]" style={{ color: "var(--mu)" }}>
+                    Pause for 2 s to finish
+                  </span>
                 </div>
               )}
               {textMode && (
