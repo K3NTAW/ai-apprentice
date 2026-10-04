@@ -86,7 +86,7 @@ export default function LearnView(props: LearnViewProps) {
           setUnknownAgent(false);
         }
       : undefined;
-  const first = processes[0] ?? null;
+  const first = processes.find((p) => p.ready) ?? null;
   return (
     <main className="flex min-w-0 flex-col" style={{ padding: "36px 40px 56px", gap: 26 }}>
       <div className="flex flex-col" style={{ gap: 6, maxWidth: 680 }}>
@@ -140,17 +140,28 @@ export default function LearnView(props: LearnViewProps) {
           <Column n={2} title="Process">
             {!selected && <span className="text-[13px]" style={{ color: "var(--mu)" }}>Pick the agent that knows the job you are learning.</span>}
             {selected &&
-              processes.map((p) => (
-                <Link key={p.sessionId} href={p.teachHref} style={opt(p === first)}>
-                  <span className="flex min-w-0 flex-col" style={{ gap: 4 }}>
-                    <span style={{ fontWeight: 600 }}>{p.task}</span>
-                    <span className="text-xs" style={{ color: "var(--mu)" }}>
-                      {p.counts}
+              processes.map((p) =>
+                p.ready ? (
+                  <Link key={p.sessionId} href={p.teachHref} style={opt(p === first)}>
+                    <span className="flex min-w-0 flex-col" style={{ gap: 4 }}>
+                      <span style={{ fontWeight: 600 }}>{p.task}</span>
+                      <span className="text-xs" style={{ color: "var(--mu)" }}>
+                        {p.counts}
+                      </span>
                     </span>
-                  </span>
-                  {radio(p === first)}
-                </Link>
-              ))}
+                    {radio(p === first)}
+                  </Link>
+                ) : (
+                  <div key={p.sessionId} aria-disabled="true" data-testid="process-not-ready" style={{ ...opt(false), opacity: 0.5, cursor: "not-allowed" }}>
+                    <span className="flex min-w-0 flex-col" style={{ gap: 4 }}>
+                      <span style={{ fontWeight: 600 }}>{p.task}</span>
+                      <span className="text-xs" style={{ color: "var(--mu)" }}>
+                        Still training · {p.understood}% understood
+                      </span>
+                    </span>
+                  </div>
+                ),
+              )}
           </Column>
           {selected && first && (
             <Column n={3} title="Start" style={{ padding: 22, gap: 18, background: "var(--stage)" }}>

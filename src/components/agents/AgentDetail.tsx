@@ -25,6 +25,7 @@ import {
   type ShortcutRow,
 } from "./model";
 import type { AgentStats } from "@/lib/agents/stats";
+import { STATUS_LABELS, type AgentStatus } from "@/lib/agents/status";
 
 export type AgentDetailProps = {
   agent: Agent;
@@ -223,6 +224,8 @@ function Learners({ rows }: { rows: LearnerRow[] }) {
 
 export default function AgentDetail(props: AgentDetailProps) {
   const { agent, role, tab, stats } = props;
+  // Same rule as lib/agents/status: a ready process, else any capture (last_trained is set), else new.
+  const status: AgentStatus = props.processes.some((p) => p.ready) ? "ready" : stats.last_trained ? "training" : "new";
   const counts: Record<AgentTab, number | undefined> = {
     processes: stats.processes,
     shortcuts: stats.shortcuts ?? undefined,
@@ -250,7 +253,7 @@ export default function AgentDetail(props: AgentDetailProps) {
         <div className="flex min-w-0 flex-col justify-center" style={{ flex: "1 1 420px", padding: "28px 32px", gap: 14 }}>
           <div className="flex flex-wrap items-center" style={{ gap: 12 }}>
             <h1 className="ui-td">{agent.name}</h1>
-            {stats.processes > 0 && <Badge kind="confirmed">Ready to teach</Badge>}
+            <Badge kind={status === "ready" ? "confirmed" : status === "training" ? "accent" : "pending"}>{STATUS_LABELS[status]}</Badge>
           </div>
           <div className="flex flex-col" style={{ gap: 4 }}>
             <span style={{ fontSize: 17 }}>{agent.role}</span>

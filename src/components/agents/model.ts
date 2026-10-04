@@ -9,6 +9,7 @@
 // - Deleting an agent keeps its sessions; they become agentless (agent_id cleared by the store).
 import { z } from "zod";
 import { agentStats, type AgentStats } from "@/lib/agents/stats";
+import { agentStatus, isReadyProcess, understandingPercent, type AgentStatus } from "@/lib/agents/status";
 import type { CreatedBy, DashboardMember } from "@/lib/dashboard/summary";
 import { AGENT_EXPERT_NAME_MAX, type Agent, type Guardrail, type Session, type SessionDigest } from "@/lib/types";
 import { countsLine, formatT, formatZurich } from "@/lib/workmap/view";
@@ -68,7 +69,9 @@ export type GalleryCard = {
   /** The expert's name, or null when none is named yet. */
   expertName: string | null;
   initials: string;
-  /** Ready to teach: at least one confirmed Work Map; otherwise the agent is still in training. */
+  /** Shared status rule (lib/agents/status): ready, training or new. */
+  status: AgentStatus;
+  /** Ready to teach: a confirmed, non-archived process at or above the 75% understanding bar. */
   ready: boolean;
   last: string;
   avatar: Agent["avatar"];
@@ -86,7 +89,7 @@ export function filterCards(cards: readonly GalleryCard[], query: string, filter
   const q = query.trim().toLowerCase();
   return cards.filter(
     (c) =>
-      (filter === "all" || (filter === "ready") === c.ready) &&
+      (filter === "all" || filter === c.status) &&
       (!q || [c.name, c.role, c.expertName ?? ""].some((t) => t.toLowerCase().includes(q))),
   );
 }
@@ -97,6 +100,7 @@ export function galleryCards(agents: readonly Agent[], sessions: readonly Sessio
     .map((a) => {
       const stats = agentStats(a.id, sessions);
       const expertName = a.expert_name?.trim() || null;
+      const status = agentStatus(a.id, sessions);
       return {
         id: a.id,
         name: a.name,
@@ -104,7 +108,8 @@ export function galleryCards(agents: readonly Agent[], sessions: readonly Sessio
         expert: expertLine(a),
         expertName,
         initials: initials(expertName),
-        ready: stats.processes > 0,
+        status,
+        ready: status === "ready",
         last: lastText(stats.last_trained),
         avatar: a.avatar,
         stats,
@@ -118,14 +123,8 @@ const confirmedOf = (agentId: string, sessions: readonly SessionDigest[]) =>
     .filter((s) => s.agent_id === agentId && s.kind === "capture" && s.workmap?.confirmed_by_expert === true)
     .sort((a, b) => Date.parse(b.started_at) - Date.parse(a.started_at) || a.id.localeCompare(b.id));
 
-export type ProcessRow = { sessionId: string; task: string; counts: string; understood: number; date: string; href: string };
-
-/** Mean of the per-step reason and guardrail scores, 0-100 (the 'Understood' bar). */
-function understood(steps: readonly { scores?: { reason_captured?: number; guardrail_captured?: number } }[]): number {
-  if (steps.length === 0) return 0;
-  const sum = steps.reduce((n, st) => n + ((st.scores?.reason_captured ?? 0) + (st.scores?.guardrail_captured ?? 0)) / 2, 0);
-  return Math.round((sum / steps.length) * 100);
-}
+/** understood: the shared understanding score as 0-100 (the 'Understood' bar); ready: startable in Learn. */
+export type ProcessRow = { sessionId: string; task: string; counts: string; understood: number; ready: boolean; date: string; href: string };
 
 /** The agent's confirmed Work Maps, newest first. */
 export function agentProcesses(agentId: string, sessions: readonly SessionDigest[]): ProcessRow[] {
@@ -133,7 +132,8 @@ export function agentProcesses(agentId: string, sessions: readonly SessionDigest
     sessionId: s.id,
     task: s.workmap!.task || "Untitled capture",
     counts: countsLine(s.workmap!),
-    understood: understood(s.workmap!.steps ?? []),
+    understood: understandingPercent(s.workmap),
+    ready: isReadyProcess({ workmap: s.workmap, archived_at: null }),
     date: formatZurich(s.started_at),
     href: `/map/${encodeURIComponent(s.id)}`,
   }));
@@ -271,19 +271,19 @@ export function agentLearners(
 export const masteryText = (mastered: number, steps: number) =>
   steps > 0 ? `${mastered} of ${steps} steps mastered (${Math.round((mastered / steps) * 100)}%)` : `${mastered} steps mastered`;
 
-/** Learn: only agents with at least one confirmed process are offered. */
+/** Learn: only agents with at least one ready process are offered. */
 export function learnAgents(agents: readonly Agent[], sessions: readonly SessionDigest[]): GalleryCard[] {
-  return galleryCards(agents, sessions).filter((c) => c.stats.processes > 0);
+  return galleryCards(agents, sessions).filter((c) => c.ready);
 }
 
-/** Learn: agents without a confirmed process yet, shown dimmed as 'Still training' (not startable). */
+/** Learn: agents without a ready process yet, shown dimmed as 'Still training' (not startable). */
 export function learnTraining(agents: readonly Agent[], sessions: readonly SessionDigest[]): GalleryCard[] {
-  return galleryCards(agents, sessions).filter((c) => c.stats.processes === 0);
+  return galleryCards(agents, sessions).filter((c) => !c.ready);
 }
 
 export type LearnProcess = ProcessRow & { teachHref: string; focus: string[]; practice: string[] };
 
-/** Learn: the agent's confirmed processes, each linking to Teach, with the judgment-call steps the agent focuses on
+/** Learn: the agent's confirmed processes (ready ones startable, the rest dimmed with their %), each linking to Teach, with the judgment-call steps the agent focuses on
  * and the screen entities to practise with. */
 export function learnProcesses(agentId: string, sessions: readonly SessionDigest[]): LearnProcess[] {
   const maps = new Map(confirmedOf(agentId, sessions).map((s) => [s.id, s.workmap!]));

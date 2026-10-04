@@ -9,6 +9,7 @@ import { useState } from "react";
 import { Badge, buttonClass, Segmented } from "@/components/ui";
 import { COMPANION_README } from "@/components/capture/CompanionCard";
 import AgentAvatar from "./AgentAvatar";
+import { STATUS_LABELS } from "@/lib/agents/status";
 import { EMPTY_AVATAR, filterCards, statText, type GalleryCard, type GalleryFilter } from "./model";
 
 export const cardClass = "ui-card flex flex-col";
@@ -45,8 +46,8 @@ export function AgentCard({ card, href = card.href }: { card: GalleryCard; href?
     <li>
       <HoverPrefetchLink href={href} className={`${cardClass} h-full gap-4 p-4 hover:border-[var(--ln2)]`} data-testid="agent-card">
         <span className="relative flex h-44 items-center justify-center rounded-[12px]" style={{ background: "var(--stage)" }}>
-          <Badge kind={card.ready ? "confirmed" : "accent"} className="absolute top-3 left-3">
-            {card.ready ? "Ready to teach" : "Training"}
+          <Badge kind={card.status === "ready" ? "confirmed" : card.status === "training" ? "accent" : "pending"} className="absolute top-3 left-3">
+            {STATUS_LABELS[card.status]}
           </Badge>
           <span className="absolute top-[13px] right-3 text-xs" style={{ color: "var(--fa)" }}>{card.last}</span>
           <AgentAvatar avatar={card.avatar} size={124} />
@@ -174,7 +175,7 @@ export default function AgentGallery({
             items={[
               { id: "all", label: "All", count: cards.length },
               { id: "ready", label: "Ready to teach", count: ready },
-              { id: "training", label: "Training", count: cards.length - ready },
+              { id: "training", label: "Training", count: cards.filter((c) => c.status === "training").length },
             ]}
           />
           <ul className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr))]">
