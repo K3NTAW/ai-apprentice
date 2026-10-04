@@ -139,8 +139,9 @@ export default function WorkspaceSwitcher({
   const select = async (workspaceId: string) => {
     setError(false);
     const result = await switchWorkspace(workspaceId, activeId, browserDeps());
+    // On success the page is reloading into the chosen workspace: close the menu so it never shows the old check.
     if (!result.ok) setError(true);
-    else if (workspaceId === activeId) close();
+    else close();
   };
   return (
     <div className="relative" ref={rootRef}>

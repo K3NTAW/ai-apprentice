@@ -50,11 +50,29 @@ async function homeWorkspace(page: Page): Promise<string> {
   return labels.map((l) => l.trim()).find((l) => !l.startsWith(WORKSPACE_NAME)) ?? "";
 }
 
+const switcher = (page: Page) => page.getByRole("button", { name: "Switch workspace" });
+
+/**
+ * Chooses the workspace and waits for POST /api/workspace/active and the reload it triggers, then checks the
+ * server-rendered switcher label, again after a reload. No polling through the menu: it is still open while the
+ * reload is pending, so a poll's click closed it and a read that straddled the reload waited out the timeout.
+ */
 async function switchTo(page: Page, name: string) {
   await openSwitcher(page);
-  await page.getByRole("menuitemradio").filter({ hasText: name }).first().click();
-  await page.waitForLoadState("load");
-  await expect.poll(async () => (await activeWorkspace(page)).includes(name)).toBe(true);
+  const item = page.getByRole("menuitemradio").filter({ hasText: name }).first();
+  if ((await item.getAttribute("aria-checked")) === "true") {
+    await page.keyboard.press("Escape");
+  } else {
+    const posted = page.waitForResponse((r) => new URL(r.url()).pathname === "/api/workspace/active" && r.request().method() === "POST");
+    const reloaded = page.waitForEvent("load");
+    await item.click();
+    expect((await posted).ok(), "POST /api/workspace/active").toBe(true);
+    await reloaded;
+  }
+  await expect(switcher(page)).toContainText(name, { timeout: 15_000 });
+  await page.reload();
+  await expect(switcher(page)).toContainText(name, { timeout: 15_000 });
+  expect(await activeWorkspace(page)).toContain(name);
 }
 
 test("01 sign in with email and password, walk onboarding", async ({ app: { page, shot } }) => {

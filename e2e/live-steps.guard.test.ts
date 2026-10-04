@@ -25,3 +25,19 @@ describe("live step 12: theme", () => {
     for (const text of [spec, local]) expect(text).not.toMatch(/menuitem", \{ name: \/theme\$\//);
   });
 });
+
+describe("live steps 07 and 13: workspace switch", () => {
+  const helper = spec.slice(spec.indexOf("async function switchTo("), spec.indexOf("\ntest(", spec.indexOf("async function switchTo(")));
+
+  it("waits for POST /api/workspace/active and the reload, then checks the label, again after a reload", () => {
+    expect(helper).toMatch(/waitForResponse\(/);
+    expect(helper).toContain("/api/workspace/active");
+    expect(helper).toMatch(/waitForEvent\("load"\)/);
+    expect(helper).toMatch(/page\.reload\(\)/);
+    expect(helper).toMatch(/toContainText\(name/);
+  });
+
+  it("never polls through the menu (a poll's click closed the still open menu)", () => {
+    expect(helper).not.toMatch(/expect\.poll/);
+  });
+});
