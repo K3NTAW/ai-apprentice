@@ -47,5 +47,15 @@ After `supabase db push`:
 14. As owner, delete a backfilled process (204): `select * from public.processes_tombstones` lists its source session.
     `POST /api/processes/backfill` again answers `{created: 0}`, the process stays deleted.
 
+15. Slice (c), end of the debrief. Confirm the teach-back for an agent without processes: the session becomes the
+    agent's first process ('Saved in ... version 1'). Debrief a second session of the same task: 'This looks like
+    <Process> (n% similar)' with Add to it as the default. Add to it shows what changes and the conflicts; Confirm and
+    add bumps the version; the old reasons and guardrails are still there, conflicts are open questions.
+    `GET /api/processes/<id>/versions` lists 'extended' with the session as source. Replace it on a third session
+    keeps the previous version in the history ('replaced'). Save as a new process makes a second process.
+16. Edit a step title of a process (PATCH workmap), then open it from Learn: the link carries `&process=<id>` and
+    Teach shows the edited title. An old `/teach?session=<id>` link still opens that session's Work Map.
+17. Before the migration: the debrief shows no process choice (503) and the session stays a legacy Work Map.
+
 Rollback: supabase/rollbacks/20261004030000_processes.down.sql (lossy: drops processes, versions and sessions.process_id),
 then `supabase migration repair --status reverted 20261004030000`.
