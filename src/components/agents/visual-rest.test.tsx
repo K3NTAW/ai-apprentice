@@ -58,7 +58,7 @@ describe("agent tabs", () => {
   it("guardrail rows: serif quote line, status, play icon on 'Screen moment', 'Export guardrails' on the export route", () => {
     const html = detail("guardrails");
     expect(html).toContain('data-testid="guardrail-quote"');
-    expect(html).toContain("var(--font-serif)");
+    expect(html).toContain("var(--font-serif");
     expect(html).toContain("Confirmed");
     expect(html).toContain('data-testid="play-icon"');
     expect(html).toContain("Export guardrails");

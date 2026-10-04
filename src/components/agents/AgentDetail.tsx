@@ -51,7 +51,7 @@ const Intro = ({ children, action }: { children: React.ReactNode; action?: React
   </div>
 );
 const GUARD_KIND: Record<GuardrailRow["kind"], BadgeKind> = { limit: "limit", exception: "exception", stop_and_ask: "stop_and_ask" };
-const quoteStyle = { fontFamily: "var(--font-serif)", fontStyle: "italic" as const, fontSize: 17, lineHeight: 1.3 };
+const quoteStyle = { fontFamily: "var(--font-serif, 'Instrument Serif', Georgia, serif)", fontStyle: "italic" as const, fontSize: 17, lineHeight: 1.3 };
 
 function Processes({ rows, agentId, role }: { rows: ProcessRow[]; agentId: string; role: Role | null }) {
   const train = canCapture(role) && (

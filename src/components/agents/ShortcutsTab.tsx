@@ -5,7 +5,7 @@ import { Card, Chord } from "@/components/ui";
 import type { ShortcutRow } from "./model";
 
 const COLS = "150px 100px 190px minmax(0, 1fr)";
-const quoteStyle = { fontFamily: "var(--font-serif)", fontStyle: "italic" as const, fontSize: 17, lineHeight: 1.3 };
+const quoteStyle = { fontFamily: "var(--font-serif, 'Instrument Serif', Georgia, serif)", fontStyle: "italic" as const, fontSize: 17, lineHeight: 1.3 };
 
 /** Apps in first-seen order with their shortcut counts. */
 export function shortcutApps(rows: readonly ShortcutRow[]): { app: string; n: number }[] {
