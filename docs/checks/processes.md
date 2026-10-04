@@ -1,4 +1,4 @@
-# Manual checks: processes slice (a) (T-0212, fix rounds T-0219, T-0225, T-0233), (c) and (d) (T-0235)
+# Manual checks: processes slice (a) (T-0212, fix rounds T-0219, T-0225, T-0233), (c) (T-0234) and (d) (T-0235)
 
 Data model, API and the read side: agent cards, header, filter tabs, the agent page tabs, Learn and Teach read the
 agent's processes merged with legacy confirmed sessions (agentWorkMaps). Slices b-d wire the debrief, merge and editing.
