@@ -1,4 +1,4 @@
-# E2E click-through (T-0168 -> T-0172 -> T-0173)
+# E2E click-through (T-0168 -> T-0172 -> T-0173 -> T-0247)
 
 ## How to run
 
@@ -7,13 +7,17 @@ PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm ci   # once; no browser download, drives 
 npm run e2e                                 # playwright test
 ```
 
-- `playwright.config.ts`: channel `chrome`, headless, 1 worker, `retries: 0`, `forbidOnly`.
+- `playwright.config.ts`: channel `chrome`, headless, 1 worker, `retries: 0`, `forbidOnly`, `testIgnore: "live/**"` (the
+  live suite runs only with `npm run e2e:live`).
+- Part of the pre-PR checks in `docs/DEPLOY.md`. `e2e/e2e.guard.test.ts` (Vitest, no browser) checks the script, the
+  live ignore and that the pre-PR list names `npm run e2e`.
 - webServer: `node e2e/seed.mjs && next dev --port 3217`, `reuseExistingServer: false`, timeout 180 s. `next dev` because
   NODE_ENV=development resolves appMode to `local`; a production build would be `misconfigured`.
 - Seed: `e2e/seed.mjs` writes into `$TMPDIR/ai-apprentice-e2e` (never `./data`, it refuses a path inside the repo) and
   fails fast if any `NEXT_PUBLIC_SUPABASE_*` / `SUPABASE_SERVICE_ROLE_KEY` is set. Fixtures: Invoice Ivy (confirmed Work
-  Map `e2e-map-confirmed`, open debrief `e2e-debrief-open`, learner teach session `e2e-teach-learner`) and Ledger Leo (no
-  training). `e2e/global-teardown.ts` removes the dir.
+  Map `e2e-map-confirmed` linked to a confirmed process at 0.8 understanding, so 'Ready to teach'; open debrief
+  `e2e-debrief-open`; ended learner teach session `e2e-teach-learner`) and Ledger Leo (one unconfirmed process, so
+  'Training'). `processes.json` holds both processes. `e2e/global-teardown.ts` removes the dir.
 - Not part of tests-green (needs a browser). Specs are `*.spec.ts`, so Vitest ignores them. tsc and eslint cover `e2e/`.
 - No `test.skip`, `test.fixme`, retries, `waitForTimeout` or soft assertions. Assertions are web-first and wait through
   the `loading.tsx` skeletons.
@@ -32,7 +36,7 @@ the content changes). Each spec then clicks the elements and asserts that result
 | --- | --- | --- |
 | Main, LandingLight, LandingPhone | `landing-login.spec.ts` | section anchors, CTAs to /capture, `?theme=light` vs dark, phone menu |
 | Login, LoginSent | `landing-login.spec.ts` | tabs, show/hide, sign in, forgot password, link request (each shows the error without Supabase), sent state and back (`/login/preview`, `?sent=`) |
-| Shell, Sidebar | `shell.spec.ts` | every nav link, recent sessions (teach, map, live capture), user menu, theme toggle, account |
+| Shell, Sidebar | `shell.spec.ts` | every nav link, search (palette opens), collapse and expand, recent sessions (teach, map), user menu, theme Dark and Light, account; workspace switcher is covered as an expectation (Supabase mode only) |
 | Gallery, GalleryLight | `agents.spec.ts` | input box start session, agent picker, speak (disabled reason), chips, filter tabs, search, cards, new agent |
 | GalleryEmpty, GalleryPhone | `landing-login.spec.ts` | empty state links (`/agents/preview?empty=1`), phone top bar, user menu, card |
 | NewAgent 1-3 | `agents.spec.ts` | steps 1 to 3, create, link to capture, cancel |
@@ -64,6 +68,7 @@ AppOnly controls: the assertion is disabled/aria-disabled plus the reason text a
 | Shortcuts tab read the wrong field (T-0172, 6ced609) | tab empty for maps with shortcuts | reads `WorkMap.shortcuts` | `src/app/agents/[id]/agent.page.test.tsx` |
 | Login form submit with no Supabase config (T-0173) | `unhandledRejection: supabase_not_configured`, button stuck on busy, no message | every submit handler catches and shows 'That did not work. Try again.' | `landing-login.spec.ts` sign in / forgot / link request |
 | LoginSent had no reachable state in local mode (T-0173) | only reachable through a real sign-in link | `/login/preview?sent=<address>` (local mode only, address-shaped values only) | `landing-login.spec.ts` link sent state |
+| Stale specs after the shell and processes work (T-0247) | 15 failures: new sidebar controls (search, collapse) uncovered, user menu no longer a `<details>`, theme is a Dark, Light, System radio, home redirects to `/agents`, seed agents never met the ready rule (0.73 understanding, no processes), delete uses a type-to-confirm dialog, learners are labelled from members | shell expectations and specs updated, seed scores 0.8 with `processes.json`, teach session ended (no clock-dependent live row) | the specs themselves |
 | Spec fixes (T-0173) | sidebar showed a live `Capture ·` session with no expectation; stacked `page.once` dialog handlers; `getByRole('alert')` matched Next's route announcer | shell expectation covers `Capture`; one handler; announcer excluded | the specs themselves |
 
 ## Run result

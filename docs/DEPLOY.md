@@ -18,6 +18,19 @@ In production without the three Supabase variables the app runs in 'misconfigure
 setup notice and API routes answer 503 `{"error":"supabase_not_configured"}`. It never falls back to the
 local file store or to no auth.
 
+## Pre-PR checks
+
+Run these locally before opening a PR into the goal branch. None of them need CI.
+
+```
+npm test                 # Vitest (also checks that this list names npm run e2e: e2e/e2e.guard.test.ts)
+npx tsc --noEmit
+npm run lint
+npm run e2e              # Playwright click-through in local mode, installed Google Chrome (docs/checks/e2e.md)
+```
+
+`npm run e2e` ignores `e2e/live/**`; the live suite needs real keys and runs only with `npm run e2e:live`.
+
 ## 1. Create the Supabase project
 
 Either:
