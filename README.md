@@ -176,4 +176,4 @@ Full step-by-step guide: [docs/DEPLOY.md](docs/DEPLOY.md).
 
 ## Team
 
-[team]
+Built solo by Kenta Waibel, working with a team of AI agents: a planner agent that splits the work into atomic specs, and coding agents (Claude) that build, test and review every change in parallel. 1,500+ automated tests gate every merge.
