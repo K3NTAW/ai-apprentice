@@ -3,6 +3,8 @@ import localFont from "next/font/local";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import { connection } from "next/server";
+import { Suspense } from "react";
+import NavProgress from "@/components/ui/NavProgress";
 import { appMode } from "@/lib/supabase/env";
 import "./globals.css";
 
@@ -41,6 +43,9 @@ export default async function RootLayout({
             Setup incomplete: Supabase is not configured on this deployment. See docs/DEPLOY.md.
           </div>
         )}
+        <Suspense fallback={null}>
+          <NavProgress />
+        </Suspense>
         {children}
       </body>
     </html>

@@ -1,7 +1,11 @@
+"use client";
+
 // Learn, 1:1 with docs/design/canvas/Learn.dc.html: three cards, 1 Agent (only agents with a confirmed process),
-// 2 Process, 3 Start; Teach starts with ?agent&session. Selection is in the URL (?agent=), so options are links.
+// 2 Process, 3 Start; Teach starts with ?agent&session. ?agent= picks the first selection; with processesByAgent
+// later picks switch client-side (shallow ?agent=, no route navigation), without it the options are links.
 import Link from "next/link";
-import type { CSSProperties, ReactNode } from "react";
+import { useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
+import { shallowClick } from "@/lib/nav/shallow";
 import { buttonClass, Card } from "@/components/ui";
 import AgentAvatar from "./AgentAvatar";
 import { learnHref, type GalleryCard, type LearnProcess } from "./model";
@@ -14,6 +18,8 @@ export type LearnViewProps = {
   /** Agents without a confirmed process: shown dimmed, not startable. */
   training?: GalleryCard[];
   firstName?: string | null;
+  /** Processes of every offered agent, loaded with the page: agent picks then switch without a navigation. */
+  processesByAgent?: Record<string, LearnProcess[]>;
 };
 
 const opt = (on: boolean): CSSProperties => ({
@@ -51,7 +57,35 @@ function Column({ n, title, children, style }: { n: number; title: string; child
   );
 }
 
-export default function LearnView({ agents, selected, processes, unknownAgent, training = [], firstName = null }: LearnViewProps) {
+/** A selection option: a shallow client-side switch when onPick is set, else a link. */
+function Pick({ href, onPick, style, current, children }: { href: string; onPick?: () => void; style: CSSProperties; current?: boolean; children: ReactNode }) {
+  if (!onPick)
+    return (
+      <Link href={href} aria-current={current ? "true" : undefined} style={style}>
+        {children}
+      </Link>
+    );
+  return (
+    <a href={href} data-shallow="" aria-current={current ? "true" : undefined} style={style} onClick={(e: MouseEvent) => shallowClick(href, onPick)(e)}>
+      {children}
+    </a>
+  );
+}
+
+export default function LearnView(props: LearnViewProps) {
+  const { agents, training = [], firstName = null, processesByAgent } = props;
+  const [pickedId, setPickedId] = useState<string | null>(props.selected?.id ?? null);
+  const [unknownAgent, setUnknownAgent] = useState(props.unknownAgent);
+  const client = processesByAgent !== undefined;
+  const selected = client ? (agents.find((a) => a.id === pickedId) ?? null) : props.selected;
+  const processes = client ? (selected ? (processesByAgent[selected.id] ?? []) : []) : props.processes;
+  const pick = (id: string | null) =>
+    client
+      ? () => {
+          setPickedId(id);
+          setUnknownAgent(false);
+        }
+      : undefined;
   const first = processes[0] ?? null;
   return (
     <main className="flex min-w-0 flex-col" style={{ padding: "36px 40px 56px", gap: 26 }}>
@@ -79,7 +113,7 @@ export default function LearnView({ agents, selected, processes, unknownAgent, t
             {agents.map((c) => {
               const on = c.id === selected?.id;
               return (
-                <Link key={c.id} href={learnHref(c.id)} aria-current={on ? "true" : undefined} style={opt(on)}>
+                <Pick key={c.id} href={learnHref(c.id)} onPick={pick(c.id)} current={on} style={opt(on)}>
                   <AgentAvatar avatar={c.avatar} size={44} />
                   <span className="flex min-w-0 flex-col">
                     <span style={{ fontWeight: 600 }}>{c.name}</span>
@@ -88,7 +122,7 @@ export default function LearnView({ agents, selected, processes, unknownAgent, t
                     </span>
                   </span>
                   {radio(on)}
-                </Link>
+                </Pick>
               );
             })}
             {training.map((c) => (
@@ -158,9 +192,9 @@ export default function LearnView({ agents, selected, processes, unknownAgent, t
               <span className="text-center text-xs" style={{ color: "var(--fa)" }}>
                 {selected.name} appears next to your cursor. Say &ldquo;off the record&rdquo; any time.
               </span>
-              <Link className="text-center text-[13px]" style={{ color: "var(--mu)" }} href={learnHref()}>
+              <Pick href={learnHref()} onPick={pick(null)} style={{ color: "var(--mu)", fontSize: 13, textAlign: "center" }}>
                 Pick another agent
-              </Link>
+              </Pick>
             </Column>
           )}
         </div>

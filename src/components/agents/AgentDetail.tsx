@@ -1,24 +1,23 @@
 // Agent page, 1:1 with docs/design/canvas/Agent.dc.html and its tab artboards (AgentShortcuts, AgentGuardrails,
-// AgentLearners, AgentSettings): hero card with the big avatar, Train and Teach buttons, tabs selected by ?tab=
-// (server rendered) with counts. Data the app does not have (understood %, seen counts, learner avatars) is hidden.
+// AgentLearners, AgentSettings): hero card with the big avatar, Train and Teach buttons, tabs with counts, ?tab= picks the first
+// one and later switches are client-side (./AgentTabs). Data the app does not have (understood %, seen counts,
+// learner avatars) is hidden.
 import Link from "next/link";
 import { canCapture } from "@/components/shell/ShellHeader";
 import type { Role } from "@/lib/auth/context";
 import type { Agent } from "@/lib/types";
 import { guardrailKindLabel } from "@/lib/workmap/view";
 import AgentAvatar from "./AgentAvatar";
-import { Badge, Card, ScoreBar, buttonClass, Tabs, type BadgeKind } from "@/components/ui";
+import { Badge, Card, ScoreBar, buttonClass, type BadgeKind } from "@/components/ui";
+import AgentTabs from "./AgentTabs";
 import AgentSettings from "./AgentSettings";
 import ShortcutsTab from "./ShortcutsTab";
 import {
-  AGENT_TABS,
-  agentHref,
   captureHref,
   expertLine,
   learnHref,
   masteryText,
   statText,
-  TAB_LABELS,
   type AgentTab,
   type GuardrailRow,
   type LearnerRow,
@@ -278,23 +277,25 @@ export default function AgentDetail(props: AgentDetailProps) {
           </Link>
         </div>
       </Card>
-      <nav aria-label="Agent tabs">
-        <Tabs tabs={AGENT_TABS.map((t) => ({ id: t, label: TAB_LABELS[t], count: counts[t], href: agentHref(agent.id, t) }))} active={tab} />
-      </nav>
-      <section>
-        {tab === "processes" && <Processes rows={props.processes} agentId={agent.id} role={role} />}
-        {tab === "shortcuts" &&
-          (props.shortcuts.length === 0 ? (
-            <Empty>No shortcuts recorded yet. The companion records the chords the expert uses while training.</Empty>
-          ) : (
-            <div className="flex flex-col" style={{ gap: 14 }}>
-              <ShortcutsTab rows={props.shortcuts} expert={agent.expert_name ?? "the expert"} />
-            </div>
-          ))}
-        {tab === "guardrails" && <Guardrails rows={props.guardrails} agentId={agent.id} />}
-        {tab === "learners" && <Learners rows={props.learners} />}
-        {tab === "settings" && <AgentSettings agent={agent} role={role} />}
-      </section>
+      <AgentTabs
+        agentId={agent.id}
+        initial={tab}
+        counts={counts}
+        panels={{
+          processes: <Processes rows={props.processes} agentId={agent.id} role={role} />,
+          shortcuts:
+            props.shortcuts.length === 0 ? (
+              <Empty>No shortcuts recorded yet. The companion records the chords the expert uses while training.</Empty>
+            ) : (
+              <div className="flex flex-col" style={{ gap: 14 }}>
+                <ShortcutsTab rows={props.shortcuts} expert={agent.expert_name ?? "the expert"} />
+              </div>
+            ),
+          guardrails: <Guardrails rows={props.guardrails} agentId={agent.id} />,
+          learners: <Learners rows={props.learners} />,
+          settings: <AgentSettings agent={agent} role={role} />,
+        }}
+      />
     </main>
   );
 }

@@ -1,5 +1,6 @@
 // Shared components, 1:1 with docs/design/canvas/Components.dc.html. Styles are the ui-* classes in src/app/globals.css.
 import type { ButtonHTMLAttributes, CSSProperties, InputHTMLAttributes, ReactNode } from "react";
+import { shallowClick } from "@/lib/nav/shallow";
 
 const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(" ");
 
@@ -102,8 +103,17 @@ export function Tabs({
             {t.count !== undefined && <span className="ui-mono text-xs" style={{ color: "var(--fa)" }}> {t.count}</span>}
           </>
         );
+        // href with onSelect: a client-side switch (href stays for new tabs); href alone navigates.
         return t.href ? (
-          <a key={t.id} role="tab" aria-selected={on} href={t.href} className={cx("ui-tab", on && "ui-on")}>
+          <a
+            key={t.id}
+            role="tab"
+            aria-selected={on}
+            href={t.href}
+            data-shallow={onSelect ? "" : undefined}
+            onClick={onSelect ? shallowClick(t.href, () => onSelect(t.id)) : undefined}
+            className={cx("ui-tab", on && "ui-on")}
+          >
             {body}
           </a>
         ) : (

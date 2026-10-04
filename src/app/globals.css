@@ -252,8 +252,17 @@ body {
   50% { opacity: .3; }
 }
 
+/* Loading skeletons: invisible for 400 ms, then a 150 ms fade (src/components/ui/Skeleton.tsx). */
+.aa-skel-delay { opacity: 0; animation: aa-skel-in 150ms ease-out 400ms forwards; }
+@keyframes aa-skel-in { to { opacity: 1; } }
+
+/* Navigation progress bar (src/components/ui/NavProgress.tsx): grows slowly toward 90% while the page loads. */
+.aa-nav-progress { transform-origin: left; animation: aa-nav-grow 8s cubic-bezier(.1,.6,.2,1) forwards; }
+@keyframes aa-nav-grow { from { transform: scaleX(.08); } to { transform: scaleX(.9); } }
+
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; }
+  .aa-skel-delay { opacity: 1; }
 }
 
 @keyframes aa-wv { 50% { transform: scaleY(.4); } }

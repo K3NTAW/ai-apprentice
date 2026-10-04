@@ -1,11 +1,24 @@
 // Loading skeletons for the route segments' loading.tsx (canvas tokens, no hooks: server and client safe).
 // shell: the page renders AppShell itself, so the skeleton draws the sidebar too; segments whose layout already
 // renders AppShell (capture, teach, debrief, map) pass shell={false}.
+// Delayed: the placeholders stay transparent for 400 ms and fade in over 150 ms (.aa-skel-delay in globals.css), so a
+// navigation that finishes quickly shows only the empty frame. Reduced motion: shown at once, without the fade.
 
 export type SkeletonVariant = "list" | "grid" | "detail" | "console" | "form";
 
 export function Skeleton({ className = "", style }: { className?: string; style?: React.CSSProperties }) {
   return <div aria-hidden="true" className={`animate-pulse rounded-lg bg-panel-2 ${className}`} style={style} />;
+}
+
+export const SKELETON_DELAY_CLASS = "aa-skel-delay motion-reduce:animate-none motion-reduce:opacity-100";
+
+/** The one wrapper every loading.tsx goes through (via PageSkeleton): invisible for 400 ms, then fades in. */
+export function DelayedSkeleton({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div data-skeleton-delay className={`${SKELETON_DELAY_CLASS} ${className}`}>
+      {children}
+    </div>
+  );
 }
 
 function Body({ variant }: { variant: SkeletonVariant }) {
@@ -57,18 +70,22 @@ export function PageSkeleton({ label, variant = "list", shell = true }: { label:
   const content = (
     <main role="status" aria-busy="true" aria-live="polite" className="flex min-w-0 flex-1 flex-col gap-6" style={{ padding: "28px 40px 56px" }}>
       <span className="sr-only">Loading {label}…</span>
-      <Skeleton className="h-7 w-56" />
-      <Body variant={variant} />
+      <DelayedSkeleton className="flex flex-col gap-6">
+        <Skeleton className="h-7 w-56" />
+        <Body variant={variant} />
+      </DelayedSkeleton>
     </main>
   );
   if (!shell) return content;
   return (
     <div data-skeleton-shell className="flex min-h-screen flex-col md:flex-row" style={{ background: "var(--bg)", color: "var(--tx)" }}>
       <div aria-hidden="true" className="flex gap-3 border-line px-3 py-3 md:h-screen md:w-[248px] md:shrink-0 md:flex-col md:border-r md:py-4">
-        <Skeleton className="h-8 w-32" />
-        {Array.from({ length: 5 }, (_, i) => (
-          <Skeleton key={i} className="hidden h-7 md:block" />
-        ))}
+        <DelayedSkeleton className="flex gap-3 md:flex-col">
+          <Skeleton className="h-8 w-32" />
+          {Array.from({ length: 5 }, (_, i) => (
+            <Skeleton key={i} className="hidden h-7 md:block" />
+          ))}
+        </DelayedSkeleton>
       </div>
       {content}
     </div>

@@ -1,4 +1,5 @@
 // Learn: a new employee picks an agent with a confirmed process, then a process; Teach starts with ?agent&session.
+// Processes of every offered agent load with the page, so picking an agent switches client-side.
 import { redirect } from "next/navigation";
 import LearnView from "@/components/agents/LearnView";
 import { learnAgents, learnProcesses, learnTraining, memberName, parseId } from "@/components/agents/model";
@@ -27,6 +28,7 @@ async function body(agentId: string | null) {
         agents={agents}
         selected={selected}
         processes={selected ? learnProcesses(selected.id, input.sessions) : []}
+        processesByAgent={Object.fromEntries(agents.map((a) => [a.id, learnProcesses(a.id, input.sessions)]))}
         unknownAgent={agentId !== null && selected === null}
         training={learnTraining(input.agents, input.sessions)}
         firstName={result.ctx.email ? memberName(result.ctx.email).split(" ")[0] : null}
