@@ -10,6 +10,18 @@ export type RedactOptions = {
   knownNames?: readonly string[];
   /** Names that must never be redacted, e.g. the expert's first name. */
   keepNames?: readonly string[];
+  /**
+   * Recognizer groups (agent settings, Privacy). Off skips the group: namesEmails is PERSON and EMAIL_ADDRESS,
+   * ibanPhone is IBAN_CODE and PHONE_NUMBER. Card numbers always run. Default: both on.
+   */
+  recognizers?: { namesEmails: boolean; ibanPhone: boolean };
+};
+
+const GROUP_OF: Record<string, "namesEmails" | "ibanPhone"> = {
+  PERSON: "namesEmails",
+  EMAIL_ADDRESS: "namesEmails",
+  IBAN_CODE: "ibanPhone",
+  PHONE_NUMBER: "ibanPhone",
 };
 
 type Candidate = RedactEntity & { value: string };
@@ -143,7 +155,9 @@ export function analyze(text: string, opts: RedactOptions = {}): RedactEntity[] 
     ...titledNameCandidates(text, keep),
     ...collectGroup(text, CONTACT_NAME, "PERSON"),
     ...knownNameCandidates(text, opts.knownNames ?? [], keep),
-  ].filter((c) => c.type !== "PERSON" || !isKept(c.value));
+  ]
+    .filter((c) => c.type !== "PERSON" || !isKept(c.value))
+    .filter((c) => !opts.recognizers || !GROUP_OF[c.type] || opts.recognizers[GROUP_OF[c.type]]);
 
   // Overlaps: longest wins, earlier start breaks ties.
   candidates.sort((a, b) => b.end - b.start - (a.end - a.start) || a.start - b.start);

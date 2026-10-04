@@ -21,6 +21,8 @@ const PKS: Record<string, string[]> = {
   session_transcript: ["id"],
   session_qa: ["session_id", "qa_id"],
   session_frames: ["session_id", "name"],
+  agent_reports: ["agent_id"],
+  agent_deletion_requests: ["id"],
 };
 const SERIAL = new Set(["session_events", "session_transcript"]);
 // Nullable columns come back as null, like Postgres, when an insert leaves them out.
@@ -118,6 +120,10 @@ export class FakeSupabase {
 
   /** Returns an RLS error for a row the current user may not write, else null. */
   writeDenied(table: string, row: Row): FakeError | null {
+    // agent_reports is written with the service role in the app; the fake only checks the workspace.
+    if (table === "agent_reports") return this.visibleWorkspaces.has(row.workspace_id as string) ? null : rlsError(table);
+    if (table === "agent_deletion_requests")
+      return row.requested_by === this.uid && this.visibleWorkspaces.has(row.workspace_id as string) ? null : rlsError(table);
     if (table === "sessions" || table === "agents") {
       if (row.created_by !== this.uid || !this.visibleWorkspaces.has(row.workspace_id as string)) return rlsError(table);
       if (table === "sessions" && row.agent_id != null) {

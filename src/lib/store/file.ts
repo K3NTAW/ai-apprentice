@@ -27,6 +27,7 @@ import {
   isOffRecord,
   isValidAgentId,
   isValidSessionId,
+  recognizersFromSettings,
   redactOpts,
   SessionNotFoundError,
   type AgentInput,
@@ -305,10 +306,21 @@ function appendEvents(id: string, events: ScreenEvent[]): Promise<Session> {
   });
 }
 
+/** The session agent's recognizer groups from data/agent_settings.json (see src/lib/agents/admin.ts). */
+async function agentRecognizers(agentId: string | undefined) {
+  if (!agentId) return recognizersFromSettings({});
+  try {
+    const all = JSON.parse(await readFile(path.join(dataDir(), "agent_settings.json"), "utf8")) as Record<string, unknown>;
+    return recognizersFromSettings(all[agentId]);
+  } catch {
+    return recognizersFromSettings({});
+  }
+}
+
 function appendTranscript(id: string, entries: TranscriptEntry[]): Promise<Session> {
-  return mutate(id, (s) => {
+  return mutate(id, async (s) => {
     if (hasOpenRange(s.off_record_ranges)) return;
-    const opts = redactOpts(s.expert);
+    const opts = redactOpts(s.expert, await agentRecognizers(s.agent_id));
     for (const e of entries) {
       if (isOffRecord(s.off_record_ranges, e.t)) continue;
       s.transcript.push({ ...e, text: redactText(e.text, opts).text, redacted: true });
@@ -317,8 +329,8 @@ function appendTranscript(id: string, entries: TranscriptEntry[]): Promise<Sessi
 }
 
 function upsertQA(id: string, qa: QAPair): Promise<Session> {
-  return mutate(id, (s) => {
-    const opts = redactOpts(s.expert);
+  return mutate(id, async (s) => {
+    const opts = redactOpts(s.expert, await agentRecognizers(s.agent_id));
     const clean: QAPair = {
       ...qa,
       question: redactText(qa.question, opts).text,

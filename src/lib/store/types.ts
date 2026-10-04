@@ -134,7 +134,16 @@ export const hasOpenRange = (ranges: OffRecordRange[]) => ranges.some((r) => r.t
 export const isOffRecord = (ranges: OffRecordRange[], t: number) => ranges.some((r) => inRange(t, r));
 
 /** Keeps the expert's first name readable; everything else goes through the default recognizers. */
-export function redactOpts(expert: string | undefined | null): RedactOptions {
+export function redactOpts(expert: string | undefined | null, recognizers?: RedactOptions["recognizers"]): RedactOptions {
   const first = expert?.trim().split(/\s+/)[0];
-  return first ? { keepNames: [first] } : {};
+  return { ...(first ? { keepNames: [first] } : {}), ...(recognizers ? { recognizers } : {}) };
+}
+
+/**
+ * The single redaction filter point for stored text (transcript and QA, both backends): the recognizer groups of
+ * the session's agent (agents.settings redact_names_emails / redact_iban_phone). Any missing value means on.
+ */
+export function recognizersFromSettings(settings: unknown): NonNullable<RedactOptions["recognizers"]> {
+  const s = (settings && typeof settings === "object" ? settings : {}) as Record<string, unknown>;
+  return { namesEmails: s.redact_names_emails !== false, ibanPhone: s.redact_iban_phone !== false };
 }

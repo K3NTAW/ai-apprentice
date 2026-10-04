@@ -1,6 +1,8 @@
 import { requireRole } from "@/lib/auth/context";
 import { notFound, parseBody, withApi, withMutation, type IdContext } from "../../session/_http";
-import { agentErrors, PatchAgentBody } from "../_lib";
+import { agentAdminFor } from "@/lib/agents/admin";
+import { isValidAgentId } from "@/lib/store";
+import { adminErrors, agentErrors, PatchAgentBody } from "../_lib";
 
 export const runtime = "nodejs";
 
@@ -25,12 +27,17 @@ export async function PATCH(req: Request, ctx: IdContext) {
   });
 }
 
-// Owner only. Sessions of the agent keep their history with agent_id cleared.
+// Owner only. Frames (Storage, then rows), a report row with the teach sessions, the capture sessions, then the
+// agent (contract in src/lib/agents/admin.ts). Teach sessions stay with agent_id cleared.
 export async function DELETE(_req: Request, ctx: IdContext) {
-  return withMutation(["agents"], async ({ ctx: rc, store }) => {
+  return withMutation(["agents", "sessions"], async ({ ctx: rc }) => {
     const denied = requireRole(rc, ["owner"]);
     if (denied) return denied;
     const { id } = await ctx.params;
-    return (await store.deleteAgent(id)) ? new Response(null, { status: 204 }) : notFound(`agent not found: ${id}`);
+    if (!isValidAgentId(id)) return notFound(`agent not found: ${id}`);
+    return adminErrors(async () => {
+      const res = await agentAdminFor(rc).deleteAgentWithData(id);
+      return res.deleted ? new Response(null, { status: 204 }) : notFound(`agent not found: ${id}`);
+    });
   });
 }

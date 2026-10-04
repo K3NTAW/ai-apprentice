@@ -33,8 +33,15 @@ export type PendingItem = Omit<AskGateInput, "activity" | "agentSpeaking">;
 export type AskGateOptions = {
   maxPer10Min?: number;
   minGapMs?: number;
+  /** Agent setting 'Ask about guardrails first': possible guardrails jump the pending queue. */
+  guardrailsFirst?: boolean;
   now?: () => number;
 };
+
+/** Priority of a pending event in nextReady (higher first, stable). possible_guardrail is 2 with guardrails first, else 1. */
+export function questionPriority(eventClass: string, guardrailsFirst: boolean): number {
+  return eventClass === "possible_guardrail" && guardrailsFirst ? 2 : 1;
+}
 
 const WINDOW_MS = 10 * 60 * 1000;
 export const MIN_SILENCE_MS = 1500;
@@ -56,7 +63,7 @@ export function effectiveActivity(a: Activity): { typing: boolean; speaking: boo
   };
 }
 
-export function createAskGate({ maxPer10Min = 5, minGapMs = 20000, now = Date.now }: AskGateOptions = {}) {
+export function createAskGate({ maxPer10Min = 5, minGapMs = 20000, guardrailsFirst = false, now = Date.now }: AskGateOptions = {}) {
   const asked: { t: number; kind: AskKind }[] = [];
   let sinceGuardrail = 0;
   let pending: PendingItem[] = [];
@@ -107,7 +114,9 @@ export function createAskGate({ maxPer10Min = 5, minGapMs = 20000, now = Date.no
   function nextReady(activity: Activity & { agentSpeaking?: boolean }): { item: PendingItem; decision: AskGateDecision } | null {
     const keep: PendingItem[] = [];
     let found: { item: PendingItem; decision: AskGateDecision } | null = null;
-    for (const item of pending) {
+    const prio = (i: PendingItem) => questionPriority(String(i.eventClass.answer), guardrailsFirst);
+    const ordered = pending.map((item, n) => ({ item, n })).sort((a, b) => prio(b.item) - prio(a.item) || a.n - b.n);
+    for (const { item } of ordered) {
       if (found) {
         keep.push(item);
         continue;

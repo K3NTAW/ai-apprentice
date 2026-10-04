@@ -293,7 +293,7 @@ export default function AgentDetail(props: AgentDetailProps) {
             ),
           guardrails: <Guardrails rows={props.guardrails} agentId={agent.id} />,
           learners: <Learners rows={props.learners} />,
-          settings: <AgentSettings agent={agent} role={role} />,
+          settings: <AgentSettings agent={agent} role={role} workMaps={stats.processes} />,
         }}
       />
     </main>

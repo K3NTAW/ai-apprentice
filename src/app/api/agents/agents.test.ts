@@ -44,6 +44,8 @@ vi.mock("@/lib/supabase/server", () => ({
   },
 }));
 vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => undefined }) }));
+// Delete with data runs with the service role after the owner check; the fake stands in for it.
+vi.mock("@/lib/supabase/admin", () => ({ createSupabaseAdminClient: () => state.fake.client }));
 
 import { POST as sessionPost } from "../session/route";
 import { DELETE as agentDelete, GET as agentGet, PATCH as agentPatch } from "./[id]/route";
@@ -135,9 +137,10 @@ describe("/api/agents", () => {
     expect((await agentPatch(req("PATCH", { name: "x" }), params(a.id))).status).toBe(403);
   });
 
-  it("deletes as owner only and keeps the agent's sessions with the link cleared", async () => {
+  it("deletes as owner only: capture sessions go, teach sessions stay with the link cleared", async () => {
     const a = await (await createPost(req("POST", body))).json();
     const s = await (await sessionPost(req("POST", { kind: "capture", agent_id: a.id }))).json();
+    const t = await (await sessionPost(req("POST", { kind: "teach", agent_id: a.id }))).json();
     expect(s.agent_id).toBe(a.id);
     state.role = "expert";
     const denied = await agentDelete(req("DELETE"), params(a.id));
@@ -146,7 +149,8 @@ describe("/api/agents", () => {
     expect((await agentDelete(req("DELETE"), params(a.id))).status).toBe(204);
     expect((await agentDelete(req("DELETE"), params(a.id))).status).toBe(404);
     expect((await agentGet(req("GET"), params(a.id))).status).toBe(404);
-    expect(state.fake.tables.sessions[0]).toMatchObject({ id: s.id, agent_id: null });
+    expect(state.fake.tables.sessions.map((r) => r.id)).toEqual([t.id]);
+    expect(state.fake.tables.sessions[0]).toMatchObject({ id: t.id, agent_id: null });
   });
 
   it("answers 404 for an agent of another workspace on every method", async () => {

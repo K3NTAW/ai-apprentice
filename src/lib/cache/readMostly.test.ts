@@ -124,10 +124,10 @@ describe("mutations revalidate the tags", () => {
   const src = (rel: string) => readFileSync(path.join(process.cwd(), "src/app/api", rel), "utf8");
   const writers = (code: string) => [...code.matchAll(/export (?:async )?function (POST|PATCH|PUT|DELETE)\([^\n]*\n\s*return (\w+)\((\[[^\]]*\])?/g)];
 
-  it("agent writes (POST, PATCH, DELETE) expire 'agents'", () => {
+  it("agent writes (POST, PATCH) expire 'agents'; DELETE also expires 'sessions' (it removes the agent's sessions)", () => {
     const found = [...writers(src("agents/route.ts")), ...writers(src("agents/[id]/route.ts"))];
     expect(found.map((m) => m[1]).sort()).toEqual(["DELETE", "PATCH", "POST"]);
-    for (const m of found) expect(`${m[2]}${m[3]}`, m[1]).toBe('withMutation["agents"]');
+    for (const m of found) expect(`${m[2]}${m[3]}`, m[1]).toBe(m[1] === "DELETE" ? 'withMutation["agents", "sessions"]' : 'withMutation["agents"]');
   });
 
   it("session create, end and confirm expire 'sessions' (sidebar recents and agent stats)", () => {

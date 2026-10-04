@@ -12,6 +12,7 @@ import {
 import type { EventBus } from "@/lib/perception/eventBus";
 import type { ActivityTracker } from "@/lib/perception/activity";
 import { COMPANION_STALE_MS, type AskGate, type CompanionActivity } from "@/lib/voice/askGate";
+import { offRecordRegExp } from "@/lib/agents/settings";
 import { redactScreenEvent } from "@/lib/perception/redactEvent";
 import type { CompanionClient } from "@/lib/companion/client";
 import { buddyStateFor } from "@/lib/companion/buddyState";
@@ -76,6 +77,10 @@ export type CaptureControllerOptions = {
   agent?: SessionAgent | null;
   /** Rollback switch for chords, the dock and session.state.agent. Default SHORTCUT_LEARNING. */
   shortcutLearning?: boolean;
+  /** Agent setting 'Learn keyboard shortcuts', read at session start. false drops every chord (the single filter point). */
+  learnShortcuts?: boolean;
+  /** Agent setting 'Off the record phrase', read at session start. Escaped; empty or invalid falls back to the default. */
+  offRecordPhrase?: string;
 };
 
 export type CaptureCompanion = Pick<CompanionClient, "buddyState" | "buddySay" | "buddyPoint" | "buddyClear" | "sessionState"> &
@@ -152,6 +157,8 @@ export function createCaptureController(opts: CaptureControllerOptions) {
   let sentBuddy: string | null = null;
   let sentSession: string | null = null;
   const learning = opts.shortcutLearning ?? SHORTCUT_LEARNING;
+  const chordsOn = opts.learnShortcuts ?? true;
+  const offRe = opts.offRecordPhrase === undefined ? OFF_RE : offRecordRegExp(opts.offRecordPhrase);
   const sessionAgent = learning ? (opts.agent ?? null) : null;
   const linker = createChordLinker();
   const shortcutCap = createShortcutAskCap({ now });
@@ -481,7 +488,7 @@ export function createCaptureController(opts: CaptureControllerOptions) {
       if (ON_RE.test(text)) setOffRecord(false);
       return;
     }
-    if (OFF_RE.test(text) && !ON_RE.test(text)) {
+    if (offRe.test(text) && !ON_RE.test(text)) {
       setOffRecord(true);
       return;
     }
@@ -514,7 +521,7 @@ export function createCaptureController(opts: CaptureControllerOptions) {
 
   /** A key chord from the companion (protocol v3). Dropped off the record or when shortcut learning is off. */
   function onCompanionChord(c: CompanionChordIn) {
-    if (!learning || offRecord || !running) return;
+    if (!learning || !chordsOn || offRecord || !running) return;
     const chord = c.chord.trim();
     if (!chord) return;
     publishChord(linker.onChord({ chord, app: c.app.trim() }, now(), getT()));

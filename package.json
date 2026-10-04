@@ -10,6 +10,7 @@
     "lint": "eslint src e2e",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "audit:interactions": "AUDIT_DOC_WRITE=1 vitest run src/app/interaction.guard.test.tsx",
     "test:companion": "npm --prefix companion ci && npm --prefix companion test && npm --prefix companion run build",
     "e2e": "playwright test"
   },

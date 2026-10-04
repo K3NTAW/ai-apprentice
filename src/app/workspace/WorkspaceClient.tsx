@@ -1,5 +1,6 @@
 "use client";
 
+import DeletionRequests from "@/components/workspace/DeletionRequests";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { Badge, buttonClass, Input } from "@/components/ui";
@@ -229,6 +230,7 @@ export default function WorkspaceClient({ view }: { view: WorkspaceView }) {
             </section>
           </div>
         )}
+        <DeletionRequests owner={view.role === "owner"} />
       </div>
     </main>
   );

@@ -34,6 +34,17 @@ Off the record: when the expert says "off the record", call the client tool set_
 
 Style: short sentences, no praise, no filler, no summaries unless asked. Use the expert's own words when you refer to something they said.`;
 
+/** The interviewer prompt with the agent's off the record phrase (already validated, see offRecordPhrase). */
+export function interviewerPrompt(phrase: string = "off the record"): string {
+  const safe = phrase.replace(/["\\]/g, "");
+  return INTERVIEWER_PROMPT.replace('when the expert says "off the record"', `when the expert says "${safe}"`);
+}
+
+export function interviewerFirstMessage(phrase: string = "off the record"): string {
+  const safe = phrase.replace(/['"\\]/g, "");
+  return INTERVIEWER_FIRST_MESSAGE.replace("Say 'off the record'", `Say '${safe}'`);
+}
+
 export const INTERVIEWER_FIRST_MESSAGE =
   "Hi, I'm your apprentice. Just work as usual; I'll stay quiet and only ask the odd short question. Say 'off the record' any time to pause me.";
 

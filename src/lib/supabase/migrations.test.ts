@@ -825,3 +825,78 @@ describe("negative fixtures", () => {
     expect(check9Rollback(sql, "delete from storage.objects; delete from storage.buckets;")).toHaveLength(5);
   });
 });
+
+describe("agent settings migration", () => {
+  const FILE = "20261004010000_agent_settings.sql";
+  const sql = readFileSync(path.join(MIGRATIONS, FILE), "utf8");
+  const rollback = readFileSync(path.join(ROLLBACKS, FILE.replace(/\.sql$/, ".down.sql")), "utf8");
+  const stmts = normStatements(sql);
+  const policy = (name: string) => parsePolicies(sql).find((p) => p.name === name);
+  const check = norm(stmts.find((s) => s.includes("add constraint agents_settings_check")) ?? "");
+
+  it("adds agents.settings jsonb not null default '{}' with a CHECK on keys, types and ranges", () => {
+    expect(stmts).toContain("alter table public.agents add column settings jsonb not null default '{}'::jsonb");
+    for (const key of ["question_interval_s", "guardrails_first", "learn_shortcuts", "voice_preset", "voice_speed", "redact_names_emails", "redact_iban_phone", "off_record_phrase", "retention_days"])
+      expect(check).toContain(`'${key}'`);
+    expect(check).toContain("jsonb_typeof(settings) = 'object'");
+    expect(check).toContain("in (20, 60, 120, 180, 300)");
+    expect(check).toContain("in ('calm', 'neutral', 'energetic')");
+    expect(check).toContain("between 0.8 and 1.2");
+    expect(check).toContain("in (7, 30, 90, 365)");
+    expect(check).toMatch(/\{1,40\}/);
+  });
+
+  it("mirrors the shared schema in src/lib/agents/settings.ts", async () => {
+    const s = await import("@/lib/agents/settings");
+    expect(check).toContain(`in (${s.QUESTION_INTERVALS_S.join(", ")})`);
+    expect(check).toContain(`in (${s.RETENTION_DAYS.join(", ")})`);
+    expect(check).toContain(`between ${s.VOICE_SPEED_MIN} and ${s.VOICE_SPEED_MAX}`);
+    expect(check).toContain(`{1,${s.OFF_RECORD_MAX}}`);
+    for (const key of s.SETTINGS_KEYS) expect(check).toContain(`'${key}'`);
+  });
+
+  it("agent_deletion_requests: members read, members insert pending for themselves, owners update", () => {
+    expect(policy("agent_deletion_requests_select")).toMatchObject({ command: "select", roles: ["authenticated"] });
+    const ins = policy("agent_deletion_requests_insert");
+    expect(ins).toMatchObject({ command: "insert", roles: ["authenticated"] });
+    const wc = norm(ins?.withCheck ?? "");
+    for (const part of ["requested_by = auth.uid()", "public.is_workspace_member(workspace_id)", "status = 'pending'", "decided_by is null", "decided_at is null"])
+      expect(wc).toContain(part);
+    const upd = policy("agent_deletion_requests_update");
+    expect(upd).toMatchObject({ command: "update", roles: ["authenticated"] });
+    expect(norm(upd?.using ?? "")).toBe("public.workspace_role(workspace_id) = 'owner'");
+    expect(norm(upd?.withCheck ?? "")).toBe(norm(upd?.using ?? ""));
+    expect(policy("agent_deletion_requests_delete")).toBeUndefined();
+    expect(policy("agent_reports_select")).toMatchObject({ command: "select", roles: ["authenticated"] });
+    expect(parsePolicies(sql).filter((p) => p.table === "public.agent_reports").map((p) => p.command)).toEqual(["select"]);
+  });
+
+  it("ties decided_* to the status, keeps one pending request per agent and sets the agent link null on delete", () => {
+    const table = norm(stmts.find((s) => s.startsWith("create table public.agent_deletion_requests")) ?? "");
+    expect(table).toContain("(status = 'pending' and decided_by is null and decided_at is null) or (status <> 'pending' and decided_at is not null)");
+    expect(table).toContain("references public.agents (workspace_id, id) on delete set null (agent_id)");
+    expect(table).toContain("agent_name text not null");
+    expect(stmts).toContain("create unique index agent_deletion_requests_pending_key on public.agent_deletion_requests (agent_id) where status = 'pending'");
+  });
+
+  it("guards owner updates with a trigger: decision only, once, by the caller", () => {
+    const body = norm(parseFunctions(sql).find((f) => f.name === "agent_deletion_requests_guard_update")?.body ?? "");
+    expect(body).toContain("old.status <> 'pending'");
+    expect(body).toContain("new.decided_by is distinct from auth.uid()");
+    expect(body).toContain("new.agent_id is not null");
+    expect(stmts.some((s) => s.startsWith("create trigger agent_deletion_requests_guard_update_trg before update on public.agent_deletion_requests"))).toBe(true);
+  });
+
+  it("merges settings through a security invoker function", () => {
+    const fn = parseFunctions(sql).find((f) => f.name === "agent_settings_patch");
+    expect(fn?.header).toContain("security invoker");
+    expect(norm(fn?.body ?? "")).toContain("set settings = settings || p_patch");
+  });
+
+  it("rollback drops the settings column, both tables and both functions", () => {
+    expect(check9Rollback(sql, rollback)).toEqual([]);
+    const r = normStatements(rollback);
+    expect(r).toContain("alter table if exists public.agents drop column if exists settings");
+    expect(norm(commentText(rollback))).toContain("drops every stored agent setting");
+  });
+});

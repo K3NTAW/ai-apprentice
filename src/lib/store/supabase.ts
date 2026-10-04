@@ -37,6 +37,7 @@ import {
   isOffRecord,
   isValidAgentId,
   RECENT_SESSIONS_DEFAULT,
+  recognizersFromSettings,
   redactOpts,
   SessionNotFoundError,
   type OffRecordRange,
@@ -172,6 +173,13 @@ export function createSupabaseStore(
   async function readRow(id: string): Promise<SessionRow | null> {
     const res = await client.from("sessions").select("*").eq("id", id).eq("workspace_id", workspaceId).maybeSingle();
     return check("select sessions", res) as SessionRow | null;
+  }
+
+  /** Before migration 20261004010000 (no agents.settings) or on any read error: every recognizer stays on. */
+  async function agentRecognizers(agentId: string | null | undefined) {
+    if (!agentId) return recognizersFromSettings({});
+    const res = await client.from("agents").select("settings").eq("workspace_id", workspaceId).eq("id", agentId).maybeSingle();
+    return recognizersFromSettings(res.error ? {} : (res.data as { settings?: unknown } | null)?.settings);
   }
 
   async function requireRow(id: string): Promise<SessionRow> {
@@ -441,18 +449,19 @@ export function createSupabaseStore(
       return appendRows(id, "session_events", events, (_, e) => e);
     },
 
-    appendTranscript(id, entries) {
-      // One read of the session's expert per call for the redaction options, accepted.
+    async appendTranscript(id, entries) {
+      // One read of the session's expert per call for the redaction options, accepted; plus its agent's settings.
+      const recognizers = await agentRecognizers((await requireRow(id)).agent_id);
       return appendRows(id, "session_transcript", entries, (row, e) => ({
         ...e,
-        text: redactText(e.text, redactOpts(row.expert)).text,
+        text: redactText(e.text, redactOpts(row.expert, recognizers)).text,
         redacted: true,
       }));
     },
 
     async upsertQA(id, qa) {
       const row = await requireRow(id);
-      const opts = redactOpts(row.expert);
+      const opts = redactOpts(row.expert, await agentRecognizers(row.agent_id));
       const clean: QAPair = {
         ...qa,
         question: redactText(qa.question, opts).text,

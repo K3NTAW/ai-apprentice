@@ -86,6 +86,7 @@ Vercel project, Settings, Environment Variables. Set each for **Production** and
 | NEXT_PUBLIC_DESKTOP_DOWNLOAD_WIN | optional, https download link for the Windows desktop app |
 | NEXT_PUBLIC_COMPANION_WS | optional, `1` turns on the old local WebSocket companion in the browser (default off; per browser: localStorage `ai-apprentice.companion.ws` = `1`) |
 | VISION_MODEL | optional, overrides the vision model |
+| CRON_SECRET | server only, at least 16 characters (e.g. `openssl rand -base64 32`). Vercel Cron sends it as `Authorization: Bearer <CRON_SECRET>` to /api/cron/retention (vercel.json, daily 03:00 UTC). Unset, the route rejects every call and no screen moments expire |
 
 NEXT_PUBLIC_* values are inlined at build time, so redeploy after changing them.
 
@@ -105,6 +106,8 @@ pending invite is accepted and they join your workspace.
 Vercel dashboard, Deployments: pick the last good production deployment, open its menu and choose
 Instant Rollback (or Promote to Production). This switches traffic immediately without a rebuild.
 Database migrations are not rolled back by this; a schema change needs its own reverse migration.
+supabase/rollbacks/20261004010000_agent_settings.down.sql drops every stored agent setting, every deletion request
+and every deletion report (agents fall back to the default settings).
 
 ## 9. Daily usage caps
 

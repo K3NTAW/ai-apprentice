@@ -28,6 +28,8 @@ export type UseVoiceAgentOptions = {
 
 export type StartOptions = {
   dynamicVariables?: Record<string, string | number | boolean>;
+  /** From voiceOverrides(settings, allowed) in src/lib/agents/settings.ts. */
+  overrides?: { tts: { speed: number; stability?: number } };
 };
 
 export function useVoiceAgent({ role, clientTools, onTranscript, onModeChange, onError }: UseVoiceAgentOptions) {
@@ -67,6 +69,7 @@ export function useVoiceAgent({ role, clientTools, onTranscript, onModeChange, o
           connectionType: "websocket",
           clientTools: toolsRef.current,
           dynamicVariables: opts.dynamicVariables,
+          ...(opts.overrides ? { overrides: opts.overrides } : {}),
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
