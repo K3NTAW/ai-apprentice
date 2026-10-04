@@ -291,6 +291,8 @@ async function readSessions(): Promise<SessionSummary[]> {
       counts: { events: s.events.length, transcript: s.transcript.length, qa: s.qa.length },
       has_workmap: s.workmap !== undefined,
       ...(s.agent_id ? { agent_id: s.agent_id } : {}),
+      ...(s.workmap ? { task: s.workmap.task, confirmed: s.workmap.confirmed_by_expert } : {}),
+      ...(s.teach ? { mastered: s.teach.mastered.length, practiced: new Set([...s.teach.mastered, ...s.teach.practice]).size } : {}),
     });
   }
   return out.sort((a, b) => b.started_at.localeCompare(a.started_at));

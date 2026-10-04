@@ -12,6 +12,13 @@ export type SessionSummary = {
   counts: { events: number; transcript: number; qa: number };
   has_workmap: boolean;
   agent_id?: string;
+  /** Work Map title (workmap.task) when the session has one; the sidebar titles read it. */
+  task?: string;
+  /** workmap.confirmed_by_expert. */
+  confirmed?: boolean;
+  /** Teach progress counts (Session.teach) where the backend stores them. */
+  mastered?: number;
+  practiced?: number;
 };
 
 export const RECENT_SESSIONS_DEFAULT = 6;

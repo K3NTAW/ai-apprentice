@@ -1,13 +1,16 @@
-// App sidebar, 1:1 with docs/design/canvas/Sidebar.dc.html: logo, nav, recent sessions, workspace switcher, user menu.
-// From md width up a 248 px left column; at phone width a top bar with the logo, the nav row and the user menu
+// App sidebar, 1:1 with docs/design/canvas/Sidebar.dc.html: logo and collapse toggle, search (⌘K palette), nav, recent
+// sessions, workspace card with the switcher, user card. From md width up a 248 px left column (72 px collapsed); at phone width a top bar with the logo, the nav row and the user menu
 // (recent sessions and the switcher fold away), as the canvas phone artboards show.
 import Link from "next/link";
 import HoverPrefetchLink from "./HoverPrefetchLink";
 import type { ReactNode } from "react";
 import type { Membership, Role } from "@/lib/auth/context";
-import HideInApp, { ShowInApp } from "./HideInApp";
+import CommandPalette from "./CommandPalette";
+import HideInApp from "./HideInApp";
 import NavLink from "./NavLink";
+import SidebarFrame from "./SidebarFrame";
 import ThemeToggle from "./ThemeToggle";
+import ViewerStatus from "./ViewerStatus";
 import WorkspaceSwitcher from "./WorkspaceSwitcher";
 import type { RecentSessions } from "./recent";
 
@@ -51,7 +54,7 @@ export const NAV_LINKS = [
       </>,
     ),
   },
-  // The canvas 'Install companion' item; it opens the 'Get the desktop app' panel on /capture and is hidden inside the desktop app.
+  // The canvas 'Install companion' item, renamed; it opens the 'Get the desktop app' panel on /capture and is hidden inside the desktop app.
   {
     href: "/capture#companion",
     label: "Get the desktop app",
@@ -91,14 +94,14 @@ function Logo() {
         <circle cx="11" cy="14" r="5" style={{ fill: "var(--bg)" }} />
         <circle cx="19.5" cy="17" r="3" style={{ fill: "var(--bg)" }} opacity=".75" />
       </svg>
-      apprentice
+      <span className="md:group-data-[collapsed=true]:hidden">apprentice</span>
     </Link>
   );
 }
 
 function RecentList({ recent }: { recent: RecentSessions }) {
   return (
-    <div className="hidden flex-col gap-[2px] pt-[6px] md:flex" aria-label="Recent sessions">
+    <div className="hidden flex-col gap-[2px] pt-[6px] md:flex md:group-data-[collapsed=true]:hidden" aria-label="Recent sessions">
       {recent.kind === "error" ? (
         <span className="text-xs" style={{ color: "var(--fa)", padding: "0 12px 6px" }}>
           Recent sessions are unavailable.
@@ -131,15 +134,18 @@ function RecentList({ recent }: { recent: RecentSessions }) {
   );
 }
 
-function UserMenu({ user }: { user: ShellUser | null }) {
+/** 'sabine.keller@x' -> 'SK', 'sabine@x' -> 'SA'. */
+export function userInitials(email: string | null | undefined, fallback = "AA"): string {
+  const local = (email ?? "").split("@")[0] ?? "";
+  const parts = local.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  if (parts.length >= 2) return (parts[0]![0]! + parts[1]![0]!).toUpperCase();
+  return (parts[0]?.slice(0, 2) || fallback).toUpperCase();
+}
+
+function UserMenu({ user, inApp }: { user: ShellUser | null; inApp?: boolean }) {
   const name = user?.email ?? (user?.mode === "local" ? "Local user" : "Signed out");
-  const ini = (user?.email ?? "AA").slice(0, 2).toUpperCase();
-  const status = (
-    <span className="flex items-center gap-[6px] text-xs leading-[1.3]" style={{ color: "var(--fa)" }}>
-      <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--gr)" }} />
-      <ShowInApp fallback={user?.role ?? "browser"}>Running in AI Apprentice</ShowInApp>
-    </span>
-  );
+  const ini = userInitials(user?.email);
+  const status = <ViewerStatus inApp={inApp} />;
   return (
     <details className="relative md:w-full">
       <summary
@@ -148,13 +154,13 @@ function UserMenu({ user }: { user: ShellUser | null }) {
         style={{ height: 52, padding: "0 10px", borderRadius: 999, border: "1px solid var(--ln)", background: "var(--s1)", color: "var(--tx)" }}
       >
         <span className="ui-av">{ini}</span>
-        <span className="hidden min-w-0 flex-1 flex-col md:flex">
+        <span className="hidden min-w-0 flex-1 flex-col md:flex md:group-data-[collapsed=true]:hidden">
           <span className="truncate text-[13px] leading-[1.2]" style={{ fontWeight: 600 }}>
             {name}
           </span>
           {status}
         </span>
-        <span className="hidden md:inline-flex">{chevrons}</span>
+        <span className="hidden md:inline-flex md:group-data-[collapsed=true]:hidden">{chevrons}</span>
       </summary>
       <div
         role="menu"
@@ -198,22 +204,26 @@ function UserMenu({ user }: { user: ShellUser | null }) {
   );
 }
 
-export default function ShellHeader({ user, recent = { kind: "ok", groups: [] } }: { user: ShellUser | null; recent?: RecentSessions }) {
+export default function ShellHeader({
+  user,
+  recent = { kind: "ok", groups: [] },
+  inApp,
+}: {
+  user: ShellUser | null;
+  recent?: RecentSessions;
+  /** Tests only: forces the desktop-app detection. */
+  inApp?: boolean;
+}) {
   return (
-    <header
-      className="flex flex-wrap items-center gap-[14px] px-3 py-3 md:sticky md:top-0 md:h-screen md:w-[248px] md:shrink-0 md:flex-col md:flex-nowrap md:items-stretch md:overflow-y-auto md:py-4"
-      style={{ background: "var(--bg)", borderRight: "1px solid var(--ln)", borderBottom: "1px solid var(--ln)" }}
-    >
-      <div className="flex items-center justify-between" style={{ padding: "2px 4px 2px 8px" }}>
-        <Logo />
-      </div>
+    <SidebarFrame viewer={user?.email ?? user?.mode ?? "anonymous"} logo={<Logo />}>
+      {user && <CommandPalette />}
 
       <nav aria-label="App" className="order-last flex w-full gap-[2px] overflow-x-auto md:order-none md:flex-col">
         {NAV_LINKS.map((l) => {
           const link = (
             <NavLink key={l.href} href={l.href}>
               {l.icon}
-              {l.label}
+              <span className="md:group-data-[collapsed=true]:hidden">{l.label}</span>
             </NavLink>
           );
           return "browserOnly" in l ? <HideInApp key={l.href}>{link}</HideInApp> : link;
@@ -221,7 +231,7 @@ export default function ShellHeader({ user, recent = { kind: "ok", groups: [] } 
       </nav>
 
       {user && canCapture(user.role) && (
-        <Link href="/capture" className="ui-btn ui-bp ui-bsm ml-auto md:ml-0">
+        <Link href="/capture" className="ui-btn ui-bp ui-bsm ml-auto md:ml-0 md:group-data-[collapsed=true]:hidden">
           Start capture
         </Link>
       )}
@@ -231,7 +241,7 @@ export default function ShellHeader({ user, recent = { kind: "ok", groups: [] } 
       <div className="hidden flex-1 md:block" />
 
       {user && (
-        <div className="hidden md:block">
+        <div className="hidden md:block md:group-data-[collapsed=true]:hidden" aria-label="Workspace">
           <WorkspaceSwitcher
             mode={user.mode}
             name={user.workspaceName ?? (user.mode === "local" ? "local" : "No workspace")}
@@ -243,8 +253,8 @@ export default function ShellHeader({ user, recent = { kind: "ok", groups: [] } 
       {user?.mode === "local" && <span className="ui-bdg ui-k-jc md:hidden">local mode</span>}
 
       <div className={user && canCapture(user.role) ? "" : "ml-auto md:ml-0"}>
-        <UserMenu user={user} />
+        <UserMenu user={user} inApp={inApp} />
       </div>
-    </header>
+    </SidebarFrame>
   );
 }

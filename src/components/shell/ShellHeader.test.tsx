@@ -16,7 +16,7 @@ describe("ShellHeader", () => {
         ["/capture#companion", "Get the desktop app"],
       ]) {
         expect(html).toContain(`href="${href}"`);
-        expect(html).toContain(`>${label}</a>`);
+        expect(html).toContain(`>${label}</span></a>`);
       }
       expect(html.indexOf('href="/agents"')).toBeLessThan(html.indexOf('href="/learn"'));
     }

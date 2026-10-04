@@ -4,7 +4,7 @@ import { getRequestContext, type RequestContext } from "@/lib/auth/context";
 import { readMostly } from "@/lib/cache/readMostly";
 import { getStore } from "@/lib/store";
 import ShellHeader, { type ShellUser } from "./ShellHeader";
-import { groupRecent, RECENT_LIMIT, type RecentSessions } from "./recent";
+import { type AgentNames, groupRecent, RECENT_LIMIT, type RecentSessions } from "./recent";
 
 const toShellUser = (ctx: RequestContext): ShellUser => ({
   mode: ctx.mode,
@@ -20,6 +20,9 @@ export async function shellUser(): Promise<ShellUser | null> {
   return result.kind === "ok" ? toShellUser(result.ctx) : null;
 }
 
+const agentNames = async (store: ReturnType<typeof getStore>): Promise<AgentNames> =>
+  Object.fromEntries((await store.listAgents()).map((a) => [a.id, a.name]));
+
 /**
  * Latest capture and teach sessions of the request-context workspace; a store error never breaks the page.
  * Supabase mode caches the rows for a few seconds per user and workspace (session writes expire the sessions tag).
@@ -28,10 +31,12 @@ export async function recentSessions(ctx: RequestContext, now = new Date()): Pro
   try {
     const { supabase } = ctx;
     const store = supabase ? getStore({ supabase, workspaceId: ctx.workspaceId, userId: ctx.userId }) : getStore();
+    // Agent names only label the titles: a failed read leaves them out instead of failing the list.
+    const names = (supabase ? readMostly("shell-agent-names", ctx, ["agents"], () => agentNames(store)) : agentNames(store)).catch((): AgentNames => ({}));
     const rows = supabase
       ? await readMostly("recent-sessions", ctx, ["sessions"], () => store.recentSessions(RECENT_LIMIT))
       : await store.recentSessions(RECENT_LIMIT);
-    return { kind: "ok", groups: groupRecent(rows, now) };
+    return { kind: "ok", groups: groupRecent(rows, now, await names) };
   } catch {
     return { kind: "error" };
   }

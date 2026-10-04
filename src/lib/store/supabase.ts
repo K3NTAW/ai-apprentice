@@ -415,13 +415,13 @@ export function createSupabaseStore(
     async recentSessions(limit = RECENT_SESSIONS_DEFAULT) {
       const res = await client
         .from("sessions")
-        .select("id,kind,expert,agent_id,started_at,ended_at,has_workmap:workmap->>task")
+        .select("id,kind,expert,agent_id,started_at,ended_at,has_workmap:workmap->>task,confirmed:workmap->confirmed_by_expert")
         .eq("workspace_id", workspaceId)
         .order("started_at", { ascending: false })
         .order("id", { ascending: false })
         .limit(Math.max(0, limit));
       if (res.error) fail("select recent sessions", res.error);
-      type RecentRow = Pick<SessionRow, "id" | "kind" | "expert" | "started_at" | "ended_at" | "agent_id"> & { has_workmap: string | null };
+      type RecentRow = Pick<SessionRow, "id" | "kind" | "expert" | "started_at" | "ended_at" | "agent_id"> & { has_workmap: string | null; confirmed: boolean | null };
       return ((res.data ?? []) as RecentRow[]).map(
         (r): SessionSummary => ({
           id: r.id,
@@ -432,6 +432,7 @@ export function createSupabaseStore(
           counts: { events: 0, transcript: 0, qa: 0 },
           has_workmap: r.has_workmap !== null,
           ...(r.agent_id ? { agent_id: r.agent_id } : {}),
+          ...(r.has_workmap !== null ? { task: r.has_workmap, confirmed: r.confirmed === true } : {}),
         }),
       );
     },
