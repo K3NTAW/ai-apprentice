@@ -29,6 +29,7 @@ import { loadPickerOptions, loadWorkMap, preselect, type PickerOption } from "./
 import AgentHeader from "@/components/agents/AgentHeader";
 import { agentBlocker, useAgent } from "@/components/agents/useAgent";
 import { checkTeachSource, teachSessionBody } from "./agentSource";
+import { sendTextTurn, textTurnError } from "./textTurn";
 import TeachConsole, { type TeachConsoleProps, type TeachLine } from "./TeachConsole";
 
 /** agentParam: ?agent, the agent of the new teach session. sessionId: ?session, the source Work Map capture session. */
@@ -548,9 +549,9 @@ function TeachInner({ sessionId, localMode, agentParam = null, transport }: Teac
       onTogglePause={togglePause}
       onEnd={() => void finish()}
       onReplay={() => setReplayOpen((o) => !o)}
+      sendError={running ? textTurnError({ textMode, voiceStatus: agent.status }) : null}
       onAnswer={(text) => {
-        push("learner", text);
-        onLearner(text);
+        sendTextTurn(text, { textMode, voiceStatus: agent.status, promptTurn: (t) => agentRef.current.promptTurn(t) }, push, onLearner);
       }}
     />
     </>

@@ -57,12 +57,16 @@ const base: TeachConsoleProps = {
 describe("Teach console", () => {
   it("shows the step, the tutor transcript, the stop and the expert's moment; no placeholder, no sandbox", () => {
     const html = renderToStaticMarkup(<TeachConsole {...base} />);
-    expect(html).toContain("Step 3: Set the cost code");
+    // presentational (design V3): eyebrow "Current step · n of N" and the title as the heading
+    expect(html).toContain("Current step · 3 of");
+    expect(html).toContain("Set the cost code");
     expect(html).toContain("What would you do next?");
     expect(html).toContain("Sabine would stop here. Why do you think?");
     expect(html).toContain("Replay Sabine&#x27;s moment");
     expect(html).toContain('src="/api/session/cap_1/frames/sabine-48.jpg"');
-    expect(html).toContain('data-testid="companion-card"');
+    // presentational (design V3): no pairing card, the app status shows instead
+    expect(html).not.toContain('data-testid="companion-card"');
+    expect(html).toContain('data-testid="app-status"');
     expect(html).not.toContain("being rebuilt");
     expect(html).not.toMatch(/\bERP\b|invoice/);
   });

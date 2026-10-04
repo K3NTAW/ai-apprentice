@@ -5,10 +5,11 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { voiceStartNotice } from "@/components/capture/dailyLimit";
-import WorkMapView from "@/components/workmap/WorkMapView";
+import WorkMapViewer from "@/components/map/WorkMapViewer";
+import { buttonClass } from "@/components/ui";
 import { createDebriefController, type DebriefController, type DebriefState } from "@/lib/debrief/controller";
 import { createHttpDebriefApi } from "@/lib/debrief/httpApi";
-import type { Session } from "@/lib/types";
+import { SCORE_THRESHOLD, type Session } from "@/lib/types";
 import { useVoiceAgent, VoiceProvider, type UseVoiceAgentOptions } from "@/lib/voice/useVoiceAgent";
 import ScoreBars from "./ScoreBars";
 import TeachBackPanel from "./TeachBackPanel";
@@ -129,127 +130,131 @@ function DebriefInner({ sessionId }: { sessionId: string }) {
   const phase = view?.phase ?? "idle";
   const inTeachBack = phase === "teach_back" || phase === "corrected" || phase === "confirmed";
 
+  const followUp = view ? `Follow-up ${view.followUpsAsked + (view.question ? 1 : 0)} of at least ${view.minFollowUps}` : null;
+  const threshold = Math.round(SCORE_THRESHOLD * 100);
+
   return (
-    <main className="mx-auto flex max-w-5xl flex-col gap-5 p-8">
-      <header className="flex items-baseline justify-between">
-        <h1 className="text-xl font-semibold">Debrief</h1>
-        {view && (
-          <span className="text-sm text-slate-600">
-            Follow-up {view.followUpsAsked + (view.question ? 1 : 0)} of at least {view.minFollowUps}
-            <span className="text-slate-400"> (max {view.maxFollowUps})</span>
-          </span>
-        )}
+    <main className="flex min-w-0 flex-col" style={{ padding: "28px 40px 56px", gap: 22 }}>
+      <header className="flex flex-wrap items-end justify-between" style={{ gap: 16 }}>
+        <div className="flex flex-col" style={{ gap: 6 }}>
+          <Link className="text-[13px] no-underline" style={{ color: "var(--mu)" }} href={`/map/${encodeURIComponent(sessionId)}`}>
+            Work Map / Debrief
+          </Link>
+          <h1 className="ui-t1">Debrief</h1>
+          {view?.workmap && <span style={{ color: "var(--mu)" }}>{view.workmap.task}</span>}
+        </div>
       </header>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      {notice && <p className="text-sm text-amber-700">{notice}</p>}
+      {error && <p role="alert" className="text-[13px]" style={{ color: "var(--rd)" }}>{error}</p>}
+      {notice && <p className="text-[13px]" style={{ color: "var(--am)" }}>{notice}</p>}
       {view?.error &&
         (view.error.includes("/api/workmap 429") ? (
-          <p role="alert" className="rounded border border-red-300 bg-red-50 p-2 text-sm text-red-900">
+          <p role="alert" className="text-[13px]" style={{ padding: "12px 14px", borderRadius: 12, background: "var(--rds)", color: "var(--rd)" }}>
             Daily limit for Work Map building reached in this workspace (resets at midnight). Your answers are saved; build
             the Work Map again tomorrow.
           </p>
         ) : (
-          <p className="text-sm text-red-600">{view.error}</p>
+          <p className="text-[13px]" style={{ color: "var(--rd)" }}>{view.error}</p>
         ))}
-      {!session && !error && <p className="text-sm text-slate-400">Loading…</p>}
+      {!session && !error && <p className="text-[13px]" style={{ color: "var(--fa)" }}>Loading…</p>}
 
-      {session && !view && (
-        <div className="flex flex-col items-start gap-2">
-          <p className="text-sm text-slate-600">
-            A few follow-up questions about what is still unclear, then I explain the whole process back so you can confirm
-            or correct it.
-          </p>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              disabled={starting}
-              onClick={() => start(true)}
-              className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
-            >
-              {starting ? "Starting…" : "Start debrief"}
-            </button>
-            <button
-              type="button"
-              disabled={starting}
-              onClick={() => start(false)}
-              className="rounded border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50 disabled:opacity-50"
-            >
-              Text mode
-            </button>
-          </div>
-        </div>
-      )}
-
-      {phase === "building" && <p className="text-sm text-slate-500">Building the Work Map…</p>}
-
-      {view && !inTeachBack && phase !== "building" && view.question && (
-        <section className="flex flex-col gap-2 rounded border border-slate-200 p-4">
-          <span className="text-xs uppercase tracking-wide text-slate-500">
-            Question {view.followUpsAsked + 1}
-            {view.question.step_n ? ` · step ${view.question.step_n}` : ""} · about the {view.question.about}
-          </span>
-          <p className="text-base">{view.question.text}</p>
-          {textMode && (
-            <form
-              className="flex gap-2"
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (!answer.trim()) return;
-                void ctrlRef.current?.onExpertUtterance(answer);
-                setAnswer("");
-              }}
-            >
-              <input
-                autoFocus
-                value={answer}
-                onChange={(e) => setAnswer(e.target.value)}
-                placeholder="Type your answer"
-                className="flex-1 rounded border border-slate-300 px-2 py-1 text-sm"
-              />
-              <button
-                type="submit"
-                disabled={view.busy || !answer.trim()}
-                className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
-              >
-                Answer
-              </button>
-            </form>
+      <div className="flex flex-wrap items-start" style={{ gap: 20 }}>
+        <div className="flex min-w-0 flex-col" style={{ flex: "3 1 560px", gap: 20 }}>
+          {session && !view && (
+            <div className="ui-card flex flex-col items-start" style={{ padding: 28, gap: 18, background: "var(--stage)" }}>
+              <p style={{ fontSize: 15 }}>
+                A few follow-up questions about what is still unclear, then I explain the whole process back so you can confirm
+                or correct it.
+              </p>
+              <div className="flex flex-wrap" style={{ gap: 10 }}>
+                <button type="button" disabled={starting} onClick={() => start(true)} className={buttonClass("primary", "lg")}>
+                  {starting ? "Starting…" : "Start debrief"}
+                </button>
+                <button type="button" disabled={starting} onClick={() => start(false)} className={buttonClass("secondary", "lg")}>
+                  Text mode
+                </button>
+              </div>
+            </div>
           )}
-        </section>
-      )}
-      {view?.busy && phase === "asking" && !view.question && (
-        <p className="text-sm text-slate-500">Updating the Work Map with your answer…</p>
-      )}
 
-      {view?.endReason && (
-        <p className="text-sm text-slate-700">
-          Debrief questions done after {view.followUpsAsked}: {END_LABEL[view.endReason]}
-        </p>
-      )}
+          {phase === "building" && <p className="text-[13px]" style={{ color: "var(--mu)" }}>Building the Work Map…</p>}
 
-      {view && view.history.length > 0 && <ScoreBars history={view.history} titles={titles} />}
+          {view && !inTeachBack && phase !== "building" && view.question && (
+            <section className="ui-card flex flex-col" style={{ padding: 28, gap: 22, background: "var(--stage)" }} data-testid="debrief-question">
+              <div className="flex flex-wrap items-center justify-between" style={{ gap: 12 }}>
+                <span className="ui-bdg ui-k-ac">
+                  {followUp}
+                  <span style={{ opacity: 0.7 }}> (max {view.maxFollowUps})</span>
+                </span>
+                <span className="text-xs" style={{ color: "var(--fa)" }}>
+                  Asks until every step is above {threshold}%
+                </span>
+              </div>
+              <div className="flex flex-col" style={{ gap: 10 }}>
+                <p className="ui-t2">&ldquo;{view.question.text}&rdquo;</p>
+                <span className="text-[13px]" style={{ color: "var(--mu)" }}>
+                  Question {view.followUpsAsked + 1}
+                  {view.question.step_n ? ` · About step ${view.question.step_n}` : ""}
+                  {view.question.step_n && titles[view.question.step_n] ? ` · ${titles[view.question.step_n]}` : ""} · about the {view.question.about}
+                </span>
+              </div>
+              {textMode && (
+                <form
+                  className="flex flex-wrap"
+                  style={{ gap: 10 }}
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (!answer.trim()) return;
+                    void ctrlRef.current?.onExpertUtterance(answer);
+                    setAnswer("");
+                  }}
+                >
+                  <input autoFocus value={answer} onChange={(e) => setAnswer(e.target.value)} placeholder="Type your answer" className="ui-inp flex-1" />
+                  <button type="submit" disabled={view.busy || !answer.trim()} className={buttonClass("primary")}>
+                    Answer
+                  </button>
+                </form>
+              )}
+            </section>
+          )}
+          {view?.busy && phase === "asking" && !view.question && (
+            <p className="text-[13px]" style={{ color: "var(--mu)" }}>Updating the Work Map with your answer…</p>
+          )}
 
-      {view?.teachBack && inTeachBack && (
-        <TeachBackPanel
-          text={view.teachBack}
-          corrected={phase === "corrected"}
-          confirmed={phase === "confirmed"}
-          busy={view.busy}
-          awaitingCorrection={view.awaitingCorrection}
-          onResult={(r) => void ctrlRef.current?.onTeachBackResult(r)}
-        />
-      )}
+          {view?.endReason && (
+            <p className="text-[13px]" style={{ color: "var(--mu)" }}>
+              Debrief questions done after {view.followUpsAsked}: {END_LABEL[view.endReason]}
+            </p>
+          )}
+
+          {view?.teachBack && inTeachBack && (
+            <TeachBackPanel
+              text={view.teachBack}
+              corrected={phase === "corrected"}
+              confirmed={phase === "confirmed"}
+              busy={view.busy}
+              awaitingCorrection={view.awaitingCorrection}
+              onResult={(r) => void ctrlRef.current?.onTeachBackResult(r)}
+            />
+          )}
+        </div>
+
+        {view && view.history.length > 0 && (
+          <div className="flex min-w-0 flex-col" style={{ flex: "2 1 340px" }}>
+            <ScoreBars history={view.history} titles={titles} />
+          </div>
+        )}
+      </div>
 
       {phase === "confirmed" && view?.workmap && (
-        <section className="flex flex-col gap-3">
-          <div className="flex items-center gap-3">
-            <span className="rounded bg-green-100 px-2 py-0.5 text-sm text-green-800">Confirmed by the expert</span>
-            <Link className="text-sm underline" href={`/map/${encodeURIComponent(sessionId)}`}>
+        <section className="flex flex-col" style={{ gap: 14 }}>
+          <div className="flex items-center" style={{ gap: 12 }}>
+            <span className="ui-bdg ui-k-ok">Confirmed by the expert</span>
+            <Link className={buttonClass("secondary", "sm")} href={`/map/${encodeURIComponent(sessionId)}`}>
               Open the Work Map
             </Link>
           </div>
-          <WorkMapView sessionId={sessionId} workmap={view.workmap} />
+          <WorkMapViewer sessionId={sessionId} workmap={view.workmap} />
         </section>
       )}
     </main>

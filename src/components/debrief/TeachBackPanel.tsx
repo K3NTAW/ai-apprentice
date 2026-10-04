@@ -1,7 +1,8 @@
 "use client";
 
-// Teach-back text with its spoken length estimate, and the explicit confirm / correct buttons (always visible).
+// Teach-back card (canvas Debrief.dc.html): text with its spoken length estimate, and the explicit confirm / correct buttons (always visible).
 import { useState } from "react";
+import { buttonClass } from "@/components/ui";
 import { spokenSeconds } from "@/lib/debrief/controller";
 
 export type TeachBackPanelProps = {
@@ -21,25 +22,25 @@ export default function TeachBackPanel({ text, corrected, confirmed, busy, await
   const showInput = open || awaitingCorrection;
 
   return (
-    <section className="flex flex-col gap-3 rounded border border-slate-200 p-4">
-      <div className="flex items-baseline justify-between">
-        <h2 className="text-sm font-semibold">{corrected ? "Teach-back (after your correction)" : "Teach-back"}</h2>
+    <section className="ui-card flex flex-col" style={{ padding: 28, gap: 18 }} data-testid="teach-back">
+      <div className="flex flex-wrap items-center" style={{ gap: 10 }}>
+        <span className="ui-eb">{corrected ? "Teach-back (after your correction)" : "Teach-back"}</span>
         <span
-          className={`rounded px-2 py-0.5 font-mono text-xs ${underMinute ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}
+          className={`ui-bdg ui-mono ${underMinute ? "ui-k-pend" : "ui-k-rd"}`}
           title="spoken length estimate: words / 2.5 per second"
         >
           ~{secs.toFixed(0)} s spoken {underMinute ? "(under 60 s)" : "(over 60 s)"}
         </span>
       </div>
-      <p className="text-sm leading-relaxed">{text}</p>
+      <p style={{ fontSize: 17, lineHeight: 1.65, maxWidth: "62ch" }}>{text}</p>
       {!confirmed && (
-        <div className="flex flex-col gap-2">
-          <div className="flex gap-2">
+        <div className="flex flex-col" style={{ gap: 10 }}>
+          <div className="flex flex-wrap" style={{ gap: 10, paddingTop: 4 }}>
             <button
               type="button"
               disabled={busy}
               onClick={() => onResult({ confirmed: true })}
-              className="rounded bg-green-700 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+              className={buttonClass("primary", "lg")}
             >
               Yes, that is how it works
             </button>
@@ -47,11 +48,14 @@ export default function TeachBackPanel({ text, corrected, confirmed, busy, await
               type="button"
               disabled={busy}
               onClick={() => setOpen(true)}
-              className="rounded border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50 disabled:opacity-50"
+              className={buttonClass("secondary", "lg")}
             >
               Not quite
             </button>
           </div>
+          <span className="text-xs" style={{ color: "var(--fa)" }}>
+            &ldquo;Not quite&rdquo; lets you say what is wrong. The agent asks one more question and tries again.
+          </span>
           {showInput && (
             <form
               className="flex gap-2"
@@ -68,12 +72,12 @@ export default function TeachBackPanel({ text, corrected, confirmed, busy, await
                 value={correction}
                 onChange={(e) => setCorrection(e.target.value)}
                 placeholder="What did I get wrong?"
-                className="flex-1 rounded border border-slate-300 px-2 py-1 text-sm"
+                className="ui-inp flex-1"
               />
               <button
                 type="submit"
                 disabled={busy || !correction.trim()}
-                className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+                className={buttonClass("primary")}
               >
                 Send correction
               </button>

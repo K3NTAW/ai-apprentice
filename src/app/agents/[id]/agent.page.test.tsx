@@ -31,11 +31,11 @@ describe("agent page", () => {
     expect(html).toContain("Senior Sales Person");
     expect(html).toContain("learns from Sabine");
     expect(html).toContain('href="/capture?agent=agent-a"');
-    expect(html).toContain("Train (capture)");
+    expect(html).toContain(">Train<"); // presentational (design V3): canvas label "Train"
     expect(html).toContain('href="/learn?agent=agent-a"');
     expect(html).toContain("Teach a new employee");
     for (const t of ["shortcuts", "guardrails", "learners", "settings"]) expect(html).toContain(`href="/agents/agent-a?tab=${t}"`);
-    expect(render("processes", { role: "learner" })).not.toContain("Train (capture)");
+    expect(render("processes", { role: "learner" })).not.toContain(">Train<");
   });
 
   it("processes: only confirmed Work Maps with counts and a link", () => {

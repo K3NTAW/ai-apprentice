@@ -1,11 +1,13 @@
-// Agent page: header with the big avatar, Train and Teach buttons, and tabs selected by ?tab= (server rendered).
+// Agent page, 1:1 with docs/design/canvas/Agent.dc.html and its tab artboards (AgentShortcuts, AgentGuardrails,
+// AgentLearners, AgentSettings): hero card with the big avatar, Train and Teach buttons, tabs selected by ?tab=
+// (server rendered) with counts. Data the app does not have (understood %, seen counts, learner avatars) is hidden.
 import Link from "next/link";
 import { canCapture } from "@/components/shell/ShellHeader";
 import type { Role } from "@/lib/auth/context";
 import type { Agent } from "@/lib/types";
 import { guardrailKindLabel } from "@/lib/workmap/view";
 import AgentAvatar from "./AgentAvatar";
-import { cardClass, Stats } from "./AgentGallery";
+import { Badge, Card, Chord, buttonClass, Tabs, type BadgeKind } from "@/components/ui";
 import AgentSettings from "./AgentSettings";
 import {
   AGENT_TABS,
@@ -34,9 +36,28 @@ export type AgentDetailProps = {
   learners: LearnerRow[];
 };
 
-const Empty = ({ children }: { children: React.ReactNode }) => <p className="text-sm text-muted">{children}</p>;
+const Empty = ({ children }: { children: React.ReactNode }) => (
+  <Card style={{ padding: 22 }}>
+    <p className="text-[13px]" style={{ color: "var(--mu)" }}>
+      {children}
+    </p>
+  </Card>
+);
+const Intro = ({ children, action }: { children: React.ReactNode; action?: React.ReactNode }) => (
+  <div className="flex flex-wrap items-center justify-between" style={{ gap: 12 }}>
+    <span style={{ color: "var(--mu)" }}>{children}</span>
+    {action}
+  </div>
+);
+const GUARD_KIND: Record<GuardrailRow["kind"], BadgeKind> = { limit: "limit", exception: "exception", stop_and_ask: "stop_and_ask" };
+const quoteStyle = { fontFamily: "'Instrument Serif', Georgia, serif", fontStyle: "italic" as const, fontSize: 17, lineHeight: 1.3 };
 
 function Processes({ rows, agentId, role }: { rows: ProcessRow[]; agentId: string; role: Role | null }) {
+  const train = canCapture(role) && (
+    <Link className={buttonClass("secondary", "sm")} href={captureHref(agentId)}>
+      Train a new process
+    </Link>
+  );
   if (rows.length === 0)
     return (
       <Empty>
@@ -49,138 +70,229 @@ function Processes({ rows, agentId, role }: { rows: ProcessRow[]; agentId: strin
       </Empty>
     );
   return (
-    <ul className="flex flex-col divide-y divide-line text-sm">
-      {rows.map((p) => (
-        <li key={p.sessionId}>
-          <Link href={p.href} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 hover:text-accent">
-            <span className="font-medium">{p.task}</span>
-            <span className="text-muted">{p.counts}</span>
-            <span className="ml-auto font-mono text-xs text-muted">{p.date}</span>
-          </Link>
-        </li>
-      ))}
-    </ul>
+    <div className="flex flex-col" style={{ gap: 14 }}>
+      <Intro action={train}>Each process is one Work Map.</Intro>
+      <Card style={{ padding: "0 20px" }}>
+        {rows.map((p) => (
+          <div
+            key={p.sessionId}
+            className="grid items-center"
+            style={{ gridTemplateColumns: "minmax(0, 2.2fr) minmax(0, 1fr) auto", gap: 24, padding: "18px 0", borderBottom: "1px solid var(--ln)" }}
+          >
+            <div className="flex min-w-0 flex-col" style={{ gap: 3 }}>
+              <span className="ui-t3">{p.task}</span>
+              <span className="text-[13px]" style={{ color: "var(--mu)" }}>
+                {p.counts}
+              </span>
+            </div>
+            <div className="flex flex-col items-start" style={{ gap: 4 }}>
+              <Badge kind="confirmed" />
+              <span className="ui-mono text-xs" style={{ color: "var(--fa)" }}>
+                {p.date}
+              </span>
+            </div>
+            <Link href={p.href} className={buttonClass("secondary", "sm")}>
+              Open map
+            </Link>
+          </div>
+        ))}
+      </Card>
+    </div>
   );
 }
 
-function Shortcuts({ rows }: { rows: ShortcutRow[] }) {
+const SHORTCUT_COLS = "150px 100px 190px minmax(0, 1fr)";
+
+function Shortcuts({ rows, expert }: { rows: ShortcutRow[]; expert: string }) {
   if (rows.length === 0)
     return <Empty>No shortcuts recorded yet. The companion records the chords the expert uses while training.</Empty>;
   return (
-    <table className="w-full text-left text-sm">
-      <thead className="text-xs text-muted">
-        <tr>
-          <th className="py-1 pr-3 font-normal">Chord</th>
-          <th className="py-1 pr-3 font-normal">App</th>
-          <th className="py-1 pr-3 font-normal">What it does</th>
-          <th className="py-1 font-normal">Why</th>
-        </tr>
-      </thead>
-      <tbody className="divide-y divide-line">
-        {rows.map((s) => (
-          <tr key={`${s.chord}|${s.app}`}>
-            <td className="py-2 pr-3">
-              <kbd className="rounded border border-line bg-panel-2 px-1.5 py-0.5 font-mono text-xs">{s.chord}</kbd>
-            </td>
-            <td className="py-2 pr-3 text-muted">{s.app}</td>
-            <td className="py-2 pr-3">{s.what}</td>
-            <td className="py-2">{s.why && <q>{s.why}</q>}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <div className="flex flex-col" style={{ gap: 14 }}>
+      <Intro>Shortcuts {expert} used while training, with why they use them. Learners see these as hints.</Intro>
+      <Card style={{ overflowX: "auto" }}>
+        <div role="table" aria-label="Shortcuts" style={{ minWidth: 760 }}>
+          <div role="row" className="grid text-xs" style={{ gridTemplateColumns: SHORTCUT_COLS, gap: 16, padding: "12px 20px", borderBottom: "1px solid var(--ln)", fontWeight: 500, color: "var(--fa)" }}>
+            <span role="columnheader">Chord</span>
+            <span role="columnheader">App</span>
+            <span role="columnheader">What it does</span>
+            <span role="columnheader">Why, in {expert}&apos;s words</span>
+          </div>
+          {rows.map((s) => (
+            <div key={`${s.chord}|${s.app}`} role="row" className="grid items-center" style={{ gridTemplateColumns: SHORTCUT_COLS, gap: 16, padding: "14px 20px", borderBottom: "1px solid var(--ln)" }}>
+              <span role="cell">
+                <Chord keys={s.chord.split(/[+\s]+/).filter(Boolean)} />
+              </span>
+              <span role="cell" style={{ color: "var(--mu)" }}>
+                {s.app}
+              </span>
+              <span role="cell">{s.what}</span>
+              <span role="cell">{s.why && <q style={{ ...quoteStyle, quotes: "none" }}>{s.why}</q>}</span>
+            </div>
+          ))}
+        </div>
+      </Card>
+    </div>
   );
 }
 
 function Guardrails({ rows }: { rows: GuardrailRow[] }) {
   if (rows.length === 0) return <Empty>No guardrails yet. They come from the agent&apos;s confirmed Work Maps.</Empty>;
+  const n = (k: GuardrailRow["kind"]) => rows.filter((g) => g.kind === k).length;
   return (
-    <ul className="flex flex-col gap-3 text-sm">
-      {rows.map((g, i) => (
-        <li key={`${g.href}|${i}`} className="flex flex-col gap-1 border-b border-line pb-3">
-          <span className="flex flex-wrap items-center gap-2">
-            <span className="rounded-full border border-line px-2 py-0.5 text-xs text-muted">{guardrailKindLabel(g.kind)}</span>
-            <span className="font-medium">{g.rule}</span>
-          </span>
-          {g.quote && <q className="text-muted">{g.quote}</q>}
-          <Link className="text-xs text-accent underline" href={g.href}>
-            {g.task}, step {g.step} at {g.at}
-          </Link>
-        </li>
-      ))}
-    </ul>
+    <div className="flex flex-col" style={{ gap: 14 }}>
+      <div className="flex flex-wrap" style={{ gap: 8 }}>
+        <Badge kind="accent">All {rows.length}</Badge>
+        <Badge kind="limit">Limit {n("limit")}</Badge>
+        <Badge kind="exception">Exception {n("exception")}</Badge>
+        <Badge kind="stop_and_ask">Stop and ask {n("stop_and_ask")}</Badge>
+      </div>
+      <div className="flex flex-col" style={{ gap: 10 }}>
+        {rows.map((g, i) => (
+          <Card key={`${g.href}|${i}`} className="grid items-start" style={{ padding: "18px 20px", gridTemplateColumns: "120px minmax(0, 1fr) auto", gap: 20 }}>
+            <Badge kind={GUARD_KIND[g.kind]} className="justify-self-start">
+              {guardrailKindLabel(g.kind)}
+            </Badge>
+            <div className="flex min-w-0 flex-col" style={{ gap: 8 }}>
+              <span className="ui-t3">{g.rule}</span>
+              {g.quote && <q style={{ ...quoteStyle, color: "var(--mu)" }}>{g.quote}</q>}
+              <span className="text-xs" style={{ color: "var(--fa)" }}>
+                {g.task} · step {g.step}
+              </span>
+            </div>
+            <Link className={buttonClass("secondary", "sm")} href={g.href}>
+              Screen moment <span className="ui-mono">{g.at}</span>
+            </Link>
+          </Card>
+        ))}
+      </div>
+    </div>
   );
 }
+
+const LEARNER_COLS = "minmax(0, 1.3fr) minmax(0, 1.2fr) 220px 130px";
 
 function Learners({ rows }: { rows: LearnerRow[] }) {
   if (rows.length === 0) return <Empty>Nobody has practised with this agent yet.</Empty>;
   return (
-    <ul className="flex flex-col gap-4 text-sm">
-      {rows.map((l) => (
-        <li key={l.key} className="flex flex-col gap-1">
-          <span className="flex flex-wrap items-baseline gap-2">
-            <span className="font-medium">{l.label}</span>
-            <span className="text-muted">{masteryText(l.mastered, l.steps)}</span>
-          </span>
-          <ul className="flex flex-col gap-1 pl-3">
-            {l.processes.map((p) => (
-              <li key={p.workmapSessionId} className="flex flex-wrap gap-x-3">
-                <Link className="underline" href={`/map/${encodeURIComponent(p.workmapSessionId)}`}>
-                  {p.task}
-                </Link>
-                <span className="text-muted">{masteryText(p.mastered, p.steps)}</span>
-                <span className="text-muted">Interventions: {p.interventions}</span>
-                <span className="font-mono text-xs text-muted">
-                  {p.date}
-                  {!p.finished && " (in progress)"}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </li>
-      ))}
-    </ul>
+    <div className="flex flex-col" style={{ gap: 14 }}>
+      <Intro>Mastery is per step. A step is mastered when the learner gets it right on their own screen, twice.</Intro>
+      <Card style={{ overflowX: "auto" }}>
+        <div role="table" aria-label="Learners" style={{ minWidth: 820 }}>
+          <div role="row" className="grid text-xs" style={{ gridTemplateColumns: LEARNER_COLS, gap: 20, padding: "12px 20px", borderBottom: "1px solid var(--ln)", fontWeight: 500, color: "var(--fa)" }}>
+            <span role="columnheader">Learner</span>
+            <span role="columnheader">Process</span>
+            <span role="columnheader">Mastery</span>
+            <span role="columnheader">Last session</span>
+          </div>
+          {rows.flatMap((l) =>
+            l.processes.map((p, k) => {
+              const pct = p.steps ? Math.round((p.mastered / p.steps) * 100) : 0;
+              const done = p.steps > 0 && p.mastered >= p.steps;
+              return (
+                <div key={`${l.key}|${p.workmapSessionId}`} role="row" className="grid items-center" style={{ gridTemplateColumns: LEARNER_COLS, gap: 20, padding: "16px 20px", borderBottom: "1px solid var(--ln)" }}>
+                  <span role="cell" className="flex flex-col">
+                    {k === 0 && (
+                      <>
+                        <span style={{ fontWeight: 500 }}>{l.label}</span>
+                        <span className="text-xs" style={{ color: "var(--fa)" }}>
+                          {masteryText(l.mastered, l.steps)}
+                        </span>
+                      </>
+                    )}
+                  </span>
+                  <span role="cell" className="flex flex-col">
+                    <Link className="no-underline" style={{ color: "var(--tx)" }} href={`/map/${encodeURIComponent(p.workmapSessionId)}`}>
+                      {p.task}
+                    </Link>
+                    <span className="text-xs" style={{ color: "var(--fa)" }}>
+                      Interventions: {p.interventions}
+                    </span>
+                  </span>
+                  <span role="cell" className="flex flex-col" style={{ gap: 8 }}>
+                    <span className="flex items-center justify-between text-xs">
+                      <Badge kind={done ? "confirmed" : "judgment"}>{done ? "Mastered" : "Practice next"}</Badge>
+                      <span className="ui-mono" style={{ color: "var(--mu)" }}>
+                        {p.mastered} of {p.steps} steps
+                      </span>
+                    </span>
+                    <span className="ui-bar block">
+                      <i style={{ width: `${pct}%`, background: "var(--gr)" }} />
+                    </span>
+                  </span>
+                  <span role="cell" className="ui-mono text-[13px]" style={{ color: "var(--mu)" }}>
+                    {p.date}
+                    {!p.finished && " (in progress)"}
+                  </span>
+                </div>
+              );
+            }),
+          )}
+        </div>
+      </Card>
+    </div>
   );
 }
 
 export default function AgentDetail(props: AgentDetailProps) {
-  const { agent, role, tab } = props;
+  const { agent, role, tab, stats } = props;
+  const counts: Record<AgentTab, number | undefined> = {
+    processes: stats.processes,
+    shortcuts: stats.shortcuts ?? undefined,
+    guardrails: stats.guardrails,
+    learners: stats.learners,
+    settings: undefined,
+  };
+  const stat = (n: number | null, label: string) => (
+    <span>
+      <span className="ui-mono" style={{ color: "var(--tx)" }}>
+        {n ?? "-"}
+      </span>{" "}
+      {label}
+    </span>
+  );
   return (
-    <main className="flex flex-col gap-6 p-4 sm:p-8">
-      <header className={`${cardClass} sm:flex-row sm:items-center sm:gap-6`}>
-        <AgentAvatar avatar={agent.avatar} size={144} />
-        <div className="flex flex-1 flex-col gap-2">
-          <h1 className="text-2xl font-semibold tracking-tight">{agent.name}</h1>
-          <p className="text-muted">{agent.role}</p>
-          <p className="text-sm text-muted">{expertLine(agent)}</p>
-          <Stats stats={props.stats} />
-          <div className="mt-2 flex flex-wrap gap-2 text-sm">
-            {canCapture(role) && (
-              <Link className="rounded-lg bg-accent px-3 py-1.5 text-accent-fg" href={captureHref(agent.id)}>
-                Train (capture)
-              </Link>
-            )}
-            <Link className="rounded-lg border border-line px-3 py-1.5 hover:bg-panel-2" href={learnHref(agent.id)}>
-              Teach a new employee
-            </Link>
+    <main className="flex min-w-0 flex-col" style={{ padding: "28px 40px 56px", gap: 24 }}>
+      <Link className="text-[13px] no-underline" style={{ color: "var(--mu)" }} href="/agents">
+        Agents / {agent.name}
+      </Link>
+      <Card className="flex flex-wrap overflow-hidden" style={{ padding: 0 }}>
+        <div className="flex items-center justify-center" style={{ flex: "0 0 220px", minHeight: 220, background: "var(--stage)" }}>
+          <AgentAvatar avatar={agent.avatar} size={168} />
+        </div>
+        <div className="flex min-w-0 flex-col justify-center" style={{ flex: "1 1 420px", padding: "28px 32px", gap: 14 }}>
+          <div className="flex flex-wrap items-center" style={{ gap: 12 }}>
+            <h1 className="ui-td">{agent.name}</h1>
+            {stats.processes > 0 && <Badge kind="confirmed">Ready to teach</Badge>}
+          </div>
+          <div className="flex flex-col" style={{ gap: 4 }}>
+            <span style={{ fontSize: 17 }}>{agent.role}</span>
+            <span style={{ color: "var(--mu)" }}>{expertLine(agent)}</span>
+          </div>
+          <div className="flex flex-wrap text-[13px]" style={{ gap: 20, color: "var(--mu)" }} data-testid="agent-stats">
+            {stat(stats.processes, "processes")}
+            {stat(stats.shortcuts, "shortcuts")}
+            {stat(stats.guardrails, "guardrails")}
+            {stat(stats.learners, "learners")}
+            {stats.last_trained && <span>Last trained {stats.last_trained.slice(0, 10)}</span>}
           </div>
         </div>
-      </header>
-      <nav className="flex flex-wrap gap-1 border-b border-line text-sm" aria-label="Agent tabs">
-        {AGENT_TABS.map((t) => (
-          <Link
-            key={t}
-            href={agentHref(agent.id, t)}
-            aria-current={t === tab ? "page" : undefined}
-            className={`-mb-px border-b-2 px-3 py-2 ${t === tab ? "border-accent text-fg" : "border-transparent text-muted hover:text-fg"}`}
-          >
-            {TAB_LABELS[t]}
+        <div className="flex flex-col justify-center" style={{ flex: "0 1 auto", padding: "28px 32px", gap: 10 }}>
+          {canCapture(role) && (
+            <Link className={buttonClass("primary", "lg")} href={captureHref(agent.id)}>
+              Train
+            </Link>
+          )}
+          <Link className={buttonClass("secondary", "lg")} href={learnHref(agent.id)}>
+            Teach a new employee
           </Link>
-        ))}
+        </div>
+      </Card>
+      <nav aria-label="Agent tabs">
+        <Tabs tabs={AGENT_TABS.map((t) => ({ id: t, label: TAB_LABELS[t], count: counts[t], href: agentHref(agent.id, t) }))} active={tab} />
       </nav>
-      <section className={cardClass}>
+      <section>
         {tab === "processes" && <Processes rows={props.processes} agentId={agent.id} role={role} />}
-        {tab === "shortcuts" && <Shortcuts rows={props.shortcuts} />}
+        {tab === "shortcuts" && <Shortcuts rows={props.shortcuts} expert={agent.expert_name ?? "the expert"} />}
         {tab === "guardrails" && <Guardrails rows={props.guardrails} />}
         {tab === "learners" && <Learners rows={props.learners} />}
         {tab === "settings" && <AgentSettings agent={agent} role={role} />}

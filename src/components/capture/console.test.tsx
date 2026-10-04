@@ -44,11 +44,16 @@ describe("capture console", () => {
   it("renders Start, Share screen, End task, Pause, the feed, counter and last question, and no ERP markup", () => {
     const html = renderToStaticMarkup(<CaptureConsole {...props()} />);
     for (const label of [">Start<", ">Share screen<", ">End task<", "Pause / off the record"]) expect(html).toContain(label);
-    expect(html).toContain("2 asked, 1 about guardrails");
+    // presentational (design V3): the counter is the big number plus "asked · 1 about guardrails"
+    expect(html).toMatch(/>2<\/span>.*asked · .*1 about guardrails/);
     expect(html).toContain("Why this step?");
-    expect(html).toContain("01:05 switched to Microsoft Outlook");
+    // presentational (design V3): the feed row puts the time and the text in separate columns
+    expect(html).toContain(">01:05<");
+    expect(html).toContain("switched to Microsoft Outlook");
     expect(html).toContain("whole screen");
-    expect(html).toContain('data-testid="companion-card"');
+    // presentational (design V3): no pairing card, the app status shows instead
+    expect(html).not.toContain('data-testid="companion-card"');
+    expect(html).toContain('data-testid="app-status"');
     expect(html).not.toMatch(/ERP|erp|invoice/);
   });
 
