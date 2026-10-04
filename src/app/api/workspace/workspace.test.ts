@@ -2,6 +2,9 @@
 // next/headers) are mocked, so getRequestContext, requireContext and requireRole all run for real.
 // A vi.mock of src/lib/auth/context replacing only getRequestContext would not take effect:
 // requireContext calls it through the module-local binding.
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 type Result = { data: unknown; error: unknown };
@@ -366,6 +369,8 @@ describe("PATCH /api/workspace", () => {
     expect(q.calls).toContainEqual(["update", [{ name: "Finance Ops", city: "Zug" }]]);
     expect(q.calls).toContainEqual(["eq", ["id", WS_A]]);
     expect(revalidated).toContain(`user:${USER}:memberships`);
+    // Every member's cached list reads the workspace meta: expired too, not only the owner's own list.
+    expect(revalidated).toContain(`workspace:${WS_A}:meta`);
   });
 
   it("an empty city clears it, an absent city is left alone", async () => {
@@ -395,13 +400,37 @@ describe("PATCH /api/workspace", () => {
     expect(revalidated).toEqual([]);
   });
 
-  it("401 signed out, 400 local_mode, 404 when the policy updates no row", async () => {
+  it("local mode renames the file-backed workspace (parity with supabase), the request context shows it", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "ws-rename-"));
+    const prev = process.env.DATA_DIR;
+    process.env.DATA_DIR = dir;
+    try {
+      state.mode = "local";
+      const { getFreshRequestContext } = await import("@/lib/auth/context");
+      expect(await getFreshRequestContext()).toMatchObject({ ctx: { workspaceName: "local" } });
+      expect(await read(await renameWorkspace(jsonReq("PATCH", { name: " Finance Ops ", city: " Zug " })))).toEqual({
+        status: 200,
+        body: { id: "local", name: "Finance Ops", city: "Zug" },
+      });
+      expect(JSON.parse(readFileSync(path.join(dir, "workspace.json"), "utf8"))).toEqual({ name: "Finance Ops", city: "Zug" });
+      // An absent city is left alone, an empty one clears it.
+      expect((await read(await renameWorkspace(jsonReq("PATCH", { name: "Treasury" })))).body).toEqual({ id: "local", name: "Treasury", city: "Zug" });
+      const ctx = await getFreshRequestContext();
+      expect(ctx).toMatchObject({ ctx: { workspaceName: "Treasury", memberships: [{ workspaceId: "local", name: "Treasury", city: "Zug" }] } });
+      expect((await read(await renameWorkspace(jsonReq("PATCH", { name: "Treasury", city: "" })))).body).toEqual({ id: "local", name: "Treasury", city: null });
+      expect(await read(await renameWorkspace(jsonReq("PATCH", { name: " " })))).toEqual({ status: 400, body: { error: "invalid_input" } });
+      expect(update()).toBeUndefined();
+    } finally {
+      if (prev === undefined) delete process.env.DATA_DIR;
+      else process.env.DATA_DIR = prev;
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("401 signed out, 404 when the policy updates no row", async () => {
     state.user = null;
     expect((await renameWorkspace(jsonReq("PATCH", { name: "A" }))).status).toBe(401);
     state.user = { id: USER, email: "o@example.com" };
-    state.mode = "local";
-    expect(await read(await renameWorkspace(jsonReq("PATCH", { name: "A" })))).toEqual({ status: 400, body: { error: "local_mode" } });
-    state.mode = "supabase";
     state.results.workspaces = { data: [], error: null };
     expect((await renameWorkspace(jsonReq("PATCH", { name: "A" }))).status).toBe(404);
     expect(revalidated).toEqual([]);

@@ -7,10 +7,11 @@ import { cookies, headers } from "next/headers";
 import { cache } from "react";
 import type { z } from "zod";
 import { appMode } from "@/lib/supabase/env";
-import { readMostly, Uncacheable } from "@/lib/cache/readMostly";
+import { cacheTag, readMostly, Uncacheable } from "@/lib/cache/readMostly";
 import { timed } from "@/lib/perf";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { stateFromUser, type OnboardingState } from "@/lib/onboarding/state";
+import { LOCAL_WORKSPACE_ID, readLocalWorkspace } from "@/lib/workspace/file";
 import { WS_COOKIE } from "./cookies";
 import { FORWARDED_USER_HEADER, verifyForwardedUser, type ForwardedUser } from "./forwardedUser";
 
@@ -106,16 +107,18 @@ export function pickActive(memberships: Membership[], cookieValue: string | unde
   return memberships.find((m) => m.workspaceId === cookieValue) ?? memberships[0];
 }
 
-function localContext(): RequestContext {
+/** Local mode: one file-backed workspace; its name and city come from <DATA_DIR>/workspace.json (default 'local'). */
+async function localContext(): Promise<RequestContext> {
+  const ws = await readLocalWorkspace();
   return {
     mode: "local",
     userId: "local",
     email: null,
-    workspaceId: "local",
-    workspaceName: "local",
+    workspaceId: LOCAL_WORKSPACE_ID,
+    workspaceName: ws.name,
     role: "owner",
     supabase: null,
-    memberships: [{ workspaceId: "local", name: "local", role: "owner" }],
+    memberships: [{ workspaceId: LOCAL_WORKSPACE_ID, name: ws.name, role: "owner", ...(ws.city ? { city: ws.city } : {}) }],
   };
 }
 
@@ -130,23 +133,61 @@ async function forwardedUser(): Promise<ForwardedUser | null> {
 
 type ReadMemberships = { ok: true; memberships: Membership[] } | { ok: false };
 
+type WorkspaceMeta = Record<string, { name: string; city?: string | null }>;
+
+/** Name and city of the given workspaces, by id; null on a query error. */
+export async function readWorkspaceMeta(supabase: SupabaseClient, ids: string[]): Promise<WorkspaceMeta | null> {
+  const query = (columns: string) => supabase.from("workspaces").select(columns).in("id", ids);
+  let { data, error } = await query("id, name, city");
+  // 42703: workspaces.city does not exist yet (migration 20261004020000 not applied); read without it.
+  if (error?.code === "42703") ({ data, error } = await query("id, name"));
+  if (error || !Array.isArray(data)) {
+    if (error) console.error("readWorkspaceMeta:", error.message);
+    return null;
+  }
+  const meta: WorkspaceMeta = {};
+  for (const row of data as unknown as { id?: unknown; name?: unknown; city?: string | null }[]) {
+    if (typeof row.id !== "string" || typeof row.name !== "string") continue;
+    meta[row.id] = "city" in row ? { name: row.name, city: row.city ?? null } : { name: row.name };
+  }
+  return meta;
+}
+
 /**
  * Page path: memberships cached for a few seconds per user and requested workspace (tag memberships:<user>, expired
- * by bootstrap and member removal). Errors and empty results are never cached.
+ * by bootstrap and member removal). The workspace names and cities on top are a second cached read tagged
+ * workspace:<id>:meta for every workspace in the list, so a rename expires them for every member, not only the
+ * owner who renamed. Errors and empty results are never cached.
  */
-export function cachedMemberships(supabase: SupabaseClient, userId: string, wsCookie: string | undefined): Promise<ReadMemberships> {
-  return readMostly("memberships", { userId, workspaceId: wsCookie ?? "none" }, ["memberships"], async () => {
+export async function cachedMemberships(supabase: SupabaseClient, userId: string, wsCookie: string | undefined): Promise<ReadMemberships> {
+  const ids = { userId, workspaceId: wsCookie ?? "none" };
+  const read = await readMostly("memberships", ids, ["memberships"], async () => {
     const read = await readMemberships(supabase, userId);
     if (!read.ok || read.memberships.length === 0) throw new Uncacheable(read);
     return read;
   });
+  if (!read.ok || read.memberships.length === 0) return read;
+  const wsIds = read.memberships.map((m) => m.workspaceId);
+  const meta = await readMostly(
+    `workspace-meta:${wsIds.join(",")}`,
+    ids,
+    [],
+    async () => {
+      const meta = await readWorkspaceMeta(supabase, wsIds);
+      if (!meta) throw new Uncacheable(null);
+      return meta;
+    },
+    wsIds.map(cacheTag.workspace),
+  );
+  if (!meta) return read;
+  return { ok: true, memberships: read.memberships.map((m) => (meta[m.workspaceId] ? { ...m, ...meta[m.workspaceId] } : m)) };
 }
 
 type ResolveOpts = { fresh: boolean };
 
 async function resolveRequestContext(opts: ResolveOpts): Promise<ContextResult> {
   const mode = appMode();
-  if (mode === "local") return { kind: "ok", ctx: localContext() };
+  if (mode === "local") return { kind: "ok", ctx: await localContext() };
   if (mode !== "supabase") return { kind: "misconfigured" };
 
   let supabase: SupabaseClient;

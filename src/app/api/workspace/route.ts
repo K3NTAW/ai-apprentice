@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { WS_COOKIE, wsCookieOptions } from "@/lib/auth/cookies";
-import { internalError, parseJsonBody, requireWorkspaceApi } from "@/lib/auth/context";
+import { internalError, parseJsonBody, requireContext, requireRole, requireWorkspaceApi } from "@/lib/auth/context";
 import { revalidateScopes } from "@/lib/cache/readMostly";
+import { LOCAL_WORKSPACE_ID, renameLocalWorkspace } from "@/lib/workspace/file";
 import { CreateWorkspaceInput, isMissingFunction, RenameWorkspaceInput } from "@/lib/workspace/create";
 
 export const runtime = "nodejs";
@@ -36,13 +37,22 @@ export async function POST(req: Request): Promise<Response> {
 
 /**
  * Renames the active workspace and sets or clears its city. Owner only (requireRole); the workspaces update policy
- * allows owners too, so a row that does not update means the policy refused it. Local mode: 400 local_mode.
+ * allows owners too, so a row that does not update means the policy refused it. Local mode renames the one
+ * file-backed workspace (<DATA_DIR>/workspace.json) with the same input and response.
  */
 export async function PATCH(req: Request): Promise<Response> {
-  const ctx = await requireWorkspaceApi(["owner"]);
+  const ctx = await requireContext();
   if (ctx instanceof Response) return ctx;
+  const denied = requireRole(ctx, ["owner"]);
+  if (denied) return denied;
   const input = await parseJsonBody(req, RenameWorkspaceInput);
   if (input instanceof Response) return input;
+
+  if (ctx.mode === "local" || !ctx.supabase) {
+    const saved = await renameLocalWorkspace(input).catch((e: unknown) => e as Error);
+    if (saved instanceof Error) return internalError("workspace PATCH (local)", saved);
+    return Response.json({ id: LOCAL_WORKSPACE_ID, ...saved });
+  }
 
   const patch = input.city === undefined ? { name: input.name } : { name: input.name, city: input.city };
   const { data, error } = await ctx.supabase.from("workspaces").update(patch).eq("id", ctx.workspaceId).select("id, name, city");
@@ -53,7 +63,8 @@ export async function PATCH(req: Request): Promise<Response> {
   }
   if (!data || data.length === 0) return Response.json({ error: "not_found" }, { status: 404 });
 
-  // The sidebar and shell read the name and city through the cached memberships.
-  revalidateScopes(["memberships"], ctx);
+  // The sidebar and shell read the name and city through the cached memberships: the acting user's list and the
+  // workspace meta that every member's list reads (workspace:<id>:meta).
+  revalidateScopes(["memberships", "workspace"], ctx);
   return Response.json(data[0]);
 }

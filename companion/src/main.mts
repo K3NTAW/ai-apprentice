@@ -58,7 +58,8 @@ import type { Allowlist } from "./origin.mjs";
 import { createWsPairing } from "./pairing.mjs";
 import { isPanelAction, materialOptions, panelBounds, panelMaterial, panelViewModel, surfaceMaterial } from "./panel.mjs";
 import { isPermissionKey } from "./pairingWindow.mjs";
-import { canStartHook, PermissionMonitor, readPermissions, recheckOnActivate, sessionStarted } from "./permissions.mjs";
+import { canStartHook, PermissionMonitor, readPermissions } from "./permissions.mjs";
+import { wirePermissionRechecks } from "./permissionRechecks.mjs";
 import { allowDisplayMedia, checkPermission, DISPLAY_MEDIA_OPTIONS, grantPermission, isUrlAllowed, pickPrimarySource } from "./permissionsGrant.mjs";
 import { appMessage, chordMessage, parsePort, shortcutMessage, statusMessage, type Permissions, type ServerMessage, type SessionStateMessage } from "./protocol.mjs";
 import {
@@ -75,7 +76,7 @@ import {
 } from "./shortcuts.mjs";
 import { startServer, type CompanionServer } from "./server.mjs";
 import { installLifecycle, mainCloseAction } from "./lifecycle.mjs";
-import { MAC_SETTINGS_URLS, openPermissionSettings } from "./permissionSettings.mjs";
+import { MAC_SETTINGS_URLS } from "./permissionSettings.mjs";
 import { isWindowAction, MAIN_WINDOW, planWindowAction, restoreWindowBounds, serializeWindowBounds, type WindowAction } from "./windowActions.mjs";
 
 const require = createRequire(import.meta.url);
@@ -288,6 +289,9 @@ const permissionMonitor = new PermissionMonitor(permissions, (p) => {
   emit(status());
   pushPanel();
 });
+// Coming back to the app (activate, focus), a session start and the settings action re-check permissions, so one
+// revoked or granted in System Settings meanwhile is noticed (permissionRechecks.mts).
+const permissionRechecks = wirePermissionRechecks(permissionMonitor, app);
 
 function primaryDisplay(): DisplayInfo {
   const d = screen.getPrimaryDisplay();
@@ -757,11 +761,10 @@ const bridgeHandlers: BridgeHandlers = {
   },
   onSession(next) {
     // A session start re-checks permissions, so one revoked since launch is noticed.
-    const started = sessionStarted(session?.mode, next.mode);
+    const started = permissionRechecks.session(session?.mode, next.mode);
     session = next;
     if (started) sessionStartedAt = Date.now();
     if (!next.mode) sessionStartedAt = null;
-    if (started) permissionMonitor.check();
     // A new session (agent, mode or title change) clears the feed and the page's dock override.
     dock = reduceDock(dock, { type: "session", key: sessionKey(next) });
     syncSessionTimers();
@@ -798,16 +801,16 @@ ipcMain.on(BRIDGE_CHANNELS.send, (e, message: unknown) => {
 // openPermissionSettings(kind): main opens only the fixed pane for that kind (permissionSettings.mts).
 ipcMain.handle(BRIDGE_CHANNELS.permissionSettings, async (e, kind: unknown) => {
   if (!senderAllowed(bridgeSender(e), appList)) return { ok: false, reason: "not_allowed" };
-  return openPermissionSettings(kind, {
-    platform: process.platform,
-    openExternal: (url) => shell.openExternal(url),
-    askForMicrophone: () => systemPreferences.askForMediaAccess("microphone"),
-    touchScreenCapture: () => desktopCapturer.getSources({ types: ["screen"], thumbnailSize: { width: 0, height: 0 } }),
-    refresh: () => {
-      permissionMonitor.check();
-      emit(status());
+  return permissionRechecks.openSettings(
+    kind,
+    {
+      platform: process.platform,
+      openExternal: (url) => shell.openExternal(url),
+      askForMicrophone: () => systemPreferences.askForMediaAccess("microphone"),
+      touchScreenCapture: () => desktopCapturer.getSources({ types: ["screen"], thumbnailSize: { width: 0, height: 0 } }),
     },
-  });
+    () => emit(status()),
+  );
 });
 ipcMain.on(BRIDGE_CHANNELS.window, (e, action: unknown) => {
   if (!senderAllowed(bridgeSender(e), appList) || !isWindowAction(action)) return;
@@ -1177,10 +1180,6 @@ if (!app.requestSingleInstanceLock()) {
   app.on("web-contents-created", (_e, wc) => wc.on("will-attach-webview", (ev) => ev.preventDefault()));
   // No menu-bar item: the Dock icon (taskbar on Windows) opens the app, Cmd+Q / the app menu quits.
   installLifecycle(app, { platform: process.platform, mainVisible, showMain, sessionActive: sessionRunning });
-  // Coming back to the app re-checks permissions (one revoked in System Settings meanwhile).
-  recheckOnActivate(app, () => {
-    if (app.isReady()) permissionMonitor.check();
-  });
   app.on("before-quit", () => {
     quitting = true;
     talk.cancel();

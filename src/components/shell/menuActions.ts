@@ -30,15 +30,22 @@ export async function createWorkspace(input: { name: string; city: string }, dep
   return { ok: true };
 }
 
-/** PATCH /api/workspace (owner only). Validates first; the caller refreshes the page on ok. */
-export async function renameWorkspace(input: { name: string; city: string }, deps: Pick<MenuDeps, "fetch">): Promise<{ ok: true } | { ok: false; error: string }> {
+/**
+ * PATCH /api/workspace (owner only). Validates first; the caller refreshes the page on ok. initialCity is the city
+ * the form started with: an empty city that was empty before is left out of the body (the server keeps it as is);
+ * one that was set before is sent as null (cleared).
+ */
+export async function renameWorkspace(
+  input: { name: string; city: string; initialCity?: string | null },
+  deps: Pick<MenuDeps, "fetch">,
+): Promise<{ ok: true } | { ok: false; error: string }> {
   const invalid = workspaceInputError(input);
   if (invalid) return { ok: false, error: invalid };
   const res = await deps
     .fetch("/api/workspace", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: input.name.trim(), city: input.city.trim() || null }),
+      body: JSON.stringify(renameBody(input)),
     })
     .catch(() => null);
   if (!res) return { ok: false, error: "Could not reach the server." };
@@ -78,4 +85,12 @@ export function nameInitials(name: string, fallback = "AA"): string {
   const parts = name.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
   if (parts.length >= 2) return (parts[0]![0]! + parts[1]![0]!).toUpperCase();
   return (parts[0]?.slice(0, 2) || fallback).toUpperCase();
+}
+
+/** The PATCH body: trimmed name; city trimmed, null when cleared, absent when empty and unchanged. */
+export function renameBody(input: { name: string; city: string; initialCity?: string | null }): { name: string; city?: string | null } {
+  const name = input.name.trim();
+  const city = input.city.trim();
+  if (!city && !(input.initialCity ?? "").trim()) return { name };
+  return { name, city: city || null };
 }

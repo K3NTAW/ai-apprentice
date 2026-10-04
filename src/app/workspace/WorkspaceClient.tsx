@@ -74,7 +74,7 @@ export default function WorkspaceClient({ view }: { view: WorkspaceView }) {
     e.preventDefault();
     setBusy(true);
     setError(null);
-    const r = await renameWorkspace({ name: wsName, city: wsCity }, { fetch: (u, i) => window.fetch(u, i) });
+    const r = await renameWorkspace({ name: wsName, city: wsCity, initialCity: activeCity }, { fetch: (u, i) => window.fetch(u, i) });
     setBusy(false);
     setError(r.ok ? null : r.error);
     if (r.ok) router.refresh();

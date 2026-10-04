@@ -8,6 +8,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: () => {}, replace: () => {}, refresh: () => {} }) }));
 
 import NewAgentFlow from "@/components/agents/NewAgentFlow";
+import OnboardingFlow, { saveWorkspaceRename } from "@/components/onboarding/OnboardingFlow";
 import PermissionsStep, { PermissionsView } from "@/components/onboarding/PermissionsStep";
 import Walkthrough from "@/components/onboarding/Walkthrough";
 import UserCard from "@/components/shell/UserCard";
@@ -201,5 +202,40 @@ describe("how training works", () => {
     const r = await saveStep("permissions", "skipped", { fetch: async () => new Response("", { status: 500 }) });
     expect(r).toEqual({ ok: false, error: expect.stringContaining("could not be saved") });
     expect((await saveStep("agent", "done", { fetch: async () => Promise.reject(new Error("offline")) })).ok).toBe(false);
+  });
+});
+
+describe("workspace rename in onboarding", () => {
+  const flow = (role: "owner" | "learner", joined: { name: string; role: "owner" | "learner" } | null = null, mode: "local" | "supabase" = "supabase") =>
+    renderToStaticMarkup(
+      <OnboardingFlow initial={emptyState()} mode={mode} workspace={{ name: "Finance Ops", city: "Zug", role }} joined={joined} canCreateAgents experts={[]} next="/" startStep="workspace" />,
+    );
+
+  it("an owner of their own workspace sees Edit, also in local mode; a learner or someone who joined does not", () => {
+    expect(flow("owner")).toContain('data-testid="rename-open"');
+    expect(flow("owner", null, "local")).toContain('data-testid="rename-open"');
+    expect(flow("owner")).toMatch(/data-testid="workspace-name"[^>]*>Finance Ops · Zug</);
+    expect(flow("learner")).not.toContain("rename-open");
+    expect(flow("owner", { name: "Treasury", role: "learner" })).not.toContain("rename-open");
+  });
+
+  it("a successful rename refreshes the route so the shell and sidebar show the new name", async () => {
+    const fetch = vi.fn(async () => new Response("{}", { status: 200 }));
+    const refresh = vi.fn();
+    const r = await saveWorkspaceRename({ name: " Treasury ", city: "" }, null, { fetch: fetch as never, refresh });
+    expect(r).toEqual({ ok: true, shown: { name: "Treasury", city: null } });
+    expect(refresh).toHaveBeenCalledTimes(1);
+    // Empty and unchanged city: left out of the body.
+    expect(fetch).toHaveBeenCalledWith("/api/workspace", expect.objectContaining({ method: "PATCH", body: JSON.stringify({ name: "Treasury" }) }));
+  });
+
+  it("clearing a city sends null; a failed rename shows the error and does not refresh", async () => {
+    const ok = vi.fn(async () => new Response("{}", { status: 200 }));
+    await saveWorkspaceRename({ name: "Treasury", city: " " }, "Zug", { fetch: ok as never, refresh: () => {} });
+    expect(ok).toHaveBeenCalledWith("/api/workspace", expect.objectContaining({ body: JSON.stringify({ name: "Treasury", city: null }) }));
+    const refresh = vi.fn();
+    const denied = vi.fn(async () => new Response("{}", { status: 403 }));
+    expect(await saveWorkspaceRename({ name: "Treasury", city: "" }, null, { fetch: denied as never, refresh })).toEqual({ ok: false, error: "Only owners can rename the workspace." });
+    expect(refresh).not.toHaveBeenCalled();
   });
 });

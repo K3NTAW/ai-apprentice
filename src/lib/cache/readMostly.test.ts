@@ -83,8 +83,12 @@ describe("cache keys", () => {
     const rows = [{ workspace_id: "w1", role: "owner", created_at: "2026-10-01T00:00:00Z", workspaces: { name: "W" } }];
     const q: unknown = new Proxy({}, { get: (_t, p) => (p === "then" ? (ok: (v: unknown) => unknown) => ok({ data: rows, error: null }) : () => q) });
     await cachedMemberships({ from: () => q } as never, "u1", "w1");
-    expect(lastKey().key).toEqual(expect.arrayContaining(["user:u1", "ws:w1"]));
-    expect(lastKey().tags).toEqual([cacheTag.memberships("u1")]);
+    const [list, meta] = s.keys;
+    expect(list.key).toEqual(expect.arrayContaining(["memberships", "user:u1", "ws:w1"]));
+    expect(list.tags).toEqual([cacheTag.memberships("u1")]);
+    // Names and cities: a second read tagged with every listed workspace, expired by a rename for all members.
+    expect(meta.key).toEqual(expect.arrayContaining(["user:u1", "ws:w1"]));
+    expect(meta.tags).toEqual([cacheTag.workspace("w1")]);
   });
 
   it("never shares across users or workspaces", async () => {

@@ -6,7 +6,8 @@ import { revalidateTag, unstable_cache } from "next/cache";
 
 export const READ_MOSTLY_SECONDS = 5;
 
-export type Scope = "agents" | "sessions" | "members" | "memberships";
+/** workspace: the workspace's own name and city, shown to every member (expired by a rename). */
+export type Scope = "agents" | "sessions" | "members" | "memberships" | "workspace";
 export type CacheIds = { userId: string; workspaceId: string };
 
 export const cacheTag = {
@@ -14,6 +15,7 @@ export const cacheTag = {
   sessions: (workspaceId: string) => `ws:${workspaceId}:sessions`,
   members: (workspaceId: string) => `ws:${workspaceId}:members`,
   memberships: (userId: string) => `user:${userId}:memberships`,
+  workspace: (workspaceId: string) => `workspace:${workspaceId}:meta`,
 };
 
 export function tagFor(scope: Scope, ids: CacheIds): string {
@@ -42,9 +44,10 @@ async function settle<T>(run: () => Promise<T>): Promise<T> {
   }
 }
 
-export async function readMostly<T>(name: string, ids: CacheIds, scopes: Scope[], read: () => Promise<T>): Promise<T> {
+/** extraTags: tags beyond the scopes of ids, e.g. the meta tag of every workspace in a membership list. */
+export async function readMostly<T>(name: string, ids: CacheIds, scopes: Scope[], read: () => Promise<T>, extraTags: string[] = []): Promise<T> {
   const cached = unstable_cache(read, cacheKey(name, ids), {
-    tags: scopes.map((s) => tagFor(s, ids)),
+    tags: [...scopes.map((s) => tagFor(s, ids)), ...extraTags],
     revalidate: READ_MOSTLY_SECONDS,
   });
   try {

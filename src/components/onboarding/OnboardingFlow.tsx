@@ -49,6 +49,21 @@ function Stepper({ active, state }: { active: OnboardingStep; state: OnboardingS
 
 export type OnboardingWorkspace = { name: string; city: string | null; role: Role };
 
+/**
+ * Saves the onboarding rename (PATCH /api/workspace; an empty city that was empty before is left out) and, on
+ * success, refreshes the route so the shell and the sidebar show the new name. Returns the name and city to show.
+ */
+export async function saveWorkspaceRename(
+  rename: { name: string; city: string },
+  initialCity: string | null,
+  deps: { fetch: typeof fetch; refresh: () => void },
+): Promise<{ ok: true; shown: { name: string; city: string | null } } | { ok: false; error: string }> {
+  const r = await renameWorkspace({ ...rename, initialCity }, { fetch: deps.fetch });
+  if (!r.ok) return r;
+  deps.refresh();
+  return { ok: true, shown: { name: rename.name.trim(), city: rename.city.trim() || null } };
+}
+
 function WorkspaceStep({ workspace, joined, mode }: { workspace: OnboardingWorkspace; joined: { name: string; role: Role } | null; mode: "local" | "supabase" }) {
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
@@ -57,13 +72,15 @@ function WorkspaceStep({ workspace, joined, mode }: { workspace: OnboardingWorks
   const [editing, setEditing] = useState(false);
   const [shown, setShown] = useState({ name: workspace.name, city: workspace.city });
   const [rename, setRename] = useState({ name: workspace.name, city: workspace.city ?? "" });
-  const canRename = mode === "supabase" && !joined && workspace.role === "owner";
+  const router = useRouter();
+  // Local mode renames the file-backed workspace too (PATCH /api/workspace).
+  const canRename = !joined && workspace.role === "owner";
   const saveRename = async (e: FormEvent) => {
     e.preventDefault();
-    const r = await renameWorkspace(rename, { fetch: (u, i) => window.fetch(u, i) });
+    const r = await saveWorkspaceRename(rename, shown.city, { fetch: (u, i) => window.fetch(u, i), refresh: () => router.refresh() });
     if (!r.ok) return setMsg(r.error);
     setMsg(null);
-    setShown({ name: rename.name.trim(), city: rename.city.trim() || null });
+    setShown(r.shown);
     setEditing(false);
   };
   const submit = async (e: FormEvent) => {

@@ -3,7 +3,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { workspaceLabel } from "@/lib/workspace/create";
-import { createWorkspace, displayName, renameWorkspace, saveDisplayName, switchWorkspace, type MenuDeps } from "./menuActions";
+import { createWorkspace, displayName, renameBody, renameWorkspace, saveDisplayName, switchWorkspace, type MenuDeps } from "./menuActions";
 import ShellHeader, { type ShellUser } from "./ShellHeader";
 import { applyThemeChoice, storedChoice, THEME_KEY } from "./ThemeToggle";
 import { CreateWorkspaceDialog } from "./WorkspaceSwitcher";
@@ -192,6 +192,16 @@ describe("Rename workspace", () => {
     expect(await renameWorkspace({ name: " Treasury ", city: " Zug " }, d.deps)).toEqual({ ok: true });
     expect(d.fetch).toHaveBeenCalledWith("/api/workspace", expect.objectContaining({ method: "PATCH", body: JSON.stringify({ name: "Treasury", city: "Zug" }) }));
     expect(d.reload).not.toHaveBeenCalled();
+  });
+
+  it("omits the city when it is empty and was empty before; clears it (null) when it was set", async () => {
+    expect(renameBody({ name: " Treasury ", city: "  " })).toEqual({ name: "Treasury" });
+    expect(renameBody({ name: "Treasury", city: "", initialCity: null })).toEqual({ name: "Treasury" });
+    expect(renameBody({ name: "Treasury", city: "", initialCity: "Zug" })).toEqual({ name: "Treasury", city: null });
+    expect(renameBody({ name: "Treasury", city: " Bern ", initialCity: "Zug" })).toEqual({ name: "Treasury", city: "Bern" });
+    const d = deps(200);
+    await renameWorkspace({ name: "Treasury", city: "", initialCity: "" }, d.deps);
+    expect(d.fetch).toHaveBeenCalledWith("/api/workspace", expect.objectContaining({ body: JSON.stringify({ name: "Treasury" }) }));
   });
 
   it("shows the refusal for a non-owner", async () => {
