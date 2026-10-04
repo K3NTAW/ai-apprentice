@@ -393,6 +393,19 @@ export function runStoreContract(name: string, makeStore: () => SessionStore | P
       expect(await store.listProcesses({ agent_id: a.id, include_archived: true })).toEqual([]);
     });
 
+    it("saves teach progress, replaces it and shows it in digests and summaries", async () => {
+      const src = await store.createSession({ kind: "capture" });
+      const t = await store.createSession({ kind: "teach" });
+      const first = { workmap_session_id: src.id, mastered: ["s1"], practice: ["s2"], interventions: 1 };
+      expect((await store.saveTeach(t.id, first)).teach).toEqual(first);
+      const second = { ...first, mastered: ["s1", "s2"], practice: [], interventions: 2, finished_at: "2026-10-04T10:00:00.000Z" };
+      await store.saveTeach(t.id, second);
+      expect((await store.getSession(t.id))?.teach).toEqual(second);
+      expect((await store.listSessionDigests()).find((d) => d.id === t.id)?.teach).toEqual(second);
+      expect((await store.listSessionDigests()).find((d) => d.id === src.id)?.teach).toBeUndefined();
+      await expect(store.saveTeach("s_missing", first)).rejects.toBeInstanceOf(SessionNotFoundError);
+    });
+
     it("reports missing sessions and invalid ids", async () => {
       const id = "s_missing";
       expect(await store.getSession(id)).toBeNull();

@@ -1,7 +1,7 @@
 // Store contract shared by the file and supabase backends. Leaf module: imports nothing from ./index, ./file or ./supabase.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { RedactOptions } from "@/lib/redact";
-import type { Agent, Avatar, QAPair, ScreenEvent, Session, SessionDigest, TranscriptEntry, WorkMap } from "@/lib/types";
+import type { Agent, Avatar, QAPair, ScreenEvent, Session, SessionDigest, TeachProgress, TranscriptEntry, WorkMap } from "@/lib/types";
 
 export type SessionSummary = {
   id: string;
@@ -110,6 +110,8 @@ export interface SessionStore {
   setOffRecord(id: string, range: { from: number; to?: number }): Promise<Session>;
   saveWorkMap(id: string, workmap: WorkMap): Promise<Session>;
   endSession(id: string): Promise<Session>;
+  /** Replaces Session.teach. Supabase throws TeachUnavailableError while migration 20261004040000_session_teach is not applied. */
+  saveTeach(id: string, teach: TeachProgress): Promise<Session>;
   saveFrame(id: string, t: number, data: Buffer): Promise<SaveFrameResult>;
   readFrame(id: string, name: string): Promise<Buffer | null>;
   /** Newest first. */
@@ -233,6 +235,15 @@ export class ProcessesUnavailableError extends Error {
   constructor() {
     super("processes not available yet");
     this.name = "ProcessesUnavailableError";
+  }
+}
+
+/** sessions.teach is missing (migration not applied). The API answers 503, the Teach page keeps going quietly. */
+export class TeachUnavailableError extends Error {
+  readonly code = "teach_unavailable";
+  constructor() {
+    super("teach progress not available yet");
+    this.name = "TeachUnavailableError";
   }
 }
 

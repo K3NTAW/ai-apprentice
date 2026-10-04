@@ -8,7 +8,7 @@ import { entry, event, qaPair, runStoreContract } from "./contract";
 import { FakeSupabase } from "./fakeSupabase";
 import { fileStore, getStore } from "./index";
 import { createSupabaseStore } from "./supabase";
-import { AgentNotFoundError, frameName, InvalidWorkMapError, ProcessesUnavailableError, ProcessExistsError, SessionNotFoundError } from "./types";
+import { AgentNotFoundError, frameName, InvalidWorkMapError, ProcessesUnavailableError, ProcessExistsError, SessionNotFoundError, TeachUnavailableError } from "./types";
 import { backfillProcesses } from "@/lib/processes/server";
 
 const UID = "00000000-0000-4000-8000-000000000001";
@@ -154,6 +154,19 @@ describe("supabase store only", () => {
     const digests = await store.listSessionDigests();
     expect(digests).toHaveLength(1);
     expect(digests[0].process_id).toBeUndefined();
+  });
+
+  it("reads digests without sessions.teach and refuses saveTeach while the teach migration is missing", async () => {
+    const { fake, store } = supabaseFixture();
+    const s = await store.createSession({ kind: "teach" });
+    fake.missingTables.add("sessions.teach");
+    const digests = await store.listSessionDigests();
+    expect(digests).toHaveLength(1);
+    expect(digests[0].teach).toBeUndefined();
+    await expect(store.saveTeach(s.id, { workmap_session_id: s.id, mastered: [], practice: [], interventions: 0 })).rejects.toBeInstanceOf(
+      TeachUnavailableError,
+    );
+    expect((await store.getSession(s.id))?.teach).toBeUndefined();
   });
 
   it("pages past the row cap and returns every row in order", async () => {
