@@ -14,6 +14,8 @@ export type RequestContext = {
   mode: "local" | "supabase";
   userId: string;
   email: string | null;
+  /** When the user's address was confirmed (Supabase email_confirmed_at); null when never. Unset in local mode. */
+  emailConfirmedAt?: string | null;
   workspaceId: string;
   workspaceName: string;
   role: Role;
@@ -108,7 +110,7 @@ export async function getRequestContext(): Promise<ContextResult> {
   }
 
   // A thrown getUser counts as signed out.
-  let user: { id: string; email?: string | null } | null = null;
+  let user: { id: string; email?: string | null; email_confirmed_at?: string | null } | null = null;
   try {
     const { data, error } = await supabase.auth.getUser();
     if (!error) user = data?.user ?? null;
@@ -135,6 +137,7 @@ export async function getRequestContext(): Promise<ContextResult> {
       mode: "supabase",
       userId: user.id,
       email: user.email ?? null,
+      emailConfirmedAt: user.email_confirmed_at ?? null,
       workspaceId: active.workspaceId,
       workspaceName: active.name,
       role: active.role,

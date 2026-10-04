@@ -38,17 +38,26 @@ Supabase dashboard, Authentication:
   in the browser) and magic link (the browser also offers 'Email me a link').
 - Sign In / Providers, Email, minimum password length: 8 (the login form and `/auth/reset` require at least 8).
 - Sign In / Providers, Email, **Confirm email**:
-  - off (current setting, `auth.email.enable_confirmations = false`): a new account is confirmed at once;
-    'Create account' signs the user in and lands on `/agents`. An address is not proven to belong to whoever typed
-    it; invites still apply only to the invited address.
-  - on: 'Create account' triggers the default "Confirm your signup" message and the form says to check the inbox;
-    its link goes through `/auth/callback`. Signing in before confirming shows "Confirm your email first".
+  - **on** (current setting since 2026-10-04, `auth.email.enable_confirmations = true`; required, otherwise anyone
+    could sign up as an invited address and inherit the invite). 'Create account' triggers the default "Confirm your
+    signup" message and the form says "Check your inbox and click the confirmation link, then sign in here." with a
+    'Resend confirmation' button (`auth.resend` type `signup`). Signing in before confirming ('Email not confirmed')
+    shows the same guidance. The link goes to `https://<domain>/auth/callback?flow=signup`; opened outside the app
+    it lands on `/auth/confirmed` ("Confirmed. Go back to the AI Apprentice app and sign in."). `/api/auth/bootstrap`
+    also refuses (403 `email_not_confirmed`) a session whose address is not confirmed, and `bootstrap_workspace`
+    checks `email_confirmed_at` in the database.
 - Emails, Templates: no changes. On the free tier with the built-in sender templates cannot be edited; the default
   Magic Link message (link only) and the default Reset Password message both work as they are. 'Forgot password?'
   calls `resetPasswordForEmail` with `redirectTo` `https://<domain>/auth/reset`; the link opens in the browser,
   where the user sets a new password and is told to sign in again in the app.
-- `/api/auth/bootstrap` (called after a password sign-in or sign-up, runs the workspace bootstrap) allows at most
-  30 calls per IP in 10 minutes (per server instance), then answers 429. Supabase's own Auth rate limits apply too.
+- `/api/auth/bootstrap` (called after a password sign-in or sign-up, runs the workspace bootstrap) checks the
+  session first, then throttles (per server instance, 10 minute window, then 429): signed-in calls count per user
+  id (20); calls without a session (the 401s) count per client IP with a looser limit (60). Supabase's own Auth
+  rate limits apply too. Client IP assumption: on Vercel the platform sets `x-vercel-forwarded-for` and `x-real-ip`
+  and overwrites client-sent values, so those are read first; `x-forwarded-for` is only a fallback off Vercel,
+  where a client could spoof it.
+- `/auth/reset`: after the new password is saved the user is signed out with scope `global`, so every older
+  session (other browsers, the desktop app) is revoked.
 
 `<domain>` is the production domain on Vercel (custom domain or `<project>.vercel.app`).
 

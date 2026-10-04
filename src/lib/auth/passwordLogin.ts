@@ -4,6 +4,9 @@
 // After signInWithPassword / signUp (browser client), POST /api/auth/bootstrap runs the workspace bootstrap server
 // side with the new session cookie and returns where to go (a safe next, default /agents).
 // Forgot password: resetPasswordForEmail with redirectTo <origin>/auth/reset; /auth/reset sets the new password.
+// Confirm email is on (T-0163): signUp returns no session, and signInWithPassword answers 'Email not confirmed'
+// until the link is opened. Both show the same check-your-inbox guidance with 'Resend confirmation'.
+import { safeNext } from "./redirect";
 
 export const PASSWORD_LOGIN_DEFAULT_NEXT = "/agents";
 export const PASSWORD_MIN = 8;
@@ -45,7 +48,7 @@ export const AUTH_ERRORS: Record<AuthErrorCode, string> = {
   weak_password: "That password is too weak. Use a longer one, or mix letters, numbers and symbols.",
   password_too_short: `Use at least ${PASSWORD_MIN} characters.`,
   password_mismatch: "The two passwords do not match.",
-  email_not_confirmed: "Confirm your email first: open the link we sent you, then sign in.",
+  email_not_confirmed: "Check your inbox and click the confirmation link, then sign in here.",
   rate_limited: "Too many attempts. Wait a few minutes, then try again.",
   workspace_setup_failed: "Signed in, but your workspace could not be set up. Try again or contact the workspace owner.",
   send_failed: "The email could not be sent. Try again.",
@@ -82,6 +85,10 @@ export type PostJson = (url: string, body: unknown) => Promise<{ status: number;
 
 type Resp = { error: AuthErr | null };
 
+export type ResendClient = {
+  auth: { resend(args: { type: "signup"; email: string; options?: { emailRedirectTo?: string } }): Promise<Resp> };
+};
+
 export type PasswordClient = {
   auth: {
     signInWithPassword(args: { email: string; password: string }): Promise<Resp>;
@@ -112,14 +119,17 @@ export type AuthResult = { kind: "redirect"; to: string } | { kind: "confirm_ema
 const fail = (error: AuthErrorCode): AuthResult => ({ kind: "error", error });
 const BOOTSTRAP_CODES = new Set<string>(["rate_limited", "workspace_setup_failed"]);
 
+/** Same check as the server (safeNext): '' when the target is not a safe same-origin path. */
+const safeRedirect = (to: unknown): string => (typeof to === "string" && safeNext(to, "") === to ? to : "");
+
 /** POSTs /api/auth/bootstrap (the session cookie goes along); on success the safe path to navigate to. */
 export async function bootstrapSession(post: PostJson, next: string | null): Promise<AuthResult> {
   try {
     const res = await post(BOOTSTRAP_URL, next ? { next } : {});
     const body = (res.json ?? {}) as { redirect?: unknown; error?: unknown };
-    if (res.status === 200 && typeof body.redirect === "string" && body.redirect.startsWith("/") && !body.redirect.startsWith("//")) {
-      return { kind: "redirect", to: body.redirect };
-    }
+    const to = safeRedirect(body.redirect);
+    if (res.status === 200 && to) return { kind: "redirect", to };
+    if (body.error === "email_not_confirmed") return { kind: "confirm_email" };
     if (typeof body.error === "string" && BOOTSTRAP_CODES.has(body.error)) return fail(body.error as AuthErrorCode);
     return fail(res.status === 429 ? "rate_limited" : "failed");
   } catch {
@@ -134,7 +144,10 @@ export async function signInWithPassword(supabase: PasswordClient, post: PostJso
   if (!email || !input.password) return fail("bad_request");
   try {
     const { error } = await supabase.auth.signInWithPassword({ email, password: input.password });
-    if (error) return fail(mapAuthError(error));
+    if (error) {
+      const code = mapAuthError(error);
+      return code === "email_not_confirmed" ? { kind: "confirm_email" } : fail(code);
+    }
   } catch {
     return fail("failed");
   }
@@ -142,8 +155,8 @@ export async function signInWithPassword(supabase: PasswordClient, post: PostJso
 }
 
 /**
- * Creates the account. With 'Confirm email' off (this project) signUp returns a session and the bootstrap runs;
- * with it on there is no session yet and the user is told to confirm by email first.
+ * Creates the account. With 'Confirm email' on (this project) there is no session yet: the user is told to confirm
+ * by email first and the bootstrap does not run. With it off signUp returns a session and the bootstrap runs.
  */
 export async function signUpWithPassword(
   supabase: PasswordClient,
@@ -166,6 +179,30 @@ export async function signUpWithPassword(
     return fail("failed");
   }
   return bootstrapSession(post, input.next);
+}
+
+/**
+ * emailRedirectTo for sign-up and 'Resend confirmation': <origin>/auth/callback. flow=signup lets the callback show
+ * 'Confirmed' when the link is opened outside the app (no PKCE verifier there, so no session).
+ */
+export const signupRedirectTo = (origin: string, next: string | null) =>
+  `${origin}/auth/callback?flow=signup&next=${encodeURIComponent(safeNext(next, PASSWORD_LOGIN_DEFAULT_NEXT))}`;
+
+/** 'Resend confirmation': Supabase's default confirmation message again (resend type 'signup'). */
+export async function resendConfirmation(
+  supabase: ResendClient,
+  email: string,
+  emailRedirectTo: string,
+): Promise<{ ok: true } | { ok: false; error: AuthErrorCode }> {
+  const trimmed = email.trim();
+  if (!trimmed) return { ok: false, error: "bad_request" };
+  try {
+    const { error } = await supabase.auth.resend({ type: "signup", email: trimmed, options: { emailRedirectTo } });
+    if (!error) return { ok: true };
+    return { ok: false, error: isRateLimited(error) ? "rate_limited" : "send_failed" };
+  } catch {
+    return { ok: false, error: "send_failed" };
+  }
 }
 
 /** Browser only: the magic link (the default Magic Link email of the free tier carries a link, no code). */
@@ -226,7 +263,7 @@ export async function startRecovery(supabase: ResetClient, tokens: RecoveryToken
   }
 }
 
-/** Sets the new password, then ends the browser session: the user signs in again in the app. */
+/** Sets the new password, then signs out with scope 'global' so older sessions are revoked; sign in again in the app. */
 export async function updatePassword(
   supabase: ResetClient,
   password: string,
@@ -244,7 +281,7 @@ export async function updatePassword(
     return { ok: false, error: "failed" };
   }
   try {
-    await supabase.auth.signOut({ scope: "local" });
+    await supabase.auth.signOut({ scope: "global" });
   } catch {
     // The password is changed either way.
   }

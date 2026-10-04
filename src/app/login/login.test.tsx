@@ -16,7 +16,9 @@ vi.mock("@/lib/supabase/server", () => ({
     auth: {
       getUser: async () => {
         state.calls.push("getUser");
-        return state.user ? { data: { user: { id: state.user } }, error: null } : { data: { user: null }, error: { status: 401 } };
+        return state.user
+          ? { data: { user: { id: state.user, email_confirmed_at: "2026-10-04T05:00:00Z" } }, error: null }
+          : { data: { user: null }, error: { status: 401 } };
       },
     },
     from: () => {
@@ -33,11 +35,14 @@ vi.mock("@/lib/supabase/server", () => ({
 import { POST } from "@/app/api/auth/bootstrap/route";
 import {
   AUTH_ERRORS,
+  bootstrapSession,
   loginView,
   mapAuthError,
   requestMagicLink,
+  resendConfirmation,
   signInWithPassword,
   signUpWithPassword,
+  signupRedirectTo,
   type PasswordClient,
   type PostJson,
 } from "@/lib/auth/passwordLogin";
@@ -178,12 +183,60 @@ describe("password flows", () => {
     expect(supabase.auth.signUp).not.toHaveBeenCalled();
   });
 
-  it("sign up without a session (confirm email on) asks to confirm, no bootstrap", async () => {
+  it("sign up without a session (confirm email on) shows the confirm-your-inbox guidance, no bootstrap", async () => {
     result.session = false;
     expect(await signUpWithPassword(supabase, routePost, { email: "a@b.ch", password: "longenough", confirm: "longenough", next: null })).toEqual({
       kind: "confirm_email",
     });
     expect(state.calls).toEqual(["signUp"]);
+    const html = renderToStaticMarkup(<LoginForm next={null} inApp initialConfirm="a@b.ch" />);
+    for (const t of ["Check your inbox and click the confirmation link, then sign in here.", "a@b.ch", "Resend confirmation", "Back to sign in"]) {
+      expect(html).toContain(t);
+    }
+    expect(html).not.toContain('id="login-password"');
+  });
+
+  it("sign-up emailRedirectTo is <origin>/auth/callback (flow=signup, safe next)", () => {
+    expect(signupRedirectTo("https://app.example", null)).toBe("https://app.example/auth/callback?flow=signup&next=%2Fagents");
+    expect(signupRedirectTo("https://app.example", "//evil.example")).toBe("https://app.example/auth/callback?flow=signup&next=%2Fagents");
+  });
+
+  it("'Email not confirmed' on sign in maps to the same guidance, no bootstrap", async () => {
+    result.signIn = { status: 400, code: "email_not_confirmed", message: "Email not confirmed" };
+    expect(await signInWithPassword(supabase, routePost, { email: "a@b.ch", password: "longenough", next: null })).toEqual({ kind: "confirm_email" });
+    result.signIn = { status: 400, message: "Email not confirmed" };
+    expect(await signInWithPassword(supabase, routePost, { email: "a@b.ch", password: "longenough", next: null })).toEqual({ kind: "confirm_email" });
+    expect(state.calls).toEqual(["signInWithPassword", "signInWithPassword"]);
+    expect(AUTH_ERRORS.email_not_confirmed).toBe("Check your inbox and click the confirmation link, then sign in here.");
+  });
+
+  it("Resend confirmation calls resend with type 'signup' and the callback; maps failures", async () => {
+    const resend = vi.fn(async (args: { type: "signup"; email: string; options?: { emailRedirectTo?: string } }) => {
+      void args;
+      return { error: null as Err };
+    });
+    const redirect = signupRedirectTo("https://app.example", null);
+    expect(await resendConfirmation({ auth: { resend } }, " a@b.ch ", redirect)).toEqual({ ok: true });
+    expect(resend).toHaveBeenCalledWith({ type: "signup", email: "a@b.ch", options: { emailRedirectTo: redirect } });
+    resend.mockResolvedValueOnce({ error: { status: 429, code: "over_email_send_rate_limit" } });
+    expect(await resendConfirmation({ auth: { resend } }, "a@b.ch", redirect)).toEqual({ ok: false, error: "rate_limited" });
+    resend.mockResolvedValueOnce({ error: { status: 500 } });
+    expect(await resendConfirmation({ auth: { resend } }, "a@b.ch", redirect)).toEqual({ ok: false, error: "send_failed" });
+    expect(await resendConfirmation({ auth: { resend } }, "  ", redirect)).toEqual({ ok: false, error: "bad_request" });
+  });
+
+  it("a bootstrap 403 email_not_confirmed also shows the guidance", async () => {
+    const post: PostJson = async () => ({ status: 403, json: { error: "email_not_confirmed" } });
+    expect(await bootstrapSession(post, null)).toEqual({ kind: "confirm_email" });
+  });
+
+  it("the client redirect check reuses safeNext: '/\\\\evil.com' and other unsafe targets are rejected", async () => {
+    for (const redirect of ["/\\evil.com", "/\\\\evil.com", "//evil.com", "https://evil.com", "/login", "/auth/reset"]) {
+      const post: PostJson = async () => ({ status: 200, json: { redirect } });
+      expect(await bootstrapSession(post, null)).toEqual({ kind: "error", error: "failed" });
+    }
+    const ok: PostJson = async () => ({ status: 200, json: { redirect: "/teach?x=1" } });
+    expect(await bootstrapSession(ok, null)).toEqual({ kind: "redirect", to: "/teach?x=1" });
   });
 
   it("a Supabase error stops before the bootstrap; a bootstrap 401 is a plain failure", async () => {

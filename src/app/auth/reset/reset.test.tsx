@@ -84,6 +84,8 @@ describe("/auth/reset", () => {
     expect(await updatePassword(client, "new-password", "new-password")).toEqual({ ok: true });
     expect(client.auth.updateUser).toHaveBeenCalledWith({ password: "new-password" });
     expect(calls).toEqual(["setSession", "updateUser", "signOut"]);
+    // Global sign-out after updateUser: older sessions (other devices, the app) are revoked too.
+    expect(client.auth.signOut).toHaveBeenCalledWith({ scope: "global" });
     const done = renderToStaticMarkup(<ResetForm client={client} initialState="done" />);
     expect(done).toContain("Password changed");
     expect(done).toContain("Sign in again in the app");

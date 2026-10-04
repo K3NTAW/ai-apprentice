@@ -10,14 +10,15 @@ Covers `/login` (`src/app/login/*`), `/api/auth/bootstrap`, `/auth/reset` and `s
 
 1. Authentication > Sign In / Providers > Email: enabled, password sign-in allowed, minimum password length 8.
 2. Authentication > URL Configuration > Redirect URLs: `<origin>/auth/callback**` and `<origin>/auth/reset`.
-3. Confirm email: note whether it is off (current) or on; checks 3 and 4 differ.
+3. Confirm email: on (since 2026-10-04). Checks 3 and 4 assume it is on.
 
 ## Desktop app
 
 1. Open the app signed out. The login shows 'Sign in' and 'Create account' tabs, email and password, a Show/Hide toggle and 'Forgot password?'. No code entry, no 'Email me a link'.
 2. 'Create account' with a password under 8 characters, or two different passwords: the form says so, nothing is created.
-3. 'Create account' with a new `<email>` and a valid password. Confirm email off: lands on `/agents` with a personal workspace. Confirm email on: "Check your email", nothing else happens until the link is opened.
-4. 'Create account' again with the same `<email>`: "An account with this email already exists. Sign in instead." (confirm email off; with it on Supabase answers as if it worked and no session is created).
+3. 'Create account' with a new `<email>` and a valid password: "Check your inbox and click the confirmation link, then sign in here." with 'Resend confirmation'. No workspace is created yet. 'Sign in' before confirming shows the same guidance; 'Resend confirmation' sends the "Confirm your signup" message again.
+4. Open the confirmation link in the system browser: "Confirmed. Go back to the AI Apprentice app and sign in." (`/auth/confirmed`). Sign in in the app: lands on `/agents` with a personal workspace (or the invited one).
+4a. 'Create account' again with the same `<email>`: Supabase answers as if it worked and no session is created.
 5. Sign out, 'Sign in' with a wrong password: "Wrong email or password." With the right one: lands on `/agents`.
 6. Quit and relaunch: still signed in.
 
@@ -35,4 +36,5 @@ Covers `/login` (`src/app/login/*`), `/api/auth/bootstrap`, `/auth/reset` and `s
 
 ## Throttle
 
-13. `curl -i -X POST -H 'content-type: application/json' -d '{}' <origin>/api/auth/bootstrap` without a session: 401 (from the proxy). With a session, the 31st call within 10 minutes from one IP answers 429 `{"error":"rate_limited"}`.
+13. `curl -i -X POST -H 'content-type: application/json' -d '{}' <origin>/api/auth/bootstrap` without a session: 401 (from the proxy). With a session, the 21st call within 10 minutes for one user answers 429 `{"error":"rate_limited"}`.
+14. After a password reset (check 10), a session that was open elsewhere before the reset is signed out on its next request.

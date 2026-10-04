@@ -83,6 +83,24 @@ beforeEach(() => {
   vi.mocked(createServerClient).mockClear();
 });
 
+describe("GET /auth/callback, sign-up confirmation (flow=signup)", () => {
+  it("opened outside the app (exchange fails, no PKCE verifier): lands on /auth/confirmed, no bootstrap", async () => {
+    state.exchange = { data: { user: null, session: null }, error: { status: 400, code: "bad_code_verifier" } };
+    expect(location(await call("?code=abc&flow=signup&next=%2Fagents")).path).toBe("/auth/confirmed");
+    expect(state.calls.some(([n]) => n === "rpc")).toBe(false);
+  });
+
+  it("opened in the browser that signed up: session, bootstrap, then the safe next", async () => {
+    state.members = { data: [{ workspace_id: WS_OWN, role: "owner", created_at: "2026-01-01", workspaces: { name: "P" } }], error: null };
+    expect(location(await call("?code=abc&flow=signup&next=%2Fagents")).path).toBe("/agents");
+  });
+
+  it("without flow=signup a failed exchange is still link_invalid", async () => {
+    state.exchange = { data: { user: null, session: null }, error: { status: 400 } };
+    expect(location(await call("?code=abc")).path).toBe("/login?error=link_invalid");
+  });
+});
+
 describe("GET /auth/callback", () => {
   it("local mode redirects to /dashboard without Supabase", async () => {
     state.mode = "local";

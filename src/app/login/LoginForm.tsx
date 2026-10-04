@@ -14,8 +14,10 @@ import {
   loginView,
   requestMagicLink,
   requestPasswordReset,
+  resendConfirmation,
   signInWithPassword,
   signUpWithPassword,
+  signupRedirectTo,
   type AuthErrorCode,
   type AuthResult,
   type LoginMethod,
@@ -37,6 +39,8 @@ export type LoginFormProps = {
   navigate?: (path: string) => void;
   /** Tests: render the link sent state (LoginSent.dc.html) for this address. */
   initialSent?: string;
+  /** Tests: render the confirm-your-inbox state (after 'Create account' or 'Email not confirmed') for this address. */
+  initialConfirm?: string;
   /** Tests: start on this tab / method. */
   initialTab?: PasswordTab;
   initialMethod?: LoginMethod;
@@ -44,7 +48,16 @@ export type LoginFormProps = {
 
 const primaryWide = buttonClass("primary", "md", "h-12 w-full text-[15px]");
 
-export default function LoginForm({ next, inApp: forced, post = browserPost, navigate, initialSent, initialTab, initialMethod }: LoginFormProps) {
+export default function LoginForm({
+  next,
+  inApp: forced,
+  post = browserPost,
+  navigate,
+  initialSent,
+  initialConfirm,
+  initialTab,
+  initialMethod,
+}: LoginFormProps) {
   const [detected, setDetected] = useState(false);
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- window.apprentice only exists on the client.
@@ -53,21 +66,23 @@ export default function LoginForm({ next, inApp: forced, post = browserPost, nav
   const inApp = forced ?? detected;
   const view = loginView(inApp);
 
-  const [screen, setScreen] = useState<Screen>(initialSent ? "link_sent" : "form");
+  const [screen, setScreen] = useState<Screen>(initialSent ? "link_sent" : initialConfirm ? "confirm_email" : "form");
   const [method, setMethodState] = useState<LoginMethod>(initialMethod ?? "password");
   const activeMethod: LoginMethod = view.methods.includes(method) ? method : "password";
   const [tab, setTab] = useState<PasswordTab>(initialTab ?? "signin");
-  const [email, setEmail] = useState(initialSent ?? "");
+  const [email, setEmail] = useState(initialSent ?? initialConfirm ?? "");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<AuthErrorCode | null>(null);
+  const [resent, setResent] = useState(false);
 
   const go = (path: string) => (navigate ?? ((p: string) => location.assign(p)))(path);
   const reset = () => {
     setError(null);
     setBusy(false);
+    setResent(false);
   };
   const setMethod = (m: LoginMethod) => {
     setMethodState(m);
@@ -92,9 +107,19 @@ export default function LoginForm({ next, inApp: forced, post = browserPost, nav
     if (tab === "signin") {
       finish(await signInWithPassword(supabase, post, { email, password, next }));
     } else {
-      const emailRedirectTo = `${location.origin}/auth/callback?next=${encodeURIComponent(safeNext(next, "/agents"))}`;
+      const emailRedirectTo = signupRedirectTo(location.origin, next);
       finish(await signUpWithPassword(supabase, post, { email, password, confirm, next, emailRedirectTo }));
     }
+  }
+
+  async function onResend() {
+    setBusy(true);
+    setError(null);
+    setResent(false);
+    const res = await resendConfirmation(createSupabaseBrowserClient(), email, signupRedirectTo(location.origin, next));
+    setBusy(false);
+    if (res.ok) setResent(true);
+    else setError(res.error);
   }
 
   async function onLink(e: FormEvent<HTMLFormElement>) {
@@ -159,11 +184,54 @@ export default function LoginForm({ next, inApp: forced, post = browserPost, nav
     </div>
   );
 
-  if (screen === "link_sent" || screen === "reset_sent" || screen === "confirm_email") {
+  if (screen === "confirm_email") {
+    return (
+      <div className="flex flex-col gap-6" data-screen="login-confirm">
+        <div className="flex flex-col gap-2">
+          <h1 className="ui-t1">Confirm your email</h1>
+          <p className="text-[15px]" style={{ color: "var(--mu)" }}>
+            {AUTH_ERRORS.email_not_confirmed}
+          </p>
+          <p className="text-sm" style={{ color: "var(--mu)" }}>
+            Sent to {address}.
+          </p>
+        </div>
+        <div className="flex flex-col gap-2.5 rounded-[12px] px-4 py-3.5" style={{ background: "var(--s2)" }}>
+          <span className="text-xs" style={{ color: "var(--mu)" }}>
+            Subject to look for
+          </span>
+          <span className="text-sm font-medium">Confirm your signup</span>
+        </div>
+        <div className="flex flex-wrap gap-2.5">
+          <button type="button" disabled={busy} onClick={onResend} className={buttonClass("secondary")}>
+            {busy ? "Sending..." : "Resend confirmation"}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setScreen("form");
+              setTab("signin");
+              reset();
+            }}
+            className={buttonClass("ghost")}
+          >
+            Back to sign in
+          </button>
+        </div>
+        {resent && (
+          <p role="status" className="text-sm" style={{ color: "var(--mu)" }}>
+            Sent again. Check your inbox.
+          </p>
+        )}
+        {alert}
+      </div>
+    );
+  }
+
+  if (screen === "link_sent" || screen === "reset_sent") {
     const copy = {
       link_sent: { lead: "We sent a sign-in link to ", tail: ". It works once and expires in 15 minutes.", subject: "Your AI Apprentice sign-in link" },
       reset_sent: { lead: "If an account exists for ", tail: ", we sent a link to set a new password. Open it in your browser.", subject: "Reset your password" },
-      confirm_email: { lead: "We sent a confirmation link to ", tail: ". Open it, then sign in.", subject: "Confirm your signup" },
     }[screen];
     return (
       <div className="flex flex-col gap-6" data-screen="login-sent">

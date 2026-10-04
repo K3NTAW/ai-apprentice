@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
   mode: "supabase" as "local" | "supabase" | "misconfigured",
-  user: { data: { user: { id: "u" } }, error: null } as { data: unknown; error: unknown } | "throw",
+  user: { data: { user: { id: "u", email_confirmed_at: "2026-10-04T05:00:00Z" } }, error: null } as { data: unknown; error: unknown } | "throw",
   members: { data: [], error: null } as { data: unknown; error: unknown },
   rpc: { data: [], error: null } as { data: unknown; error: unknown },
   calls: [] as string[],
@@ -40,7 +40,7 @@ vi.mock("@/lib/supabase/server", () => ({
 }));
 vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => undefined, getAll: () => [] }) }));
 
-import { bootstrapThrottle, BOOTSTRAP_MAX_PER_IP } from "@/lib/auth/throttle";
+import { bootstrapThrottle, BOOTSTRAP_MAX_PER_USER, BOOTSTRAP_MAX_UNAUTH_PER_IP, clientIp } from "@/lib/auth/throttle";
 import { POST } from "./route";
 
 const WS_OWN = "11111111-1111-4111-8111-111111111111";
@@ -55,9 +55,15 @@ const call = (body: unknown = {}, headers: Record<string, string> = {}) =>
     }),
   );
 
+const signedIn = (id: string, confirmedAt: string | null = "2026-10-04T05:00:00Z") => ({
+  data: { user: { id, email_confirmed_at: confirmedAt } },
+  error: null,
+});
+const signedOut = { data: { user: null }, error: { status: 401, message: "Auth session missing!" } };
+
 beforeEach(() => {
   state.mode = "supabase";
-  state.user = { data: { user: { id: "u" } }, error: null };
+  state.user = signedIn("u");
   state.members = { data: [], error: null };
   state.rpc = { data: [{ workspace_id: WS_OWN, name: "Personal", role: "owner" }], error: null };
   state.calls = [];
@@ -66,7 +72,7 @@ beforeEach(() => {
 
 describe("POST /api/auth/bootstrap", () => {
   it("401 without a session, no bootstrap", async () => {
-    state.user = { data: { user: null }, error: { status: 401, message: "Auth session missing!" } };
+    state.user = signedOut;
     const res = await call();
     expect(res.status).toBe(401);
     expect(await res.json()).toEqual({ error: "unauthorized" });
@@ -112,12 +118,45 @@ describe("POST /api/auth/bootstrap", () => {
     expect(await res.json()).toEqual({ error: "workspace_setup_failed" });
   });
 
-  it("throttled per IP", async () => {
-    for (let i = 0; i < BOOTSTRAP_MAX_PER_IP; i++) expect((await call({}, { "x-forwarded-for": "203.0.113.7" })).status).toBe(200);
-    const blocked = await call({}, { "x-forwarded-for": "203.0.113.7" });
+  it("403 email_not_confirmed for a session without a confirmed email, no bootstrap", async () => {
+    state.members = { data: [{ workspace_id: WS_OWN, role: "owner", created_at: "2026-01-01", workspaces: { name: "P" } }], error: null };
+    state.user = signedIn("u", null);
+    const res = await call();
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: "email_not_confirmed" });
+    expect(state.calls).toEqual(["getUser"]);
+  });
+
+  it("authenticated attempts are throttled per user id, whatever the IP", async () => {
+    state.members = { data: [{ workspace_id: WS_OWN, role: "owner", created_at: "2026-01-01", workspaces: { name: "P" } }], error: null };
+    for (let i = 0; i < BOOTSTRAP_MAX_PER_USER; i++) {
+      expect((await call({}, { "x-vercel-forwarded-for": `203.0.113.${i}` })).status).toBe(200);
+    }
+    const blocked = await call({}, { "x-vercel-forwarded-for": "198.51.100.2" });
     expect(blocked.status).toBe(429);
     expect(await blocked.json()).toEqual({ error: "rate_limited" });
-    expect((await call({}, { "x-forwarded-for": "198.51.100.2" })).status).toBe(200);
+    state.user = signedIn("other");
+    expect((await call({}, { "x-vercel-forwarded-for": "198.51.100.2" })).status).toBe(200);
+  });
+
+  it("requireContext runs before the throttle; unauthenticated 401s use a separate, looser per-IP limit", async () => {
+    state.user = signedOut;
+    for (let i = 0; i < BOOTSTRAP_MAX_UNAUTH_PER_IP; i++) expect((await call({}, { "x-vercel-forwarded-for": "203.0.113.7" })).status).toBe(401);
+    expect(state.calls.filter((c) => c === "getUser")).toHaveLength(BOOTSTRAP_MAX_UNAUTH_PER_IP);
+    const blocked = await call({}, { "x-vercel-forwarded-for": "203.0.113.7" });
+    expect(blocked.status).toBe(429);
+    expect((await call({}, { "x-vercel-forwarded-for": "198.51.100.2" })).status).toBe(401);
+    // The IP's 401 budget does not touch a signed-in user behind the same IP.
+    state.user = signedIn("u");
+    expect((await call({}, { "x-vercel-forwarded-for": "203.0.113.7" })).status).toBe(200);
+  });
+
+  it("client IP prefers the Vercel platform header over a client-sent x-forwarded-for", () => {
+    const h = (o: Record<string, string>) => clientIp(new Headers(o));
+    expect(h({ "x-vercel-forwarded-for": "203.0.113.7", "x-forwarded-for": "6.6.6.6" })).toBe("203.0.113.7");
+    expect(h({ "x-real-ip": "203.0.113.8", "x-forwarded-for": "6.6.6.6" })).toBe("203.0.113.8");
+    expect(h({ "x-forwarded-for": "198.51.100.2, 10.0.0.1" })).toBe("198.51.100.2");
+    expect(h({})).toBe("unknown");
   });
 
   it("400 for a non-JSON body, 503 when Supabase is not configured", async () => {

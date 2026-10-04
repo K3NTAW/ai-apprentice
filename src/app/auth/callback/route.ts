@@ -51,6 +51,9 @@ export async function GET(request: NextRequest): Promise<Response> {
   } catch {
     userId = null;
   }
+  // Sign-up confirmation (flow=signup) opened outside the app: Supabase confirmed the address before redirecting
+  // here with a code, but this browser has no PKCE verifier, so there is no session. Say so plainly.
+  if (!userId && url.searchParams.get("flow") === "signup") return withCookies(redirectTo("/auth/confirmed"));
   if (!userId) return withCookies(fail("link_invalid"));
 
   const boot = await bootstrapAfterSignIn(supabase, userId);

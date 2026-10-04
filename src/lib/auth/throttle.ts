@@ -2,7 +2,6 @@
 // cold start resets it); Supabase's own Auth rate limits still apply behind it. Used by POST /api/auth/bootstrap.
 
 export const BOOTSTRAP_WINDOW_MS = 10 * 60 * 1000;
-export const BOOTSTRAP_MAX_PER_IP = 30;
 const SWEEP_AT = 10_000;
 
 export type Throttle = {
@@ -34,11 +33,30 @@ export function createThrottle({ limit, windowMs, now = () => Date.now() }: { li
   };
 }
 
-/** POST /api/auth/bootstrap: at most 30 calls per IP in 10 minutes, then 429. */
-export const bootstrapThrottle = createThrottle({ limit: BOOTSTRAP_MAX_PER_IP, windowMs: BOOTSTRAP_WINDOW_MS });
+/** POST /api/auth/bootstrap, signed in: at most 20 calls per user id in 10 minutes, then 429. */
+export const BOOTSTRAP_MAX_PER_USER = 20;
+/** POST /api/auth/bootstrap, no session (the 401s only): a looser 60 per IP in 10 minutes, then 429. */
+export const BOOTSTRAP_MAX_UNAUTH_PER_IP = 60;
 
-/** The client IP as Vercel passes it (first x-forwarded-for entry, else x-real-ip); "unknown" when absent. */
+const userThrottle = createThrottle({ limit: BOOTSTRAP_MAX_PER_USER, windowMs: BOOTSTRAP_WINDOW_MS });
+const unauthIpThrottle = createThrottle({ limit: BOOTSTRAP_MAX_UNAUTH_PER_IP, windowMs: BOOTSTRAP_WINDOW_MS });
+
+/** The two bootstrap limits: authenticated attempts by user id, unauthenticated ones by client IP. */
+export const bootstrapThrottle = {
+  user: userThrottle,
+  unauthIp: unauthIpThrottle,
+  reset() {
+    userThrottle.reset();
+    unauthIpThrottle.reset();
+  },
+};
+
+/**
+ * The client IP. Assumption (Vercel): the platform sets x-vercel-forwarded-for and x-real-ip itself and overwrites
+ * any client-sent value, so they are preferred; x-forwarded-for (first entry) is the fallback off Vercel, where a
+ * client can spoof it. "unknown" when absent.
+ */
 export function clientIp(headers: Headers): string {
-  const fwd = headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  return fwd || headers.get("x-real-ip")?.trim() || "unknown";
+  const first = (name: string) => headers.get(name)?.split(",")[0]?.trim();
+  return first("x-vercel-forwarded-for") || first("x-real-ip") || first("x-forwarded-for") || "unknown";
 }

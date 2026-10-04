@@ -2,7 +2,7 @@
 // Next 16 proxy convention (formerly middleware.ts): https://nextjs.org/docs/app/api-reference/file-conventions/proxy
 // Session refresh per the Supabase SSR guide: https://supabase.com/docs/guides/auth/server-side/nextjs
 //
-// Every path except '/', /login/* and /auth/* (/auth/callback, /auth/reset, /auth/signout) is protected, pages
+// Every path except '/', /login/* and /auth/* (/auth/callback, /auth/reset, /auth/confirmed, /auth/signout) is protected, pages
 // and /api alike (/api/auth/bootstrap too: it needs the session cookie).
 // An Auth outage is not distinguished from a missing session: getUser throwing or
 // returning an error fails closed (redirect to /login, or 401 on /api).
