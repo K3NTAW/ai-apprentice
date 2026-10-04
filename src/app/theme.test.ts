@@ -9,7 +9,7 @@ const LIGHT_CLASS = /\b(?:[a-z]+:)?bg-(?:white|slate-(?:50|100|200|300)|gray-\d+
 /** bg-[<value>] arbitrary Tailwind backgrounds. */
 const ARBITRARY_BG = /\bbg-\[([^\]]+)\]/gi;
 /** Inline styles and CSS rules: background / background-color / backgroundColor with a literal value. */
-const BG_DECL = /\bbackground(?:-color|Color)?\s*:\s*["'`]?([^;"'`},]+)/gi;
+const BG_DECL = /\bbackground(?:-color|Color)?\s*:\s*["'`]?([^;"'`}]+)/gi;
 
 /** Relative luminance (0..1) of a literal colour; null for tokens, gradients and anything not a plain colour. */
 function luminance(value: string): number | null {
