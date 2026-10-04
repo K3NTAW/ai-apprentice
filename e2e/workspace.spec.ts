@@ -23,7 +23,7 @@ test.describe("workspace", () => {
       () => page.getByRole("button", { name: "Remove" }).first().click(),
     ]) {
       await action();
-      await expect(page.getByRole("alert")).toBeVisible();
+      await expect(page.locator("[role=alert]:not(#__next-route-announcer__)")).toHaveText(/./);
     }
   });
 });
