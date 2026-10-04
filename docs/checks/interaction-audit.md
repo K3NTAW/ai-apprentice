@@ -342,7 +342,7 @@ dead (no action, fails the guard).
 | /shell (signed in) | a | Account and workspace | Opens /workspace | works |
 | /shell (signed in) | a | Agents | Opens /agents | works |
 | /shell (signed in) | a | AI Apprentice home | Opens /agents | works |
-| /shell (signed in) | a | Get the desktop app | Opens /capture#companion | works |
+| /shell (signed in) | a | Get the desktop app | Opens /download | works |
 | /shell (signed in) | a | Learn | Opens /learn | works |
 | /shell (signed in) | a | Start capture | Opens /capture | works |
 | /shell (signed in) | a | Teach 2026-10-01 | Opens /teach | works |
@@ -366,7 +366,7 @@ dead (no action, fails the guard).
 | /shell | a | Agents | Opens /agents | works |
 | /shell | a | AI Apprentice home | Opens /agents | works |
 | /shell | a | Finish setup | Opens /onboarding | works |
-| /shell | a | Get the desktop app | Opens /capture#companion | works |
+| /shell | a | Get the desktop app | Opens /download | works |
 | /shell | a | Learn | Opens /learn | works |
 | /shell | a | Start capture | Opens /capture | works |
 | /shell | a | Workspace | Opens /workspace | works |

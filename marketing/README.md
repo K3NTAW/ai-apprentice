@@ -22,11 +22,11 @@ From the repo root: `npm run marketing:dev` / `npm run marketing:build`.
 | Variable | Used for |
 | --- | --- |
 | `NEXT_PUBLIC_APP_URL` | 'Sign in' (`<app>/login`) and 'Open the app'. Unset: no 'Sign in', the CTA is the download page. |
-| `NEXT_PUBLIC_DOWNLOAD_MAC_ARM64` | macOS, Apple silicon build. Unset: 'Private beta', no link. |
-| `NEXT_PUBLIC_DOWNLOAD_MAC_X64` | macOS, Intel build. Unset: 'Private beta', no link. |
-| `NEXT_PUBLIC_DOWNLOAD_WIN` | Windows build. Unset: 'Private beta', no link. |
 
 Values must be http(s) URLs; anything else counts as unset.
+
+The desktop download links, version and sizes live in `lib/downloads.ts` (GitHub release); a new release changes that file
+and the app's `src/lib/downloads.ts`. Windows reads 'Coming soon' with no link.
 
 ## Deploy as a separate Vercel project
 

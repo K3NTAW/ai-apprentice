@@ -5,6 +5,7 @@ import Link from "next/link";
 import HoverPrefetchLink from "./HoverPrefetchLink";
 import type { ReactNode } from "react";
 import type { Membership, Role } from "@/lib/auth/context";
+import { DOWNLOAD_HREF } from "@/lib/downloads";
 import CommandPalette from "./CommandPalette";
 import HideInApp from "./HideInApp";
 import NavLink from "./NavLink";
@@ -54,9 +55,9 @@ export const NAV_LINKS = [
       </>,
     ),
   },
-  // The canvas 'Install companion' item, renamed; it opens the 'Get the desktop app' panel on /capture and is hidden inside the desktop app.
+  // The canvas 'Install companion' item, renamed; it opens the download page (src/lib/downloads.ts) and is hidden inside the desktop app.
   {
-    href: "/capture#companion",
+    href: DOWNLOAD_HREF,
     label: "Get the desktop app",
     browserOnly: true,
     icon: icon(

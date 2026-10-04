@@ -1,45 +1,50 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import DownloadList from "@/components/landing/DownloadList";
-import { ctaFor, downloadEnv, downloads } from "@/lib/site";
+import { DESKTOP_RELEASE, INSTALL_STEPS } from "@/lib/downloads";
+import { ctaFor, downloads } from "@/lib/site";
 
-afterEach(() => vi.unstubAllEnvs());
+const ARM = "https://github.com/K3NTAW/ai-apprentice-desktop/releases/download/v0.1.0/AI.Apprentice-0.1.0-arm64.dmg";
+const X64 = "https://github.com/K3NTAW/ai-apprentice-desktop/releases/download/v0.1.0/AI.Apprentice-0.1.0.dmg";
+const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 describe("download page logic", () => {
   it("lists macOS Apple silicon, macOS Intel and Windows in that order", () => {
-    expect(downloads({}).map((d) => d.id)).toEqual(["mac-arm64", "mac-x64", "win"]);
+    expect(downloads().map((d) => d.id)).toEqual(["mac-arm64", "mac-x64", "win"]);
   });
 
-  it("each build is 'Private beta' without a link when its env var is unset, empty or not a URL", () => {
-    for (const env of [{}, { macArm64: "", macX64: "  ", win: "javascript:alert(1)" }]) {
-      expect(downloads(env).every((d) => d.href === null)).toBe(true);
-      const html = renderToStaticMarkup(<DownloadList items={downloads(env)} />);
-      expect(html.match(/Private beta/g)).toHaveLength(3);
-      expect(html).not.toContain("<a ");
-    }
+  it("the macOS builds link to the GitHub release; Windows has no link", () => {
+    expect(downloads().map((d) => d.href)).toEqual([ARM, X64, null]);
+    expect(DESKTOP_RELEASE.version).toBe("0.1.0");
   });
 
-  it("a set link shows its button; the others stay 'Private beta'", () => {
-    const items = downloads({ macArm64: "https://dl.example.com/AI-Apprentice-arm64.dmg" });
-    const html = renderToStaticMarkup(<DownloadList items={items} />);
-    expect(html).toMatch(/href="https:\/\/dl\.example\.com\/AI-Apprentice-arm64\.dmg"[^>]*>Download for macOS \(Apple silicon\)</);
-    expect(html.match(/Private beta/g)).toHaveLength(2);
+  it("Apple silicon is the primary button, Intel secondary, Windows 'Coming soon' without a link", () => {
+    const html = renderToStaticMarkup(<DownloadList items={downloads()} version="0.1.0" />);
+    expect(html).toMatch(new RegExp(`class="ui-btn ui-bp ui-bl" href="${esc(ARM)}">Download for macOS \\(Apple silicon\\)<`));
+    expect(html).toMatch(new RegExp(`class="ui-btn ui-bs ui-bl" href="${esc(X64)}">Download for macOS \\(Intel\\)<`));
+    expect(html).toContain("Version 0.1.0 · 130 MB");
+    expect(html).toContain("Version 0.1.0 · 134 MB");
+    expect(html.match(/<a /g)).toHaveLength(2);
+    const win = html.slice(html.indexOf('data-download="win"'));
+    expect(win).toContain("Coming soon");
+    expect(win).not.toContain("<a ");
+    expect(html).not.toContain("Download for Windows");
   });
 
-  it("reads NEXT_PUBLIC_DOWNLOAD_MAC_ARM64 / _MAC_X64 / _WIN", () => {
-    vi.stubEnv("NEXT_PUBLIC_DOWNLOAD_MAC_ARM64", "https://dl.example.com/a.dmg");
-    vi.stubEnv("NEXT_PUBLIC_DOWNLOAD_MAC_X64", "https://dl.example.com/x.dmg");
-    vi.stubEnv("NEXT_PUBLIC_DOWNLOAD_WIN", "https://dl.example.com/w.exe");
-    expect(downloads(downloadEnv()).map((d) => d.href)).toEqual(["https://dl.example.com/a.dmg", "https://dl.example.com/x.dmg", "https://dl.example.com/w.exe"]);
-  });
-
-  it("the page renders all three builds", async () => {
+  it("the page renders all three builds, the release link and the unsigned-app install steps", async () => {
     const { default: DownloadPage } = await import("@/app/download/page");
     const html = renderToStaticMarkup(<DownloadPage />);
     expect(html).toContain('data-screen="download"');
     for (const id of ["mac-arm64", "mac-x64", "win"]) expect(html).toContain(`data-download="${id}"`);
-    expect(html).toContain("The desktop app is in private beta. The web app runs in the browser today");
-    expect(html).not.toContain("Coming soon");
+    expect(html).toContain(`href="${ARM}"`);
+    expect(html).toContain(`href="${X64}"`);
+    expect(html).toContain(`href="${DESKTOP_RELEASE.page}"`);
+    expect(html).toContain("data-install-steps");
+    for (const s of ["drag AI Apprentice to Applications", "right-click AI Apprentice in Applications and choose Open", "Privacy &amp; Security and click Open Anyway", "Sign in.", "Grant Screen Recording, Microphone and Accessibility, then restart the app once."]) {
+      expect(html).toContain(s);
+    }
+    expect(html.match(/<li>/g)).toHaveLength(INSTALL_STEPS.length);
+    expect(html).not.toContain("Download for Windows");
   });
 
   it("CTA targets: sign in on the app's /login, open the app at its URL", () => {

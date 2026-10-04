@@ -42,7 +42,7 @@ const agents = { "a-pip": "Pip" };
 describe("shell sidebar (Sidebar.dc.html)", () => {
   it("nav items in canvas order with icons", () => {
     const html = renderToStaticMarkup(<ShellHeader user={user} />);
-    const order = ["/agents", "/learn", "/workspace", "/capture#companion"].map((h) => html.indexOf(`href="${h}"`));
+    const order = ["/agents", "/learn", "/workspace", "/download"].map((h) => html.indexOf(`href="${h}"`));
     expect(order.every((i) => i > 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
     expect(html).toContain('aria-label="App"');

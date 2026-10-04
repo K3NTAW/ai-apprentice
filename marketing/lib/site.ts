@@ -1,5 +1,6 @@
 // Public site settings from env. NEXT_PUBLIC_* are read as literal process.env.X expressions because Next inlines
 // only literal access. A value counts only when it is an http(s) URL; anything else is treated as unset.
+import { DESKTOP_RELEASE } from "./downloads";
 
 export function cleanUrl(raw: string | undefined): string | null {
   const value = raw?.trim();
@@ -24,23 +25,23 @@ export function ctaFor(app: string | null): { signIn: string | null; open: { lab
 }
 
 export type DownloadId = "mac-arm64" | "mac-x64" | "win";
-export type Download = { id: DownloadId; os: string; label: string; detail: string; href: string | null };
+export type Download = {
+  id: DownloadId;
+  os: string;
+  label: string;
+  detail: string;
+  /** null: 'Coming soon', no link. */
+  href: string | null;
+  size: string | null;
+  recommended: boolean;
+};
 
-export type DownloadEnv = { macArm64?: string; macX64?: string; win?: string };
-
-export function downloadEnv(): DownloadEnv {
-  return {
-    macArm64: process.env.NEXT_PUBLIC_DOWNLOAD_MAC_ARM64,
-    macX64: process.env.NEXT_PUBLIC_DOWNLOAD_MAC_X64,
-    win: process.env.NEXT_PUBLIC_DOWNLOAD_WIN,
-  };
-}
-
-/** The three builds in a fixed order. href null: 'Private beta', no link. */
-export function downloads(env: DownloadEnv): Download[] {
+/** The three builds in a fixed order, from the release in lib/downloads.ts. Windows has no build yet. */
+export function downloads(): Download[] {
+  const r = DESKTOP_RELEASE;
   return [
-    { id: "mac-arm64", os: "macOS", label: "Apple silicon", detail: "M1 and later", href: cleanUrl(env.macArm64) },
-    { id: "mac-x64", os: "macOS", label: "Intel", detail: "Intel Macs", href: cleanUrl(env.macX64) },
-    { id: "win", os: "Windows", label: "Windows", detail: "Windows 10 and 11, 64-bit", href: cleanUrl(env.win) },
+    { id: "mac-arm64", os: "macOS", label: "Apple silicon", detail: "M1 and later", href: r.macArm64.href, size: r.macArm64.size, recommended: true },
+    { id: "mac-x64", os: "macOS", label: "Intel", detail: "Intel Macs", href: r.macX64.href, size: r.macX64.size, recommended: false },
+    { id: "win", os: "Windows", label: "Windows", detail: "Windows 10 and 11, 64-bit", href: null, size: null, recommended: false },
   ];
 }
