@@ -278,7 +278,6 @@ dead (no action, fails the guard), missing (not rendered at HEAD).
 | /capture | button | Pause | Runs 'Pause' in place | works | works |  |
 | /capture | button | Share screen | Runs 'Share screen' in place | works | works |  |
 | /capture | button | Start | Runs 'Start' in place | works | works |  |
-| /capture/preview | a | Fix | Opens x-apple.systempreferences:com.apple.preference.security | works | works |  |
 | /capture/preview | button | End task | Runs 'End task' in place | works | works |  |
 | /capture/preview | button | Off the record | Runs 'Off the record' in place | works | works |  |
 | /capture/preview | button | Pause | Runs 'Pause' in place | works | works |  |
