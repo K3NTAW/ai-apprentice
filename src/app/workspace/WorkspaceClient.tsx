@@ -51,10 +51,11 @@ export default function WorkspaceClient({ view }: { view: WorkspaceView }) {
   }
 
   return (
-    <main className="flex max-w-2xl flex-col gap-6 p-8">
+    <main className="flex max-w-[1080px] flex-col gap-7 px-4 pt-9 pb-14 sm:px-10" data-screen="workspace">
       <header className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-lg font-semibold">{view.workspaceName}</h1>
+          <span className="ui-eb">Workspace</span>
+          <h1 className="ui-t1">{view.workspaceName}</h1>
           <p className="text-sm">
             {view.email ?? "unknown"} ({view.role})
           </p>
@@ -90,8 +91,9 @@ export default function WorkspaceClient({ view }: { view: WorkspaceView }) {
         </p>
       )}
 
-      <section className="flex flex-col gap-2">
-        <h2 className="font-semibold">Members</h2>
+      <section className="ui-card flex flex-col gap-3 p-6">
+        <h2 className="ui-t2">Members</h2>
+        <p className="text-sm" style={{ color: "var(--mu)" }}>Owners manage members. Experts train agents. Learners learn.</p>
         <ul className="flex flex-col gap-1">
           {view.members.map((m) => (
             <li key={m.userId} className="flex items-center justify-between gap-4">
@@ -140,7 +142,7 @@ export default function WorkspaceClient({ view }: { view: WorkspaceView }) {
           )}
 
           <form onSubmit={onInvite} className="flex flex-col gap-2">
-            <h3 className="font-semibold">Invite</h3>
+            <h3 className="ui-t3">Invite by email</h3>
             <p className="text-sm">
               No email is sent. Tell the person to sign in at /login with this address; the invite is accepted at their
               next sign-in.

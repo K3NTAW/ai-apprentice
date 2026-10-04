@@ -25,13 +25,13 @@ type Props = {
 };
 
 const chip = (active: boolean) =>
-  `rounded-full border px-3 py-1 text-sm capitalize ${active ? "border-white bg-white text-black" : "border-neutral-700 text-neutral-300 hover:border-neutral-400"}`;
+  `rounded-full border px-3 py-1 text-sm capitalize ${active ? "border-[var(--pb)] bg-[var(--pb)] text-[var(--pf)]" : "border-[var(--ln2)] bg-[var(--s2)] text-[var(--tx)] hover:border-[var(--mu)]"}`;
 
 function ColorPicker({ label, value, onPick }: { label: string; value: string; onPick: (hex: string) => void }) {
   const [custom, setCustom] = useState(value);
   return (
     <fieldset className="flex flex-col gap-2">
-      <legend className="text-xs uppercase tracking-wide text-neutral-400">{label}</legend>
+      <legend className="ui-lbl">{label}</legend>
       <div className="flex flex-wrap gap-2">
         {AVATAR_PALETTE.map((hex) => (
           <button
@@ -53,7 +53,7 @@ function ColorPicker({ label, value, onPick }: { label: string; value: string; o
           setCustom(e.target.value);
           if (isHexColor(e.target.value)) onPick(e.target.value);
         }}
-        className="w-28 rounded border border-neutral-700 bg-transparent px-2 py-1 font-mono text-sm"
+        className="ui-inp ui-mono w-28"
       />
     </fieldset>
   );
@@ -89,10 +89,10 @@ export default function AvatarStudio({ agentId, name = "avatar", initialAvatar, 
   };
 
   return (
-    <section className="grid gap-6 rounded-2xl bg-neutral-950 p-6 text-neutral-100 md:grid-cols-[320px_1fr]">
+    <section className="ui-card grid gap-6 overflow-hidden p-6 md:grid-cols-[320px_1fr]" data-screen="avatar-studio">
       <div className="flex flex-col items-center gap-4">
         {/* eslint-disable-next-line @next/next/no-img-element -- data URL preview, same path the companion uses */}
-        <img src={src} alt={`${name} avatar, ${model.state}`} width={256} height={256} className="rounded-2xl bg-neutral-900" />
+        <img src={src} alt={`${name} avatar, ${model.state}`} width={256} height={256} className="rounded-[12px] bg-[var(--stage)]" />
         <div className="flex flex-wrap justify-center gap-2" role="group" aria-label="Animations">
           {AVATAR_STATES.map((st) => (
             <button key={st} type="button" aria-pressed={model.state === st} className={chip(model.state === st)} onClick={() => dispatch({ type: "play", state: st })}>
@@ -103,7 +103,7 @@ export default function AvatarStudio({ agentId, name = "avatar", initialAvatar, 
       </div>
       <div className="flex flex-col gap-5">
         <fieldset className="flex flex-col gap-2">
-          <legend className="text-xs uppercase tracking-wide text-neutral-400">Shape</legend>
+          <legend className="ui-lbl">Shape</legend>
           <div className="flex flex-wrap gap-2">
             {AVATAR_SHAPES.map((s) => (
               <button key={s} type="button" aria-pressed={model.avatar.shape === s} className={chip(model.avatar.shape === s)} onClick={() => dispatch({ type: "shape", shape: s })}>
@@ -113,7 +113,7 @@ export default function AvatarStudio({ agentId, name = "avatar", initialAvatar, 
           </div>
         </fieldset>
         <fieldset className="flex flex-col gap-2">
-          <legend className="text-xs uppercase tracking-wide text-neutral-400">Face</legend>
+          <legend className="ui-lbl">Face</legend>
           <div className="flex flex-wrap gap-2">
             {AVATAR_FACES.map((f) => (
               <button key={f} type="button" aria-pressed={model.avatar.face === f} className={chip(model.avatar.face === f)} onClick={() => dispatch({ type: "face", face: f })}>
@@ -122,7 +122,7 @@ export default function AvatarStudio({ agentId, name = "avatar", initialAvatar, 
             ))}
           </div>
         </fieldset>
-        <ColorPicker label="Colour" value={model.avatar.color} onPick={(color) => dispatch({ type: "color", color })} />
+        <ColorPicker label="Body colour" value={model.avatar.color} onPick={(color) => dispatch({ type: "color", color })} />
         <ColorPicker label="Accent" value={model.avatar.accent} onPick={(accent) => dispatch({ type: "accent", accent })} />
         <div className="flex flex-wrap items-center gap-2">
           <button type="button" className={chip(false)} onClick={() => dispatch({ type: "randomize" })}>
@@ -139,7 +139,7 @@ export default function AvatarStudio({ agentId, name = "avatar", initialAvatar, 
           <button type="button" className={chip(false)} onClick={exportPng}>
             Export PNG
           </button>
-          <span role="status" className="text-sm text-neutral-400">
+          <span role="status" className="text-sm" style={{ color: "var(--mu)" }}>
             {status}
           </span>
         </div>
