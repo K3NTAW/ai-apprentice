@@ -23,7 +23,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   }
 
   const params = await searchParams;
-  // Only a given, safe next is passed on: the magic link falls back to /dashboard, the code login to /agents.
+  // Only a given, safe next is passed on: the magic link falls back to /dashboard, the password login to /agents.
   const nextParam = first(params.next);
   const next = nextParam ? safeNext(nextParam) : null;
   const errorMessage = loginErrorMessage(first(params.error));

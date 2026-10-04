@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const state = vi.hoisted(() => ({ calls: [] as string[], verifyArgs: null as unknown }));
+const state = vi.hoisted(() => ({ calls: [] as string[], user: "u" as string | null }));
 
 vi.mock("@/lib/supabase/env", () => ({
   appMode: () => "supabase",
@@ -12,10 +12,9 @@ vi.mock("@/lib/supabase/env", () => ({
 vi.mock("@supabase/ssr", () => ({
   createServerClient: () => ({
     auth: {
-      verifyOtp: async (args: unknown) => {
-        state.calls.push("verifyOtp");
-        state.verifyArgs = args;
-        return { data: { user: { id: "u" } }, error: null };
+      getUser: async () => {
+        state.calls.push("getUser");
+        return state.user ? { data: { user: { id: state.user } }, error: null } : { data: { user: null }, error: { status: 401 } };
       },
     },
     from: () => {
@@ -29,86 +28,197 @@ vi.mock("@supabase/ssr", () => ({
   }),
 }));
 
-import { POST } from "@/app/auth/verify/route";
-import { requestCode, verifyCode, type PostJson } from "@/lib/auth/codeLogin";
+import { POST } from "@/app/api/auth/bootstrap/route";
+import {
+  AUTH_ERRORS,
+  loginView,
+  mapAuthError,
+  requestMagicLink,
+  signInWithPassword,
+  signUpWithPassword,
+  type PasswordClient,
+  type PostJson,
+} from "@/lib/auth/passwordLogin";
+import { bootstrapThrottle } from "@/lib/auth/throttle";
 import LoginForm from "./LoginForm";
 
-/** Posts straight into the /auth/verify route handler. */
+/** Posts straight into the /api/auth/bootstrap route handler, with the session cookie the browser client set. */
 const routePost: PostJson = async (url, body) => {
+  state.calls.push(`POST ${url}`);
   const res = await POST(
-    new NextRequest(`http://app.test${url}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
+    new NextRequest(`http://app.test${url}`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: "sb-test-auth-token=session" },
+      body: JSON.stringify(body),
+    }),
   );
   return { status: res.status, json: await res.json() };
 };
 
+type Err = { status?: number; code?: string; message?: string } | null;
+const result = vi.hoisted(() => ({ signIn: null as Err, signUp: null as Err, session: true as boolean }));
+
 const supabase = {
   auth: {
+    signInWithPassword: vi.fn(async (args: { email: string; password: string }) => {
+      void args;
+      state.calls.push("signInWithPassword");
+      return { error: result.signIn };
+    }),
+    signUp: vi.fn(async (args: { email: string; password: string; options?: { emailRedirectTo?: string } }) => {
+      void args;
+      state.calls.push("signUp");
+      return { data: { session: result.session ? {} : null }, error: result.signUp };
+    }),
     signInWithOtp: vi.fn(async (args: { email: string; options?: { emailRedirectTo?: string } }) => {
       void args;
       state.calls.push("signInWithOtp");
-      return { error: null as { status?: number; code?: string } | null };
+      return { error: null as Err };
     }),
   },
 };
+const typed: PasswordClient = supabase;
+void typed;
 
 beforeEach(() => {
   state.calls = [];
-  state.verifyArgs = null;
-  supabase.auth.signInWithOtp.mockClear();
+  state.user = "u";
+  result.signIn = null;
+  result.signUp = null;
+  result.session = true;
+  bootstrapThrottle.reset();
+  vi.clearAllMocks();
 });
 
-describe("login page", () => {
-  it("in the desktop app offers 'Email me a code'; the browser keeps the magic link", () => {
-    expect(renderToStaticMarkup(<LoginForm next={null} inApp />)).toContain("Email me a code");
-    const browser = renderToStaticMarkup(<LoginForm next={null} inApp={false} />);
-    expect(browser).toContain("Email me a sign-in link");
-    expect(browser).not.toContain("Email me a code");
-  });
-
-  it("Login.dc.html and LoginSent.dc.html key elements: code entry in the app, the link in the browser", () => {
-    const idle = renderToStaticMarkup(<LoginForm next={null} inApp={false} />);
-    for (const t of ["Sign in", "We email you a one-time link. No password to remember.", "Work email", "New here? Your workspace owner sends the first invite."]) {
-      expect(idle).toContain(t);
-    }
-    const app = renderToStaticMarkup(<LoginForm next={null} inApp initialSent="sabine.keller@example.com" />);
-    expect(app).toContain("Check your email");
-    expect(app).toContain('autoComplete="one-time-code"');
-    expect(app).toContain("Enter it here.");
-    expect(app).not.toContain("Subject to look for");
-    const web = renderToStaticMarkup(<LoginForm next={null} inApp={false} initialSent="sabine.keller@example.com" />);
-    for (const t of ["Check your email", "We sent a sign-in link to ", "sabine.keller@example.com", "It works once and expires in 15 minutes.", "Subject to look for", "Your AI Apprentice sign-in link", "Use a different email"]) {
-      expect(web).toContain(t);
-    }
-  });
-
-  it("code flow: signInWithOtp, then verifyOtp(type 'email'), the workspace bootstrap and /agents", async () => {
-    const sent = await requestCode(supabase, " sabine@example.com ", "http://app.test/auth/callback?next=%2Fdashboard");
-    expect(sent).toEqual({ ok: true });
-    expect(supabase.auth.signInWithOtp).toHaveBeenCalledWith({
-      email: "sabine@example.com",
-      options: { emailRedirectTo: "http://app.test/auth/callback?next=%2Fdashboard" },
+describe("login view per environment", () => {
+  it("desktop app: email + password with 'Sign in' / 'Create account' tabs, no link, no code", () => {
+    expect(loginView(true)).toEqual({
+      methods: ["password"],
+      tabs: [
+        { id: "signin", label: "Sign in" },
+        { id: "signup", label: "Create account" },
+      ],
     });
+    const app = renderToStaticMarkup(<LoginForm next={null} inApp />);
+    for (const t of ['role="tablist"', ">Sign in<", ">Create account<", 'id="login-email"', 'id="login-password"', "Forgot password?", "Show"]) {
+      expect(app).toContain(t);
+    }
+    expect(app).not.toContain("Email me a link");
+    expect(app).not.toContain("one-time-code");
+    expect(app).not.toContain("Email me a code");
+  });
+
+  it("desktop app 'Create account': password and confirm, minimum 8 characters", () => {
+    const app = renderToStaticMarkup(<LoginForm next={null} inApp initialTab="signup" />);
+    expect(app).toContain('id="login-confirm"');
+    expect(app).toContain('minLength="8"');
+    expect(app).toContain("At least 8 characters.");
+    expect(app).toContain('autoComplete="new-password"');
+  });
+
+  it("browser: email + password and 'Email me a link'; the link form keeps the magic link", () => {
+    expect(loginView(false).methods).toEqual(["password", "link"]);
+    const web = renderToStaticMarkup(<LoginForm next={null} inApp={false} />);
+    expect(web).toContain('id="login-password"');
+    expect(web).toContain("Email me a link");
+    const link = renderToStaticMarkup(<LoginForm next={null} inApp={false} initialMethod="link" />);
+    for (const t of ["Sign in", "We email you a one-time link. No password to remember.", "Work email", "Email me a sign-in link", "Email + password"]) {
+      expect(link).toContain(t);
+    }
+    expect(link).not.toContain('id="login-password"');
+    const sent = renderToStaticMarkup(<LoginForm next={null} inApp={false} initialSent="sabine.keller@example.com" />);
+    for (const t of ["Check your email", "We sent a sign-in link to ", "sabine.keller@example.com", "Subject to look for", "Use a different email"]) {
+      expect(sent).toContain(t);
+    }
+  });
+
+  it("the desktop app ignores a link method", () => {
+    expect(renderToStaticMarkup(<LoginForm next={null} inApp initialMethod="link" />)).toContain('id="login-password"');
+  });
+});
+
+describe("password flows", () => {
+  it("sign in: signInWithPassword, then POST /api/auth/bootstrap, then /agents", async () => {
     const navigate = vi.fn();
-    const res = await verifyCode(routePost, { email: "sabine@example.com", token: "123 456", next: null });
-    if (res.ok) navigate(res.redirect);
-    expect(state.calls).toEqual(["signInWithOtp", "verifyOtp", "bootstrap_workspace"]);
-    expect(state.verifyArgs).toEqual({ email: "sabine@example.com", token: "123456", type: "email" });
+    const res = await signInWithPassword(supabase, routePost, { email: " sabine@example.com ", password: "correct horse", next: null });
+    if (res.kind === "redirect") navigate(res.to);
+    expect(supabase.auth.signInWithPassword).toHaveBeenCalledWith({ email: "sabine@example.com", password: "correct horse" });
+    expect(state.calls).toEqual(["signInWithPassword", "POST /api/auth/bootstrap", "getUser", "bootstrap_workspace"]);
     expect(navigate).toHaveBeenCalledWith("/agents");
   });
 
-  it("keeps a safe next after the code login", async () => {
-    expect(await verifyCode(routePost, { email: "a@b.ch", token: "123456", next: "/teach" })).toEqual({ ok: true, redirect: "/teach" });
+  it("sign up: signUp, then POST /api/auth/bootstrap, then /agents (keeps a safe next)", async () => {
+    const res = await signUpWithPassword(supabase, routePost, {
+      email: "new@example.com",
+      password: "longenough",
+      confirm: "longenough",
+      next: "/teach",
+      emailRedirectTo: "http://app.test/auth/callback",
+    });
+    expect(supabase.auth.signUp).toHaveBeenCalledWith({
+      email: "new@example.com",
+      password: "longenough",
+      options: { emailRedirectTo: "http://app.test/auth/callback" },
+    });
+    expect(state.calls).toEqual(["signUp", "POST /api/auth/bootstrap", "getUser", "bootstrap_workspace"]);
+    expect(res).toEqual({ kind: "redirect", to: "/teach" });
   });
 
-  it("send and verify errors: rate limit, bad code format, server error codes", async () => {
-    supabase.auth.signInWithOtp.mockResolvedValueOnce({ error: { status: 429 } });
-    expect(await requestCode(supabase, "a@b.ch", "x")).toEqual({ ok: false, error: "rate_limited" });
-    expect(await verifyCode(routePost, { email: "a@b.ch", token: "12", next: null })).toEqual({ ok: false, error: "code_invalid" });
-    const expired: PostJson = async () => ({ status: 403, json: { error: "code_expired" } });
-    expect(await verifyCode(expired, { email: "a@b.ch", token: "123456", next: null })).toEqual({ ok: false, error: "code_expired" });
-    const setup: PostJson = async () => ({ status: 500, json: { error: "workspace_setup_failed" } });
-    expect(await verifyCode(setup, { email: "a@b.ch", token: "123456", next: null })).toEqual({ ok: false, error: "workspace_setup_failed" });
-    const offsite: PostJson = async () => ({ status: 200, json: { redirect: "//evil.example" } });
-    expect((await verifyCode(offsite, { email: "a@b.ch", token: "123456", next: null })).ok).toBe(false);
+  it("sign up checks length and confirmation before calling Supabase", async () => {
+    expect(await signUpWithPassword(supabase, routePost, { email: "a@b.ch", password: "short", confirm: "short", next: null })).toEqual({
+      kind: "error",
+      error: "password_too_short",
+    });
+    expect(await signUpWithPassword(supabase, routePost, { email: "a@b.ch", password: "longenough", confirm: "longenougj", next: null })).toEqual({
+      kind: "error",
+      error: "password_mismatch",
+    });
+    expect(supabase.auth.signUp).not.toHaveBeenCalled();
+  });
+
+  it("sign up without a session (confirm email on) asks to confirm, no bootstrap", async () => {
+    result.session = false;
+    expect(await signUpWithPassword(supabase, routePost, { email: "a@b.ch", password: "longenough", confirm: "longenough", next: null })).toEqual({
+      kind: "confirm_email",
+    });
+    expect(state.calls).toEqual(["signUp"]);
+  });
+
+  it("a Supabase error stops before the bootstrap; a bootstrap 401 is a plain failure", async () => {
+    result.signIn = { status: 400, code: "invalid_credentials", message: "Invalid login credentials" };
+    expect(await signInWithPassword(supabase, routePost, { email: "a@b.ch", password: "x", next: null })).toEqual({ kind: "error", error: "wrong_credentials" });
+    expect(state.calls).toEqual(["signInWithPassword"]);
+    result.signIn = null;
+    state.user = null;
+    expect(await signInWithPassword(supabase, routePost, { email: "a@b.ch", password: "x", next: null })).toEqual({ kind: "error", error: "failed" });
+  });
+
+  it("magic link (browser) still uses signInWithOtp with the callback", async () => {
+    expect(await requestMagicLink(supabase, " a@b.ch ", "http://app.test/auth/callback?next=%2Fdashboard")).toEqual({ ok: true });
+    expect(supabase.auth.signInWithOtp).toHaveBeenCalledWith({ email: "a@b.ch", options: { emailRedirectTo: "http://app.test/auth/callback?next=%2Fdashboard" } });
+  });
+});
+
+describe("Supabase errors map to plain messages", () => {
+  it.each([
+    [{ status: 400, code: "invalid_credentials", message: "Invalid login credentials" }, "wrong_credentials", "Wrong email or password."],
+    [{ status: 400, message: "Invalid login credentials" }, "wrong_credentials", "Wrong email or password."],
+    [{ status: 422, code: "user_already_exists", message: "User already registered" }, "account_exists", "An account with this email already exists. Sign in instead."],
+    [{ status: 422, code: "email_exists" }, "account_exists", "An account with this email already exists. Sign in instead."],
+    [{ status: 422, code: "weak_password", message: "Password should be at least 8 characters." }, "weak_password", AUTH_ERRORS.weak_password],
+    [{ status: 429, code: "over_request_rate_limit" }, "rate_limited", "Too many attempts. Wait a few minutes, then try again."],
+    [{ code: "over_email_send_rate_limit" }, "rate_limited", "Too many attempts. Wait a few minutes, then try again."],
+    [{ status: 400, code: "email_not_confirmed" }, "email_not_confirmed", AUTH_ERRORS.email_not_confirmed],
+    [{ status: 500, message: "Database error saving new user: a@b.ch" }, "failed", "That did not work. Try again."],
+  ] as const)("%o -> %s", (err, code, text) => {
+    expect(mapAuthError(err)).toBe(code);
+    expect(AUTH_ERRORS[code]).toBe(text);
+  });
+
+  it("messages never echo the address or the Supabase text", async () => {
+    result.signUp = { status: 500, message: "Database error saving new user: a@b.ch" };
+    const res = await signUpWithPassword(supabase, routePost, { email: "a@b.ch", password: "longenough", confirm: "longenough", next: null });
+    expect(res).toEqual({ kind: "error", error: "failed" });
+    for (const text of Object.values(AUTH_ERRORS)) expect(text).not.toContain("a@b.ch");
   });
 });

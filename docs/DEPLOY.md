@@ -30,17 +30,25 @@ The schema, RLS policies and the private `frames` Storage bucket are in `supabas
 Supabase dashboard, Authentication:
 
 - URL Configuration, Site URL: `https://<domain>`
-- URL Configuration, Redirect URLs: add `https://<domain>/auth/callback`
-  (add the Preview URL pattern too if you log in on preview deployments, e.g. `https://*-<team>.vercel.app/auth/callback`)
-- Sign In / Providers, Email: enabled, magic link on.
-- Emails, Templates, Magic Link: the template must include `{{ .Token }}` (the one-time code) next to
-  `{{ .ConfirmationURL }}`. The desktop app signs in with the code (login page, 'Email me a code', then
-  `/auth/verify`); the browser accepts both. Example body:
-  `<p>Your sign-in code: {{ .Token }}</p><p><a href="{{ .ConfirmationURL }}">Or sign in with this link</a></p>`.
-  The code length follows Auth settings, Email OTP length (default 6); the login form accepts 6 to 10 digits.
-  When the project uses another length, set `SUPABASE_OTP_LENGTH` (server env, 6 to 10) to the same value:
-  /auth/verify accepts exactly that many digits. /auth/verify also allows at most 10 attempts per email and 30
-  per IP in 10 minutes (per server instance), then answers 429.
+- URL Configuration, Redirect URLs: add `https://<domain>/auth/callback` and `https://<domain>/auth/reset`
+  (add the Preview URL patterns too if you log in on preview deployments, e.g. `https://*-<team>.vercel.app/auth/callback`
+  and `https://*-<team>.vercel.app/auth/reset`). Without the `/auth/reset` entry the password reset link falls back
+  to the Site URL and the user cannot set a new password.
+- Sign In / Providers, Email: enabled, with password sign-in (email + password is the login in the desktop app and
+  in the browser) and magic link (the browser also offers 'Email me a link').
+- Sign In / Providers, Email, minimum password length: 8 (the login form and `/auth/reset` require at least 8).
+- Sign In / Providers, Email, **Confirm email**:
+  - off (current setting, `auth.email.enable_confirmations = false`): a new account is confirmed at once;
+    'Create account' signs the user in and lands on `/agents`. An address is not proven to belong to whoever typed
+    it; invites still apply only to the invited address.
+  - on: 'Create account' triggers the default "Confirm your signup" message and the form says to check the inbox;
+    its link goes through `/auth/callback`. Signing in before confirming shows "Confirm your email first".
+- Emails, Templates: no changes. On the free tier with the built-in sender templates cannot be edited; the default
+  Magic Link message (link only) and the default Reset Password message both work as they are. 'Forgot password?'
+  calls `resetPasswordForEmail` with `redirectTo` `https://<domain>/auth/reset`; the link opens in the browser,
+  where the user sets a new password and is told to sign in again in the app.
+- `/api/auth/bootstrap` (called after a password sign-in or sign-up, runs the workspace bootstrap) allows at most
+  30 calls per IP in 10 minutes (per server instance), then answers 429. Supabase's own Auth rate limits apply too.
 
 `<domain>` is the production domain on Vercel (custom domain or `<project>.vercel.app`).
 

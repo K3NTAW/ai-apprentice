@@ -1,18 +1,32 @@
 "use client";
 
-// Sign-in form. In a browser: the magic link, and the emailed code is accepted too. Inside the desktop app
-// (window.apprentice, one-app D2): 'Email me a code', then the code; /auth/verify runs verifyOtp and the workspace
-// bootstrap and returns where to go (a safe next, default /agents).
-// Look: Login.dc.html (idle) and LoginSent.dc.html (the sent state of the same route).
+// Sign-in form (T-0160). Desktop app (window.apprentice): email + password with 'Sign in' and 'Create account'
+// tabs. Browser: email + password and 'Email me a link' (the magic link). After the password step
+// /api/auth/bootstrap runs the workspace bootstrap and returns where to go (a safe next, default /agents).
+// 'Forgot password?' emails a reset link to /auth/reset. Look: Login.dc.html and LoginSent.dc.html.
 import { useEffect, useState, type FormEvent } from "react";
-import { buttonClass } from "@/components/ui";
+import { buttonClass, Tabs } from "@/components/ui";
 import { safeNext } from "@/lib/auth/redirect";
-import { browserPost, CODE_LOGIN_ERRORS, OTP_MAX, requestCode, verifyCode, type PostJson } from "@/lib/auth/codeLogin";
+import {
+  AUTH_ERRORS,
+  PASSWORD_MIN,
+  browserPost,
+  loginView,
+  requestMagicLink,
+  requestPasswordReset,
+  signInWithPassword,
+  signUpWithPassword,
+  type AuthErrorCode,
+  type AuthResult,
+  type LoginMethod,
+  type PasswordTab,
+  type PostJson,
+} from "@/lib/auth/passwordLogin";
+import { createRecoveryClient } from "@/lib/auth/recoveryClient";
 import { getBridge } from "@/lib/companion/transport";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
-type State = "idle" | "sending" | "sent" | "verifying";
-type ErrorKey = keyof typeof CODE_LOGIN_ERRORS;
+type Screen = "form" | "forgot" | "link_sent" | "reset_sent" | "confirm_email";
 
 export type LoginFormProps = {
   /** A safe next path from ?next, or null when none was given. */
@@ -21,139 +35,295 @@ export type LoginFormProps = {
   inApp?: boolean;
   post?: PostJson;
   navigate?: (path: string) => void;
-  /** Tests: render the sent state (LoginSent.dc.html) for this address. */
+  /** Tests: render the link sent state (LoginSent.dc.html) for this address. */
   initialSent?: string;
+  /** Tests: start on this tab / method. */
+  initialTab?: PasswordTab;
+  initialMethod?: LoginMethod;
 };
 
 const primaryWide = buttonClass("primary", "md", "h-12 w-full text-[15px]");
 
-export default function LoginForm({ next, inApp: forced, post = browserPost, navigate, initialSent }: LoginFormProps) {
+export default function LoginForm({ next, inApp: forced, post = browserPost, navigate, initialSent, initialTab, initialMethod }: LoginFormProps) {
   const [detected, setDetected] = useState(false);
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- window.apprentice only exists on the client.
     if (forced === undefined) setDetected(getBridge() !== null);
   }, [forced]);
   const inApp = forced ?? detected;
-  const [email, setEmail] = useState(initialSent ?? "");
-  const [code, setCode] = useState("");
-  const [state, setState] = useState<State>(initialSent ? "sent" : "idle");
-  const [error, setError] = useState<ErrorKey | null>(null);
+  const view = loginView(inApp);
 
-  async function onSend(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setState("sending");
+  const [screen, setScreen] = useState<Screen>(initialSent ? "link_sent" : "form");
+  const [method, setMethodState] = useState<LoginMethod>(initialMethod ?? "password");
+  const activeMethod: LoginMethod = view.methods.includes(method) ? method : "password";
+  const [tab, setTab] = useState<PasswordTab>(initialTab ?? "signin");
+  const [email, setEmail] = useState(initialSent ?? "");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [show, setShow] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<AuthErrorCode | null>(null);
+
+  const go = (path: string) => (navigate ?? ((p: string) => location.assign(p)))(path);
+  const reset = () => {
     setError(null);
-    const emailRedirectTo = `${location.origin}/auth/callback?next=${encodeURIComponent(safeNext(next))}`;
-    const res = await requestCode(createSupabaseBrowserClient(), email, emailRedirectTo);
-    if (res.ok) setState("sent");
-    else {
-      setState("idle");
-      setError(res.error);
+    setBusy(false);
+  };
+  const setMethod = (m: LoginMethod) => {
+    setMethodState(m);
+    reset();
+  };
+
+  function finish(res: AuthResult) {
+    if (res.kind === "redirect") {
+      go(res.to);
+      return;
+    }
+    setBusy(false);
+    if (res.kind === "confirm_email") setScreen("confirm_email");
+    else setError(res.error);
+  }
+
+  async function onPassword(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    const supabase = createSupabaseBrowserClient();
+    if (tab === "signin") {
+      finish(await signInWithPassword(supabase, post, { email, password, next }));
+    } else {
+      const emailRedirectTo = `${location.origin}/auth/callback?next=${encodeURIComponent(safeNext(next, "/agents"))}`;
+      finish(await signUpWithPassword(supabase, post, { email, password, confirm, next, emailRedirectTo }));
     }
   }
 
-  async function onVerify(e: FormEvent<HTMLFormElement>) {
+  async function onLink(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setState("verifying");
+    setBusy(true);
     setError(null);
-    const res = await verifyCode(post, { email, token: code, next });
-    if (res.ok) {
-      (navigate ?? ((p: string) => location.assign(p)))(res.redirect);
-      return;
-    }
-    setState("sent");
-    setError(res.error);
+    const emailRedirectTo = `${location.origin}/auth/callback?next=${encodeURIComponent(safeNext(next))}`;
+    const res = await requestMagicLink(createSupabaseBrowserClient(), email, emailRedirectTo);
+    setBusy(false);
+    if (res.ok) setScreen("link_sent");
+    else setError(res.error);
+  }
+
+  async function onForgot(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    const res = await requestPasswordReset(createRecoveryClient(), email, location.origin);
+    setBusy(false);
+    if (res.ok) setScreen("reset_sent");
+    else setError(res.error);
   }
 
   const alert = error && (
     <p role="alert" className="text-sm" style={{ color: "var(--rd)" }}>
-      {CODE_LOGIN_ERRORS[error]}
+      {AUTH_ERRORS[error]}
     </p>
   );
+  const back = (
+    <div className="flex flex-wrap gap-2.5">
+      <button
+        type="button"
+        onClick={() => {
+          setScreen("form");
+          reset();
+        }}
+        className={buttonClass("ghost")}
+      >
+        {screen === "link_sent" ? "Use a different email" : "Back to sign in"}
+      </button>
+    </div>
+  );
+  const address = (
+    <span className="font-medium" style={{ color: "var(--tx)" }}>
+      {email.trim()}
+    </span>
+  );
+  const emailField = (
+    <div>
+      <label className="ui-lbl" htmlFor="login-email">
+        Work email
+      </label>
+      <input
+        id="login-email"
+        type="email"
+        required
+        autoComplete="email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        className="ui-inp"
+      />
+    </div>
+  );
 
-  if (state === "sent" || state === "verifying") {
+  if (screen === "link_sent" || screen === "reset_sent" || screen === "confirm_email") {
+    const copy = {
+      link_sent: { lead: "We sent a sign-in link to ", tail: ". It works once and expires in 15 minutes.", subject: "Your AI Apprentice sign-in link" },
+      reset_sent: { lead: "If an account exists for ", tail: ", we sent a link to set a new password. Open it in your browser.", subject: "Reset your password" },
+      confirm_email: { lead: "We sent a confirmation link to ", tail: ". Open it, then sign in.", subject: "Confirm your signup" },
+    }[screen];
     return (
-      <form onSubmit={onVerify} className="flex flex-col gap-6" data-testid="code-form" data-screen="login-sent">
+      <div className="flex flex-col gap-6" data-screen="login-sent">
         <div className="flex flex-col gap-2">
           <h1 className="ui-t1">Check your email</h1>
           <p className="text-[15px]" style={{ color: "var(--mu)" }}>
-            {inApp ? "We emailed a code to " : "We sent a sign-in link to "}
-            <span className="font-medium" style={{ color: "var(--tx)" }}>
-              {email.trim()}
-            </span>
-            {inApp ? ". Enter it here." : ". It works once and expires in 15 minutes."}
+            {copy.lead}
+            {address}
+            {copy.tail}
           </p>
         </div>
-        {!inApp && (
-          <div className="flex flex-col gap-2.5 rounded-[12px] px-4 py-3.5" style={{ background: "var(--s2)" }}>
-            <span className="text-xs" style={{ color: "var(--mu)" }}>
-              Subject to look for
-            </span>
-            <span className="text-sm font-medium">Your AI Apprentice sign-in link</span>
-          </div>
-        )}
-        <div>
-          <label className="ui-lbl" htmlFor="login-code">
-            {inApp ? "Code" : "Or enter the code from the email"}
-          </label>
-          <input
-            id="login-code"
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            required
-            maxLength={OTP_MAX}
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            className="ui-inp ui-mono"
-          />
+        <div className="flex flex-col gap-2.5 rounded-[12px] px-4 py-3.5" style={{ background: "var(--s2)" }}>
+          <span className="text-xs" style={{ color: "var(--mu)" }}>
+            Subject to look for
+          </span>
+          <span className="text-sm font-medium">{copy.subject}</span>
         </div>
-        <button type="submit" disabled={state === "verifying"} className={primaryWide}>
-          {state === "verifying" ? "Checking..." : "Sign in"}
-        </button>
-        <div className="flex flex-wrap gap-2.5">
-          <button type="button" onClick={() => setState("idle")} className={buttonClass("ghost")}>
-            Use a different email
-          </button>
-        </div>
-        {alert}
+        {back}
         <p className="text-xs" style={{ color: "var(--fa)" }}>
           No mail after a minute? Check the spam folder, or ask your owner to confirm your address.
         </p>
+      </div>
+    );
+  }
+
+  if (screen === "forgot") {
+    return (
+      <form onSubmit={onForgot} className="flex flex-col gap-6" data-screen="login-forgot">
+        <div className="flex flex-col gap-2">
+          <h1 className="ui-t1">Reset your password</h1>
+          <p className="text-[15px]" style={{ color: "var(--mu)" }}>
+            We email you a link. Open it in your browser and choose a new password.
+          </p>
+        </div>
+        <div className="flex flex-col gap-4">
+          {emailField}
+          <button type="submit" disabled={busy} className={primaryWide}>
+            {busy ? "Sending..." : "Email me a reset link"}
+          </button>
+        </div>
+        {alert}
+        {back}
       </form>
     );
   }
 
-  return (
-    <form onSubmit={onSend} className="flex flex-col gap-6" data-screen="login">
-      <div className="flex flex-col gap-2">
-        <h1 className="ui-t1">Sign in</h1>
-        <p className="text-[15px]" style={{ color: "var(--mu)" }}>
-          {inApp ? "We email you a one-time code. No password to remember." : "We email you a one-time link. No password to remember."}
-        </p>
+  const signup = tab === "signup";
+  const passwordFields = (
+    <>
+      <div>
+        <label className="ui-lbl" htmlFor="login-password">
+          Password
+        </label>
+        <div className="relative">
+          <input
+            id="login-password"
+            type={show ? "text" : "password"}
+            required
+            minLength={signup ? PASSWORD_MIN : undefined}
+            autoComplete={signup ? "new-password" : "current-password"}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="ui-inp pr-20"
+          />
+          <button
+            type="button"
+            onClick={() => setShow((s) => !s)}
+            aria-pressed={show}
+            className={buttonClass("ghost", "md", "absolute top-1/2 right-1.5 h-9 -translate-y-1/2 px-3")}
+          >
+            {show ? "Hide" : "Show"}
+          </button>
+        </div>
+        {signup && (
+          <p className="mt-1.5 text-xs" style={{ color: "var(--fa)" }}>
+            At least {PASSWORD_MIN} characters.
+          </p>
+        )}
       </div>
-      <div className="flex flex-col gap-4">
+      {signup && (
         <div>
-          <label className="ui-lbl" htmlFor="login-email">
-            Work email
+          <label className="ui-lbl" htmlFor="login-confirm">
+            Confirm password
           </label>
           <input
-            id="login-email"
-            type="email"
+            id="login-confirm"
+            type={show ? "text" : "password"}
             required
-            autoComplete="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            minLength={PASSWORD_MIN}
+            autoComplete="new-password"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
             className="ui-inp"
           />
         </div>
-        <button type="submit" disabled={state === "sending"} className={primaryWide}>
-          {state === "sending" ? "Sending..." : inApp ? "Email me a code" : "Email me a sign-in link"}
-        </button>
+      )}
+    </>
+  );
+
+  return (
+    <div className="flex flex-col gap-6" data-screen="login">
+      <div className="flex flex-col gap-2">
+        <h1 className="ui-t1">{activeMethod === "password" && signup ? "Create account" : "Sign in"}</h1>
+        <p className="text-[15px]" style={{ color: "var(--mu)" }}>
+          {activeMethod === "link"
+            ? "We email you a one-time link. No password to remember."
+            : signup
+              ? "Use your work email and choose a password."
+              : "Use your work email and password."}
+        </p>
       </div>
+      {activeMethod === "password" ? (
+        <form onSubmit={onPassword} className="flex flex-col gap-4" data-method="password">
+          <Tabs
+            tabs={view.tabs}
+            active={tab}
+            onSelect={(id) => {
+              setTab(id as PasswordTab);
+              reset();
+            }}
+          />
+          {emailField}
+          {passwordFields}
+          <button type="submit" disabled={busy} className={primaryWide}>
+            {busy ? (signup ? "Creating..." : "Signing in...") : signup ? "Create account" : "Sign in"}
+          </button>
+          {!signup && (
+            <button
+              type="button"
+              onClick={() => {
+                setScreen("forgot");
+                reset();
+              }}
+              className={buttonClass("ghost", "md", "self-start px-0")}
+            >
+              Forgot password?
+            </button>
+          )}
+        </form>
+      ) : (
+        <form onSubmit={onLink} className="flex flex-col gap-4" data-method="link">
+          {emailField}
+          <button type="submit" disabled={busy} className={primaryWide}>
+            {busy ? "Sending..." : "Email me a sign-in link"}
+          </button>
+        </form>
+      )}
       {alert}
+      {view.methods.includes("link") && (
+        <button
+          type="button"
+          onClick={() => setMethod(activeMethod === "password" ? "link" : "password")}
+          className={buttonClass("secondary", "md", "w-full")}
+        >
+          {activeMethod === "password" ? "Email me a link" : "Email + password"}
+        </button>
+      )}
       <p className="text-xs" style={{ color: "var(--fa)" }}>
-        New here? Your workspace owner sends the first invite.
+        New here? Create an account with your work email; your workspace owner can also send an invite.
       </p>
-    </form>
+    </div>
   );
 }

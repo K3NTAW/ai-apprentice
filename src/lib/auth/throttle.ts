@@ -1,10 +1,8 @@
-// In-memory throttle for POST /auth/verify (fix round T-0123): at most 10 attempts per email and 30 per IP in a
-// sliding 10 minute window; a blocked attempt is not counted. Per server instance only (a serverless cold start
-// resets it); Supabase's own verify rate limit still applies behind it.
+// In-memory throttle (sliding window; a blocked attempt is not counted). Per server instance only (a serverless
+// cold start resets it); Supabase's own Auth rate limits still apply behind it. Used by POST /api/auth/bootstrap.
 
-export const VERIFY_WINDOW_MS = 10 * 60 * 1000;
-export const VERIFY_MAX_PER_EMAIL = 10;
-export const VERIFY_MAX_PER_IP = 30;
+export const BOOTSTRAP_WINDOW_MS = 10 * 60 * 1000;
+export const BOOTSTRAP_MAX_PER_IP = 30;
 const SWEEP_AT = 10_000;
 
 export type Throttle = {
@@ -36,17 +34,8 @@ export function createThrottle({ limit, windowMs, now = () => Date.now() }: { li
   };
 }
 
-const emailThrottle = createThrottle({ limit: VERIFY_MAX_PER_EMAIL, windowMs: VERIFY_WINDOW_MS });
-const ipThrottle = createThrottle({ limit: VERIFY_MAX_PER_IP, windowMs: VERIFY_WINDOW_MS });
-
-export const verifyThrottle = {
-  email: emailThrottle,
-  ip: ipThrottle,
-  reset() {
-    emailThrottle.reset();
-    ipThrottle.reset();
-  },
-};
+/** POST /api/auth/bootstrap: at most 30 calls per IP in 10 minutes, then 429. */
+export const bootstrapThrottle = createThrottle({ limit: BOOTSTRAP_MAX_PER_IP, windowMs: BOOTSTRAP_WINDOW_MS });
 
 /** The client IP as Vercel passes it (first x-forwarded-for entry, else x-real-ip); "unknown" when absent. */
 export function clientIp(headers: Headers): string {

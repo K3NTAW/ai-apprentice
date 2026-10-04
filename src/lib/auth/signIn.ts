@@ -1,4 +1,4 @@
-// Shared by the magic-link callback and the code login (/auth/verify): after a session exists, read the
+// Shared by the magic-link callback and the password login (/api/auth/bootstrap): after a session exists, read the
 // memberships, run bootstrap_workspace once and pick the ws cookie for a newly accepted invite.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { bootstrapMemberships, readMemberships } from "./context";
