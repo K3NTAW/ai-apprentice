@@ -115,9 +115,11 @@ export default function MapDetail({ id, learners }: { id: string; learners: Mast
             </div>
             <div className="flex flex-wrap" style={{ gap: 8 }}>
               <a className={buttonClass("secondary")} href={`/api/export?session_id=${encodeURIComponent(session.id)}`} download={`guardrails-${session.id}.md`}>
+                <svg className="ui-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14" /></svg>
                 Export guardrails
               </a>
               <Link className={buttonClass("primary")} href={`/teach?session=${encodeURIComponent(session.id)}`}>
+                <svg className="ui-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5 12 4l9 3.5-9 3.5z" /><path d="M7 9.5V15c0 1.5 2.5 3 5 3s5-1.5 5-3V9.5" /></svg>
                 Open in Teach
               </Link>
             </div>
