@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
+import { Badge, buttonClass, Input } from "@/components/ui";
 import type { WorkspaceView } from "@/lib/auth/context";
 
 const ERRORS: Record<string, string> = {
@@ -28,6 +29,18 @@ async function call(path: string, method: string, body: unknown): Promise<string
   }
 }
 
+const muted = { color: "var(--mu)" } as const;
+const faint = { color: "var(--fa)" } as const;
+const memberRow = "grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_88px] items-center gap-4 border-b border-[var(--ln)] px-5";
+
+const initials = (label: string) =>
+  label
+    .split(/[.@\s]/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]!.toUpperCase())
+    .join("");
+
 export default function WorkspaceClient({ view }: { view: WorkspaceView }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -50,31 +63,32 @@ export default function WorkspaceClient({ view }: { view: WorkspaceView }) {
     if (await run("/api/workspace/invites", "POST", { email: inviteEmail, role: inviteRole })) setInviteEmail("");
   }
 
+  // Workspace.dc.html: header, members table on the left, invite and pending cards on the right.
   return (
-    <main className="flex max-w-[1080px] flex-col gap-7 px-4 pt-9 pb-14 sm:px-10" data-screen="workspace">
+    <main className="flex flex-col gap-7 px-4 pt-9 pb-14 sm:px-10" data-screen="workspace">
       <header className="flex items-start justify-between gap-4">
-        <div>
+        <div className="flex flex-col gap-1.5">
           <span className="ui-eb">Workspace</span>
           <h1 className="ui-t1">{view.workspaceName}</h1>
-          <p className="text-sm">
-            {view.email ?? "unknown"} ({view.role})
+          <p className="text-sm" style={muted}>
+            {view.members.length} members · {view.email ?? "unknown"} ({view.role})
           </p>
         </div>
         <form method="post" action="/auth/signout">
-          <button type="submit" className="rounded border px-3 py-1">
+          <button type="submit" className={buttonClass("secondary", "sm")}>
             Sign out
           </button>
         </form>
       </header>
 
       {view.memberships.length > 1 && (
-        <label className="flex items-center gap-2">
-          <span>Workspace</span>
+        <label className="flex items-center gap-2 text-sm">
+          <span className="ui-lbl">Workspace</span>
           <select
             value={view.workspaceId}
             disabled={busy}
             onChange={(e) => void run("/api/workspace/active", "POST", { workspaceId: e.target.value })}
-            className="rounded border px-2 py-1"
+            className="rounded-full border border-[var(--ln2)] bg-[var(--s2)] px-3 py-1.5"
           >
             {view.memberships.map((m) => (
               <option key={m.workspaceId} value={m.workspaceId}>
@@ -86,92 +100,135 @@ export default function WorkspaceClient({ view }: { view: WorkspaceView }) {
       )}
 
       {error && (
-        <p role="alert" className="text-red-700">
+        <p role="alert" className="text-sm" style={{ color: "var(--rd)" }}>
           {error}
         </p>
       )}
 
-      <section className="ui-card flex flex-col gap-3 p-6">
-        <h2 className="ui-t2">Members</h2>
-        <p className="text-sm" style={{ color: "var(--mu)" }}>Owners manage members. Experts train agents. Learners learn.</p>
-        <ul className="flex flex-col gap-1">
-          {view.members.map((m) => (
-            <li key={m.userId} className="flex items-center justify-between gap-4">
-              <span>
-                {m.label} ({m.role}){m.isSelf ? " - you" : ""}
-              </span>
-              {view.isOwner && !m.isSelf && (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void run("/api/workspace/members", "DELETE", { userId: m.userId })}
-                  className="rounded border px-2 py-0.5 text-sm"
-                >
-                  Remove
-                </button>
-              )}
-            </li>
-          ))}
-        </ul>
-        {view.truncated && <p className="text-sm">Showing the first 50 members only.</p>}
-      </section>
-
-      {view.isOwner && (
-        <section className="flex flex-col gap-2">
-          <h2 className="font-semibold">Pending invites</h2>
-          {view.invites.length === 0 ? (
-            <p className="text-sm">No pending invites.</p>
-          ) : (
-            <ul className="flex flex-col gap-1">
-              {view.invites.map((i) => (
-                <li key={i.id} className="flex items-center justify-between gap-4">
-                  <span>
-                    {i.email} ({i.role})
+      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.75fr)_minmax(0,1fr)]">
+        <section className="ui-card overflow-hidden">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--ln)] px-5 py-4">
+            <h2 className="ui-t3">Members</h2>
+            <span className="text-xs" style={muted}>
+              Owners manage members. Experts train agents. Learners learn.
+            </span>
+          </div>
+          <div className={`${memberRow} py-3 text-xs font-medium`} style={muted}>
+            <span>Name</span>
+            <span>Role</span>
+            <span />
+          </div>
+          <ul className="flex flex-col">
+            {view.members.map((m) => (
+              <li key={m.userId} className={`${memberRow} py-3 last:border-b-0`}>
+                <span className="flex min-w-0 items-center gap-3">
+                  <span className="grid size-8 flex-none place-items-center rounded-full text-[11px] font-semibold" style={{ background: "var(--s3)" }}>
+                    {initials(m.label)}
                   </span>
+                  <span className="truncate text-sm">
+                    {m.label}
+                    {m.isSelf ? " - you" : ""}
+                  </span>
+                </span>
+                <span className="text-sm capitalize">{m.role}</span>
+                {view.isOwner && !m.isSelf ? (
                   <button
                     type="button"
                     disabled={busy}
-                    onClick={() => void run("/api/workspace/invites", "DELETE", { id: i.id })}
-                    className="rounded border px-2 py-0.5 text-sm"
+                    onClick={() => void run("/api/workspace/members", "DELETE", { userId: m.userId })}
+                    className={buttonClass("ghost", "sm")}
                   >
-                    Revoke
+                    Remove
                   </button>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          <form onSubmit={onInvite} className="flex flex-col gap-2">
-            <h3 className="ui-t3">Invite by email</h3>
-            <p className="text-sm">
-              No email is sent. Tell the person to sign in at /login with this address; the invite is accepted at their
-              next sign-in.
+                ) : (
+                  <span />
+                )}
+              </li>
+            ))}
+          </ul>
+          {view.truncated && (
+            <p className="px-5 py-3 text-sm" style={muted}>
+              Showing the first 50 members only.
             </p>
-            <div className="flex gap-2">
-              <input
+          )}
+        </section>
+
+        {view.isOwner && (
+          <div className="flex flex-col gap-5">
+            <form onSubmit={onInvite} className="ui-card flex flex-col gap-3 p-[22px]">
+              <h2 className="ui-t3">Invite by email</h2>
+              <label className="ui-lbl" htmlFor="invite-email">
+                Work email
+              </label>
+              <Input
+                id="invite-email"
                 type="email"
                 required
                 maxLength={254}
                 value={inviteEmail}
                 onChange={(e) => setInviteEmail(e.target.value)}
                 placeholder="name@example.com"
-                className="flex-1 rounded border px-2 py-1"
               />
-              <select
-                value={inviteRole}
-                onChange={(e) => setInviteRole(e.target.value as "expert" | "learner")}
-                className="rounded border px-2 py-1"
-              >
-                <option value="learner">learner</option>
-                <option value="expert">expert</option>
-              </select>
-              <button type="submit" disabled={busy} className="rounded border px-3 py-1">
+              <span className="ui-lbl mt-1">Role</span>
+              <div className="inline-flex self-start rounded-full border border-[var(--ln)] p-[3px]" style={{ background: "var(--s2)" }} role="radiogroup" aria-label="Role">
+                {(["expert", "learner"] as const).map((r) => (
+                  <button
+                    key={r}
+                    type="button"
+                    role="radio"
+                    aria-checked={inviteRole === r}
+                    onClick={() => setInviteRole(r)}
+                    className="h-[34px] rounded-full px-4 text-[13px] font-medium capitalize"
+                    style={inviteRole === r ? { background: "var(--s3)", color: "var(--tx)" } : muted}
+                  >
+                    {r}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs" style={muted}>
+                No email is sent. Tell the person to sign in at /login with this address; the invite is accepted at their
+                next sign-in.
+              </p>
+              <button type="submit" disabled={busy} className={buttonClass("primary", "md", "self-start")}>
                 Invite
               </button>
-            </div>
-          </form>
-        </section>
-      )}
+            </form>
+
+            <section className="ui-card flex flex-col p-[22px]">
+              <div className="flex items-center justify-between pb-3">
+                <h2 className="ui-t3">Pending invites</h2>
+                <Badge kind="pending">{view.invites.length}</Badge>
+              </div>
+              {view.invites.length === 0 ? (
+                <p className="border-t border-[var(--ln)] pt-3 text-sm" style={muted}>
+                  No pending invites.
+                </p>
+              ) : (
+                <ul className="flex flex-col">
+                  {view.invites.map((i) => (
+                    <li key={i.id} className="flex flex-col gap-2.5 border-t border-[var(--ln)] py-4 last:pb-0">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-sm">{i.email}</span>
+                        <span className="text-xs" style={faint}>
+                          <span className="capitalize">{i.role}</span> · sent {i.createdAt.slice(0, 10)}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void run("/api/workspace/invites", "DELETE", { id: i.id })}
+                        className={buttonClass("ghost", "sm", "self-start")}
+                      >
+                        Revoke
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          </div>
+        )}
+      </div>
     </main>
   );
 }
