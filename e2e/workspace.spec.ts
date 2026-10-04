@@ -16,12 +16,12 @@ test.describe("workspace", () => {
     await page.getByRole("radio", { name: "expert" }).click();
     await expect(page.getByRole("radio", { name: "expert" })).toHaveAttribute("aria-checked", "true");
     await page.getByLabel(/email/i).first().fill("new.person@example.com");
+    page.on("dialog", (d) => void d.accept());
     for (const action of [
       () => page.getByRole("button", { name: "Invite" }).click(),
       () => page.getByRole("button", { name: "Revoke" }).first().click(),
       () => page.getByRole("button", { name: "Remove" }).first().click(),
     ]) {
-      page.once("dialog", (d) => void d.accept());
       await action();
       await expect(page.getByRole("alert")).toBeVisible();
     }

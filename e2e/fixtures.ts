@@ -14,7 +14,7 @@ export const SHELL: Record<string, Result> = {
   Workspace: "url",
   "Get the desktop app": "url",
   "Start capture": "url",
-  "/^(Teach|Work Map)/": "url",
+  "/^(Teach|Work Map|Capture)/": "url",
   "Account and workspace": "url",
   "Open user menu": "state",
   "/^(Dark|Light) theme$/": "state",
