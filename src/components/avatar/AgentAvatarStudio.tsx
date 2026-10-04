@@ -6,5 +6,5 @@ import AvatarStudio from "./AvatarStudio";
 
 export default function AgentAvatarStudio({ agentId }: { agentId: string }) {
   const saver = useMemo(() => httpAvatarSaver(), []);
-  return <AvatarStudio agentId={agentId} saver={saver} />;
+  return <AvatarStudio agentId={agentId} saver={saver} page={{ backHref: `/agents/${agentId}`, backLabel: "Agent" }} />;
 }

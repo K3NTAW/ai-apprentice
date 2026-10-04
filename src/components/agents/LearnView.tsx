@@ -80,7 +80,7 @@ export default function LearnView({ agents, selected, processes, unknownAgent }:
                   <span className="flex min-w-0 flex-col">
                     <span style={{ fontWeight: 600 }}>{c.name}</span>
                     <span className="text-xs" style={{ color: "var(--mu)" }}>
-                      {c.role} · from {c.expert}
+                      {c.role} · {c.expert.replace(/^learns /, "")}
                     </span>
                   </span>
                   {radio(on)}
