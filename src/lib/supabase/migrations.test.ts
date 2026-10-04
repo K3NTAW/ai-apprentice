@@ -1169,3 +1169,39 @@ describe("processes migration", () => {
     expect(norm(commentText(rollback))).toContain("lossy");
   });
 });
+
+describe("session teach migration", () => {
+  const FILE = "20261004040000_session_teach.sql";
+  const sql = readFileSync(path.join(MIGRATIONS, FILE), "utf8");
+  const rollback = readFileSync(path.join(ROLLBACKS, FILE.replace(/\.sql$/, ".down.sql")), "utf8");
+  const stmts = normStatements(sql);
+  const check = norm(stmts.find((s) => s.includes("add constraint sessions_teach_check")) ?? "");
+
+  it("adds a nullable sessions.teach jsonb with a CHECK on the TeachProgress keys and types", () => {
+    expect(stmts).toContain("alter table public.sessions add column teach jsonb");
+    expect(check).toContain("teach is null");
+    for (const key of ["workmap_session_id", "mastered", "practice", "interventions", "finished_at"]) expect(check).toContain(`'${key}'`);
+    expect(check).toContain("jsonb_typeof(teach -> 'mastered') = 'array'");
+    expect(check).toContain("jsonb_typeof(teach -> 'interventions') = 'number'");
+  });
+
+  it("mirrors TeachProgressSchema in src/lib/types.ts", async () => {
+    const { TeachProgressSchema } = await import("@/lib/types");
+    for (const key of Object.keys(TeachProgressSchema.shape)) expect(check).toContain(`'${key}'`);
+  });
+
+  it("adds no policy, grant or function (writes go through sessions_update)", () => {
+    expect(stmts.some((s) => /\b(create policy|grant|create (or replace )?function)\b/.test(s))).toBe(false);
+  });
+
+  it("rollback drops the constraint, then the column, with if exists", () => {
+    expect(check9Rollback(sql, rollback)).toEqual([]);
+    const down = deepStatements(rollback).map(norm);
+    const at = (re: RegExp) => down.findIndex((s) => re.test(s));
+    const c = at(/drop constraint if exists sessions_teach_check/);
+    const col = at(/drop column if exists teach$/);
+    expect(c).toBeGreaterThanOrEqual(0);
+    expect(col).toBeGreaterThan(c);
+    expect(norm(commentText(rollback))).toContain("lossy");
+  });
+});
