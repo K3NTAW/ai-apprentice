@@ -33,9 +33,12 @@ import { checkTeachSource, teachSessionBody } from "./agentSource";
 import { sendTextTurn, textTurnError } from "./textTurn";
 import TeachConsole, { type TeachConsoleProps, type TeachLine } from "./TeachConsole";
 
-/** agentParam: ?agent, the agent of the new teach session. sessionId: ?session, the source Work Map capture session. */
+/**
+ * agentParam: ?agent, the agent of the new teach session. sessionId: ?session, the source Work Map capture session.
+ * processId: ?process, the process whose current Work Map is played while ?session is the selected map.
+ */
 /** transport: injected for tests; otherwise selected on mount (bridge, opt-in WebSocket or none). */
-export type TeachAppProps = { sessionId: string | null; localMode: boolean; agentParam?: string | null; transport?: CompanionTransport };
+export type TeachAppProps = { sessionId: string | null; localMode: boolean; agentParam?: string | null; processId?: string | null; transport?: CompanionTransport };
 
 const NO_STATS: InterventionStats = { interventions: 0, active: 0, decideCalls: 0, decideFailures: 0, lastDecideError: null, capped: false };
 const PREDICT_QUESTION = "What would you do next?";
@@ -77,7 +80,7 @@ export default function TeachApp(props: TeachAppProps) {
   );
 }
 
-function TeachInner({ sessionId, localMode, agentParam = null, transport }: TeachAppProps) {
+function TeachInner({ sessionId, localMode, agentParam = null, processId = null, transport }: TeachAppProps) {
   const agentLoad = useAgent(agentParam);
   const agentId = agentLoad.status === "ok" ? agentLoad.agent.id : null;
   const [sourceCheck, setSourceCheck] = useState<{ key: string; error: string | null } | null>(null);
@@ -196,7 +199,7 @@ function TeachInner({ sessionId, localMode, agentParam = null, transport }: Teac
   useEffect(() => {
     if (!selected) return;
     let live = true;
-    loadWorkMap(selected).then(
+    loadWorkMap(selected, selected === sessionId ? processId : null).then(
       (m) => {
         if (!live) return;
         setWorkmap(m.workmap);
@@ -208,7 +211,7 @@ function TeachInner({ sessionId, localMode, agentParam = null, transport }: Teac
     return () => {
       live = false;
     };
-  }, [selected]);
+  }, [selected, sessionId, processId]);
 
   // Desktop companion: halo over any app plus typing/idle counts for the pause check. Selected in an effect
   // ("detecting" until then). Activity and chords are used only while a teach session runs.

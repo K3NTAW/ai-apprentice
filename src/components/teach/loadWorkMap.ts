@@ -1,4 +1,5 @@
-// Which Work Map Teach uses: ?session=<id>, else the latest confirmed capture session, else SAMPLE_WORKMAP.
+// Which Work Map Teach uses: ?process=<id> (the process's current Work Map, edits included, taught through
+// ?session), else ?session=<id>, else the latest confirmed capture session, else SAMPLE_WORKMAP.
 // The picker lists the workspace's confirmed Work Maps; the sample is offered only in local mode or when none exist.
 // Each loader is one GET /api/workmaps. A non-ok answer (401, 403, 5xx) throws WorkMapLoadError: no silent sample.
 import { SAMPLE_WORKMAP } from "@/lib/teach/sampleWorkMap";
@@ -32,9 +33,29 @@ async function fetchWorkMaps(params: Record<string, string>): Promise<WorkMapsRe
 
 const sampleMap = (banner: string): LoadedMap => ({ workmap: SAMPLE_WORKMAP, sessionId: null, banner });
 
-/** One request: ?session_id returns the named map (confirmed or not) next to the latest confirmed one. */
-export async function loadWorkMap(sessionId: string | null): Promise<LoadedMap> {
+type ProcessAnswer = { title: string; workmap: WorkMap; confirmed: boolean; archived_at: string | null; version: number };
+
+/** GET /api/processes/<id>: the process's current Work Map, or null (missing, archived, unconfirmed, 503). */
+async function loadProcessMap(processId: string, sessionId: string): Promise<LoadedMap | null> {
+  const res = await fetch(`/api/processes/${encodeURIComponent(processId)}`, { cache: "no-store" });
+  if (res.status === 401 || res.status === 403) throw new WorkMapLoadError(res.status);
+  if (!res.ok) return null;
+  const p = (await res.json()) as ProcessAnswer;
+  if (!p.confirmed || p.archived_at) return null;
+  return { workmap: { ...p.workmap, task: p.title }, sessionId, banner: `Process "${p.title}", version ${p.version}.` };
+}
+
+/**
+ * processId (with a session): the process's current Work Map, falling back to the session's map when the process
+ * cannot be read. Otherwise one request: ?session_id returns the named map (confirmed or not) next to the latest
+ * confirmed one.
+ */
+export async function loadWorkMap(sessionId: string | null, processId: string | null = null): Promise<LoadedMap> {
   if (sessionId === SAMPLE_ID) return sampleMap("Sample Work Map (demo).");
+  if (processId && sessionId) {
+    const fromProcess = await loadProcessMap(processId, sessionId);
+    if (fromProcess) return fromProcess;
+  }
   const { maps, session } = await fetchWorkMaps({ confirmed: "1", limit: "1", ...(sessionId ? { session_id: sessionId } : {}) });
   if (session) return { workmap: session.workmap, sessionId: session.id, banner: `Work Map from session ${session.id}.` };
   const note = sessionId ? `Session ${sessionId} has no Work Map. ` : "";

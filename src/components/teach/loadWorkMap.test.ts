@@ -117,3 +117,65 @@ describe("loadWorkMap", () => {
     expect(l.workmap).toBe(SAMPLE_WORKMAP);
   });
 });
+
+describe("loadWorkMap with ?process (Teach plays the process's current Work Map)", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const original = { ...workmap(true, "AP"), steps: [] };
+  const edited: WorkMap = {
+    ...original,
+    steps: [
+      {
+        n: 1,
+        title: "Check the IBAN (edited)",
+        screen_moment: { t: 1, entity: "invoice" },
+        decision: "hold",
+        is_judgment_call: true,
+        reason: { quote: "IBAN changes are fraud", t: 1, source: "debrief" },
+        guardrails: [],
+        scores: { reason_captured: 1, guardrail_captured: 1 },
+      },
+    ],
+  };
+
+  function stub(processStatus: number, process: Record<string, unknown> = {}) {
+    const fetchMock = vi.fn(async (url: string) => {
+      const u = new URL(url, "http://localhost");
+      if (u.pathname === "/api/processes/p1") {
+        if (processStatus !== 200) return Response.json({ error: "x" }, { status: processStatus });
+        return Response.json({ id: "p1", title: "Pay invoices", workmap: edited, confirmed: true, archived_at: null, version: 2, ...process });
+      }
+      if (u.pathname === "/api/workmaps") {
+        const s = { ...session("s1", "2026-10-01T08:00:00Z", original), expert: null, agent_id: null, ended_at: null };
+        return Response.json({ maps: [s], session: u.searchParams.get("session_id") === "s1" ? s : null });
+      }
+      return new Response("{}", { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  it("an edited process step shows in Teach, taught through the session", async () => {
+    stub(200);
+    const m = await loadWorkMap("s1", "p1");
+    expect(m.sessionId).toBe("s1");
+    expect(m.workmap.task).toBe("Pay invoices");
+    expect(m.workmap.steps[0]!.title).toBe("Check the IBAN (edited)");
+  });
+
+  it("falls back to the session's map when the process is archived, unconfirmed or unavailable (503)", async () => {
+    for (const [status, extra] of [[200, { archived_at: "2026-10-03T00:00:00Z" }], [200, { confirmed: false }], [503, {}], [404, {}]] as const) {
+      stub(status, extra);
+      const m = await loadWorkMap("s1", "p1");
+      expect(m.workmap.steps).toEqual([]);
+      expect(m.sessionId).toBe("s1");
+    }
+  });
+
+  it("legacy ?session links still work without a process", async () => {
+    const f = stub(200);
+    const m = await loadWorkMap("s1");
+    expect(m.sessionId).toBe("s1");
+    expect(f.mock.calls.every(([u]) => !String(u).startsWith("/api/processes"))).toBe(true);
+  });
+});

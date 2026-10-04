@@ -46,9 +46,12 @@ export const agentHref = (id: string, tab?: AgentTab) =>
 /** ?task is the optional first task title from the new agent flow. */
 export const captureHref = (agentId: string, task?: string) =>
   `/capture?agent=${encodeURIComponent(agentId)}${task?.trim() ? `&task=${encodeURIComponent(task.trim())}` : ""}`;
-/** ?agent is the agent of the new teach session; ?session is the source Work Map capture session. */
-export const teachHref = (agentId: string, workmapSessionId: string) =>
-  `/teach?agent=${encodeURIComponent(agentId)}&session=${encodeURIComponent(workmapSessionId)}`;
+/**
+ * ?agent is the agent of the new teach session; ?session is the source Work Map capture session; ?process, when the
+ * Work Map is a process, makes Teach play the process's current Work Map (edits included).
+ */
+export const teachHref = (agentId: string, workmapSessionId: string, processId?: string | null) =>
+  `/teach?agent=${encodeURIComponent(agentId)}&session=${encodeURIComponent(workmapSessionId)}${processId ? `&process=${encodeURIComponent(processId)}` : ""}`;
 export const learnHref = (agentId?: string) => (agentId ? `/learn?agent=${encodeURIComponent(agentId)}` : "/learn");
 
 export const statText = (n: number | null) => (n === null ? "none yet" : String(n));
@@ -301,12 +304,13 @@ export type LearnProcess = ProcessRow & { teachHref: string; focus: string[]; pr
 /** Processes reach Teach through their newest linked capture session; one without a session is not listed. */
 export function learnProcesses(agentId: string, sessions: readonly SessionDigest[], processes: readonly ModelProcess[] = []): LearnProcess[] {
   const linked = confirmedOf(agentId, sessions, processes).filter((m) => m.sessionId !== null);
-  const maps = new Map(linked.map((m) => [m.sessionId!, m.workmap]));
+  const maps = new Map(linked.map((m) => [m.sessionId!, m]));
   return agentProcesses(agentId, sessions, processes).filter((p) => maps.has(p.sessionId)).map((p) => {
-    const steps = maps.get(p.sessionId)?.steps ?? [];
+    const m = maps.get(p.sessionId)!;
+    const steps = m.workmap.steps;
     const focus = steps.filter((st) => st.is_judgment_call).map((st) => `Step ${st.n} · ${st.title}`);
     const practice = [...new Set(steps.map((st) => st.screen_moment.entity.trim()).filter(Boolean))];
-    return { ...p, teachHref: teachHref(agentId, p.sessionId), focus, practice };
+    return { ...p, teachHref: teachHref(agentId, p.sessionId, m.source === "process" ? m.id : null), focus, practice };
   });
 }
 

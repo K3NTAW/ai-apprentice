@@ -112,12 +112,12 @@ describe("agents callers pass processes merged with legacy sessions", () => {
 });
 
 describe("Learn reads agentWorkMaps", () => {
-  it("offers the agent through its ready process and lists the process (Teach on its linked session) and the legacy map", async () => {
+  it("offers the agent through its ready process and lists the process (Teach on its linked session with ?process) and the legacy map", async () => {
     const props = viewProps(await LearnPage({ searchParams: Promise.resolve({ agent: A }) }));
     expect((props.agents as GalleryCard[]).map((a) => a.id)).toEqual([A]);
     const processes = props.processes as LearnProcess[];
     expect(processes.map((p) => [p.task, p.ready, p.teachHref])).toEqual([
-      ["Pay invoices", true, `/teach?agent=${A}&session=linked-1`],
+      ["Pay invoices", true, `/teach?agent=${A}&session=linked-1&process=${P}`],
       ["Legacy task", false, `/teach?agent=${A}&session=legacy-1`],
     ]);
     expect(processes[0].focus).toEqual(["Step 1 · Check the amount"]);

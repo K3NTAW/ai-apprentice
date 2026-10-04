@@ -12,6 +12,7 @@ import { createHttpDebriefApi } from "@/lib/debrief/httpApi";
 import { SCORE_THRESHOLD, type Session } from "@/lib/types";
 import { useVoiceAgent, VoiceProvider, type UseVoiceAgentOptions } from "@/lib/voice/useVoiceAgent";
 import AgentAvatar from "@/components/agents/AgentAvatar";
+import ProcessChoice from "./ProcessChoice";
 import ScoreBars from "./ScoreBars";
 import TeachBackPanel from "./TeachBackPanel";
 
@@ -301,6 +302,7 @@ function DebriefInner({ sessionId, preview }: { sessionId: string; preview?: Deb
               Open the Work Map
             </Link>
           </div>
+          {!preview && session?.agent_id && <ProcessChoice sessionId={sessionId} />}
           <WorkMapViewer sessionId={sessionId} workmap={view.workmap} />
         </section>
       )}

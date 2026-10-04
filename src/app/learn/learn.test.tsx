@@ -43,3 +43,10 @@ describe("learn", () => {
     for (const bad of ["", "../x", "a/b", ["x"], null, "x".repeat(65)]) expect(parseId(bad)).toBeNull();
   });
 });
+
+describe("learn -> teach for a process", () => {
+  it("passes ?process=<id> next to the session", () => {
+    expect(teachHref("agent-a", "cap-1", "proc-1")).toBe("/teach?agent=agent-a&session=cap-1&process=proc-1");
+    expect(teachHref("agent-a", "cap-1", null)).toBe("/teach?agent=agent-a&session=cap-1");
+  });
+});

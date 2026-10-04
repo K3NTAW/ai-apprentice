@@ -31,3 +31,14 @@ export const PatchProcessBody = z
   .refine((b) => b.title !== undefined || b.workmap !== undefined || b.archived !== undefined, {
     message: "nothing to update",
   });
+
+/** POST /api/processes/from-session: the expert's choice at the end of the debrief. add and replace need process_id. */
+export const SaveFromSessionBody = z
+  .strictObject({
+    session_id: z.string(),
+    choice: z.enum(["add", "replace", "new"]),
+    process_id: z.string().optional(),
+    expected_version: z.number().int().min(1).optional(),
+    preview: z.boolean().optional(),
+  })
+  .refine((b) => b.choice === "new" || !!b.process_id, { message: "process_id required" });
