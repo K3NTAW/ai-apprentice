@@ -4,9 +4,26 @@ const state = vi.hoisted(() => ({
   mode: "supabase" as "local" | "supabase" | "misconfigured",
   cookie: undefined as string | undefined,
   client: null as unknown,
+  headers: {} as Record<string, string>,
+  proxyGetUser: 0,
+  proxyUser: null as { id: string } | null,
 }));
 
-vi.mock("@/lib/supabase/env", () => ({ appMode: () => state.mode }));
+vi.mock("@/lib/supabase/env", () => ({
+  appMode: () => state.mode,
+  publicSupabaseEnv: () => (state.mode === "supabase" ? { url: "http://localhost:54321", anonKey: "anon-placeholder" } : null),
+}));
+// The proxy's own client (proxy plus context test below).
+vi.mock("@supabase/ssr", () => ({
+  createServerClient: () => ({
+    auth: {
+      getUser: async () => {
+        state.proxyGetUser++;
+        return { data: { user: state.proxyUser }, error: null };
+      },
+    },
+  }),
+}));
 vi.mock("@/lib/supabase/server", () => ({
   createSupabaseServerClient: vi.fn(async () => {
     if (!state.client) throw new Error("supabase_not_configured");
@@ -15,9 +32,13 @@ vi.mock("@/lib/supabase/server", () => ({
 }));
 vi.mock("next/headers", () => ({
   cookies: async () => ({ get: (name: string) => (name === "ws" && state.cookie ? { value: state.cookie } : undefined) }),
+  headers: async () => new Headers(state.headers),
 }));
 
+import { NextRequest } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { proxy } from "@/proxy";
+import { FORWARDED_USER_HEADER, signForwardedUser } from "./forwardedUser";
 import {
   buildWorkspaceView,
   emailLookupIds,
@@ -88,7 +109,61 @@ beforeEach(() => {
   state.mode = "supabase";
   state.cookie = undefined;
   state.client = null;
+  state.headers = {};
+  state.proxyGetUser = 0;
+  state.proxyUser = null;
   vi.mocked(createSupabaseServerClient).mockClear();
+});
+
+describe("one getUser per page request (proxy plus context)", () => {
+  const forward = (res: Response) => {
+    const v = res.headers.get(`x-middleware-request-${FORWARDED_USER_HEADER}`);
+    state.headers = v ? { [FORWARDED_USER_HEADER]: v } : {};
+  };
+
+  it("the page render reuses the proxy-verified user: getUser runs once in total", async () => {
+    state.proxyUser = { id: USER };
+    const client = fakeClient({ user: { id: USER }, members: { data: [memberRow(WS_A, "A")], error: null } });
+    state.client = client;
+    forward(await proxy(new NextRequest("http://app.test/agents")));
+    const r = await getRequestContext();
+    expect(r).toMatchObject({ kind: "ok", ctx: { userId: USER, workspaceId: WS_A } });
+    expect(state.proxyGetUser + client.auth.getUser.mock.calls.length).toBe(1);
+    expect(client.auth.getUser).not.toHaveBeenCalled();
+  });
+
+  it("a forged, tampered or expired header is ignored: the context calls getUser itself", async () => {
+    const client = fakeClient({ user: { id: USER }, members: { data: [memberRow(WS_A, "A")], error: null } });
+    state.client = client;
+    const good = signForwardedUser({ id: "someone-else" });
+    const [payload] = good.split(".");
+    const tampered = `${Buffer.from(JSON.stringify({ id: "attacker", exp: Date.now() + 1e6 })).toString("base64url")}.${good.split(".")[1]}`;
+    for (const v of ["attacker", `${payload}.bad`, tampered, signForwardedUser({ id: "old" }, Date.now() - 60_000)]) {
+      state.headers = { [FORWARDED_USER_HEADER]: v };
+      client.auth.getUser.mockClear();
+      const r = await getRequestContext();
+      expect(r.kind === "ok" && r.ctx.userId).toBe(USER);
+      expect(client.auth.getUser).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it("requireContext (route handlers) never trusts the forwarded header", async () => {
+    const client = fakeClient({ user: null });
+    state.client = client;
+    state.headers = { [FORWARDED_USER_HEADER]: signForwardedUser({ id: USER }) };
+    const res = await requireContext();
+    expect(res instanceof Response && res.status).toBe(401);
+    expect(client.auth.getUser).toHaveBeenCalledTimes(1);
+  });
+
+  it("an /api request costs one getUser: the proxy skips it, requireContext runs it", async () => {
+    state.proxyUser = { id: USER };
+    const client = fakeClient({ user: { id: USER }, members: { data: [memberRow(WS_A, "A")], error: null } });
+    state.client = client;
+    forward(await proxy(new NextRequest("http://app.test/api/session")));
+    await requireContext();
+    expect(state.proxyGetUser + client.auth.getUser.mock.calls.length).toBe(1);
+  });
 });
 
 describe("getRequestContext", () => {

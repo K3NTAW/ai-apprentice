@@ -1,12 +1,17 @@
 // Per-request auth and workspace context for server components and route handlers.
 // Only auth.getUser() is used, never getSession(): getUser revalidates the token with Supabase Auth.
+// Page renders reuse the user the proxy verified in the same request (signed forwarded header), so a page request
+// costs one getUser in total; route handlers (requireContext) always call getUser themselves.
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { cache } from "react";
 import type { z } from "zod";
 import { appMode } from "@/lib/supabase/env";
+import { readMostly, Uncacheable } from "@/lib/cache/readMostly";
+import { timed } from "@/lib/perf";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { WS_COOKIE } from "./cookies";
+import { FORWARDED_USER_HEADER, verifyForwardedUser, type ForwardedUser } from "./forwardedUser";
 
 export type Role = "owner" | "expert" | "learner";
 export type Membership = { workspaceId: string; name: string; role: Role };
@@ -98,7 +103,32 @@ function localContext(): RequestContext {
   };
 }
 
-async function resolveRequestContext(): Promise<ContextResult> {
+/** The proxy-verified user of this request, or null (no header, bad signature, expired, outside a request). */
+async function forwardedUser(): Promise<ForwardedUser | null> {
+  try {
+    return verifyForwardedUser((await headers()).get(FORWARDED_USER_HEADER));
+  } catch {
+    return null;
+  }
+}
+
+type ReadMemberships = { ok: true; memberships: Membership[] } | { ok: false };
+
+/**
+ * Page path: memberships cached for a few seconds per user and requested workspace (tag memberships:<user>, expired
+ * by bootstrap and member removal). Errors and empty results are never cached.
+ */
+export function cachedMemberships(supabase: SupabaseClient, userId: string, wsCookie: string | undefined): Promise<ReadMemberships> {
+  return readMostly("memberships", { userId, workspaceId: wsCookie ?? "none" }, ["memberships"], async () => {
+    const read = await readMemberships(supabase, userId);
+    if (!read.ok || read.memberships.length === 0) throw new Uncacheable(read);
+    return read;
+  });
+}
+
+type ResolveOpts = { fresh: boolean };
+
+async function resolveRequestContext(opts: ResolveOpts): Promise<ContextResult> {
   const mode = appMode();
   if (mode === "local") return { kind: "ok", ctx: localContext() };
   if (mode !== "supabase") return { kind: "misconfigured" };
@@ -111,16 +141,27 @@ async function resolveRequestContext(): Promise<ContextResult> {
   }
 
   // A thrown getUser counts as signed out.
-  let user: { id: string; email?: string | null; email_confirmed_at?: string | null } | null = null;
-  try {
-    const { data, error } = await supabase.auth.getUser();
-    if (!error) user = data?.user ?? null;
-  } catch {
-    user = null;
+  let user: { id: string; email?: string | null; email_confirmed_at?: string | null } | null = opts.fresh
+    ? null
+    : await forwardedUser();
+  if (!user) {
+    user = await timed("ctx-auth", async () => {
+      try {
+        const { data, error } = await supabase.auth.getUser();
+        return error ? null : (data?.user ?? null);
+      } catch {
+        return null;
+      }
+    });
   }
   if (!user) return { kind: "signed_out" };
 
-  const read = await readMemberships(supabase, user.id);
+  const cookieStore = await cookies();
+  const wsCookie = cookieStore.get(WS_COOKIE)?.value;
+  const userId = user.id;
+  const read = await timed("db", () =>
+    opts.fresh ? readMemberships(supabase, userId) : cachedMemberships(supabase, userId, wsCookie),
+  );
   if (!read.ok) return { kind: "no_workspace" };
   let memberships = read.memberships;
   if (memberships.length === 0) {
@@ -130,8 +171,7 @@ async function resolveRequestContext(): Promise<ContextResult> {
   }
   if (memberships.length === 0) return { kind: "no_workspace" };
 
-  const cookieStore = await cookies();
-  const active = pickActive(memberships, cookieStore.get(WS_COOKIE)?.value);
+  const active = pickActive(memberships, wsCookie);
   return {
     kind: "ok",
     ctx: {
@@ -153,10 +193,13 @@ async function resolveRequestContext(): Promise<ContextResult> {
  * resolves the user, memberships and workspace once (one getUser) however many components ask. cache() keys on the
  * React server request: nothing is shared across requests, and outside a server render it does not memoize at all.
  */
-export const getRequestContext = cache(resolveRequestContext);
+export const getRequestContext = cache(() => resolveRequestContext({ fresh: false }));
 
-/** Always resolves again, never from the cache. requireContext (route handlers, where every mutation lives) uses it. */
-export const getFreshRequestContext = resolveRequestContext;
+/**
+ * Always resolves again: its own getUser (never the forwarded user) and memberships straight from the database.
+ * requireContext (route handlers, where every mutation lives) uses it.
+ */
+export const getFreshRequestContext = () => resolveRequestContext({ fresh: true });
 
 const json = (error: string, status: number) => Response.json({ error }, { status });
 

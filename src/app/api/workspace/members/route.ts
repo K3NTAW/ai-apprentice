@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { internalError, parseJsonBody, requireWorkspaceApi } from "@/lib/auth/context";
+import { revalidateScopes } from "@/lib/cache/readMostly";
 
 export const runtime = "nodejs";
 
@@ -28,5 +29,8 @@ export async function DELETE(req: Request): Promise<Response> {
     return internalError("members DELETE", error);
   }
   if (!data || data.length === 0) return Response.json({ error: "not_found" }, { status: 404 });
+  // The removed user's cached memberships and this workspace's member list (agents and control room input).
+  revalidateScopes(["memberships"], { userId: input.userId, workspaceId: ctx.workspaceId });
+  revalidateScopes(["members"], ctx);
   return Response.json({ ok: true });
 }

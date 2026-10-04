@@ -1,5 +1,5 @@
 import { requireRole } from "@/lib/auth/context";
-import { notFound, parseBody, withApi, type IdContext } from "../../session/_http";
+import { notFound, parseBody, withApi, withMutation, type IdContext } from "../../session/_http";
 import { agentErrors, PatchAgentBody } from "../_lib";
 
 export const runtime = "nodejs";
@@ -15,7 +15,7 @@ export async function GET(_req: Request, ctx: IdContext) {
 
 // Owner or expert.
 export async function PATCH(req: Request, ctx: IdContext) {
-  return withApi(async ({ ctx: rc, store }) => {
+  return withMutation(["agents"], async ({ ctx: rc, store }) => {
     const denied = requireRole(rc, ["owner", "expert"]);
     if (denied) return denied;
     const { id } = await ctx.params;
@@ -27,7 +27,7 @@ export async function PATCH(req: Request, ctx: IdContext) {
 
 // Owner only. Sessions of the agent keep their history with agent_id cleared.
 export async function DELETE(_req: Request, ctx: IdContext) {
-  return withApi(async ({ ctx: rc, store }) => {
+  return withMutation(["agents"], async ({ ctx: rc, store }) => {
     const denied = requireRole(rc, ["owner"]);
     if (denied) return denied;
     const { id } = await ctx.params;

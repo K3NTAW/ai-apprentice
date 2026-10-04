@@ -4,6 +4,7 @@
 // The light and phone variants (GalleryLight, GalleryPhone) are the same markup under data-theme="light" and the
 // narrow breakpoint; no separate route.
 import Link from "next/link";
+import HoverPrefetchLink from "@/components/shell/HoverPrefetchLink";
 import { useState } from "react";
 import { Badge, buttonClass, Segmented } from "@/components/ui";
 import { COMPANION_README } from "@/components/capture/CompanionCard";
@@ -42,7 +43,7 @@ export function Stats({ stats }: { stats: GalleryCard["stats"] }) {
 export function AgentCard({ card, href = card.href }: { card: GalleryCard; href?: string }) {
   return (
     <li>
-      <Link href={href} className={`${cardClass} h-full gap-4 p-4 hover:border-[var(--ln2)]`} data-testid="agent-card">
+      <HoverPrefetchLink href={href} className={`${cardClass} h-full gap-4 p-4 hover:border-[var(--ln2)]`} data-testid="agent-card">
         <span className="relative flex h-44 items-center justify-center rounded-[12px]" style={{ background: "var(--stage)" }}>
           <Badge kind={card.ready ? "confirmed" : "accent"} className="absolute top-3 left-3">
             {card.ready ? "Ready to teach" : "Training"}
@@ -69,7 +70,7 @@ export function AgentCard({ card, href = card.href }: { card: GalleryCard; href?
           )}
         </span>
         <Stats stats={card.stats} />
-      </Link>
+      </HoverPrefetchLink>
     </li>
   );
 }

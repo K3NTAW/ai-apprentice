@@ -1,13 +1,13 @@
 import { z } from "zod";
 import { QAPairSchema } from "@/lib/types";
-import { parseBody, requireCreatorOrOwner, withApi, type IdContext } from "../../_http";
+import { parseBody, requireCreatorOrOwner, withMutation, type IdContext } from "../../_http";
 
 export const runtime = "nodejs";
 
 const Body = z.object({ qa: QAPairSchema });
 
 export async function POST(req: Request, ctx: IdContext) {
-  return withApi(async (api) => {
+  return withMutation(["sessions"], async (api) => {
     const { id } = await ctx.params;
     const denied = await requireCreatorOrOwner(api, id);
     if (denied) return denied;

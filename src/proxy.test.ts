@@ -10,6 +10,7 @@ const state = vi.hoisted(() => ({
   userError: null as unknown,
   getUserThrows: false,
   refresh: false,
+  getUserCalls: 0,
 }));
 
 vi.mock("@/lib/supabase/env", () => ({
@@ -26,6 +27,7 @@ vi.mock("@supabase/ssr", () => ({
   createServerClient: vi.fn((_url: string, _key: string, opts: { cookies: CookieAdapter }) => ({
     auth: {
       getUser: vi.fn(async () => {
+        state.getUserCalls++;
         if (state.refresh) {
           opts.cookies.setAll([{ name: "sb-test-auth-token", value: "refreshed", options: { path: "/", httpOnly: true } }], {
             "Cache-Control": "private, no-cache, no-store, must-revalidate, max-age=0",
@@ -42,6 +44,7 @@ vi.mock("@supabase/ssr", () => ({
 }));
 
 import { createServerClient } from "@supabase/ssr";
+import { FORWARDED_USER_HEADER, verifyForwardedUser } from "@/lib/auth/forwardedUser";
 import { config, proxy } from "./proxy";
 
 const req = (path: string) => new NextRequest(new URL(path, "http://app.test"));
@@ -52,6 +55,7 @@ beforeEach(() => {
   state.userError = null;
   state.getUserThrows = false;
   state.refresh = false;
+  state.getUserCalls = 0;
   vi.mocked(createServerClient).mockClear();
 });
 
@@ -95,16 +99,14 @@ describe("supabase mode, signed out", () => {
     expect(res.status).toBe(307);
     expect(loginTarget(res)?.path).toBe("/login");
     expect(loginTarget(res)?.next).toBe("/dashboard");
-    const api = await proxy(req("http://app.test/api//session"));
-    expect(api.status).toBe(401);
   });
 
-  it("answers /api/* with 401 JSON", async () => {
-    for (const p of ["/api/session", "/api/session/x.png", "/api"]) {
-      const res = await proxy(req(p));
-      expect(res.status).toBe(401);
-      expect(await res.json()).toEqual({ error: "unauthorized" });
+  it("passes /api/* without an Auth round trip: route handlers answer 401 themselves (requireContext)", async () => {
+    for (const p of ["/api/session", "/api/session/x.png", "/api", "/api//session"]) {
+      expect(passes(await proxy(req(p))), p).toBe(true);
     }
+    expect(state.getUserCalls).toBe(0);
+    expect(createServerClient).not.toHaveBeenCalled();
   });
 
   it("passes '/', /login and /auth/callback", async () => {
@@ -116,16 +118,15 @@ describe("supabase mode, signed out", () => {
   it("treats a getUser throw or an error result as signed out", async () => {
     state.getUserThrows = true;
     expect((await proxy(req("/capture"))).status).toBe(307);
-    expect((await proxy(req("/api/session"))).status).toBe(401);
     state.getUserThrows = false;
     state.user = { id: "u" };
     state.userError = { message: "auth down" };
     expect((await proxy(req("/capture"))).status).toBe(307);
   });
 
-  it("a redirect and a 401 carry the cookies the client set during refresh", async () => {
+  it("a redirect carries the cookies the client set during refresh", async () => {
     state.refresh = true;
-    for (const p of ["/capture", "/api/session"]) {
+    for (const p of ["/capture"]) {
       const res = await proxy(req(p));
       expect(res.headers.get("set-cookie")).toContain("sb-test-auth-token=refreshed");
       expect(res.headers.get("cache-control")).toContain("no-store");
@@ -134,10 +135,10 @@ describe("supabase mode, signed out", () => {
 });
 
 describe("supabase mode, signed in", () => {
-  it("passes protected pages and api, with refreshed cookies", async () => {
+  it("passes protected pages with refreshed cookies", async () => {
     state.user = { id: "u" };
     state.refresh = true;
-    for (const p of ["/capture", "/api/session"]) {
+    for (const p of ["/capture", "/agents"]) {
       const res = await proxy(req(p));
       expect(passes(res)).toBe(true);
       expect(res.headers.get("set-cookie")).toContain("sb-test-auth-token=refreshed");
@@ -174,5 +175,63 @@ describe("matcher", () => {
     for (const p of ["/_next/static/chunk.js", "/_next/image", "/favicon.ico", "/logo.png", "/fonts/a.woff2"]) {
       expect(matches(p), p).toBe(false);
     }
+  });
+});
+
+describe("auth round trips (performance 2)", () => {
+  const withHeaders = (path: string, headers: Record<string, string>) =>
+    new NextRequest(new URL(path, "http://app.test"), { headers });
+  const forwarded = (res: Response) => res.headers.get(`x-middleware-request-${FORWARDED_USER_HEADER}`);
+
+  it("no getUser for RSC and router prefetch requests", async () => {
+    state.user = { id: "u" };
+    for (const h of [
+      { "next-router-prefetch": "1", rsc: "1" },
+      { purpose: "prefetch" },
+      { "sec-purpose": "prefetch;prerender" },
+      { "x-middleware-prefetch": "1" },
+    ]) {
+      expect(passes(await proxy(withHeaders("/agents", h))), JSON.stringify(h)).toBe(true);
+    }
+    expect(state.getUserCalls).toBe(0);
+  });
+
+  it("no getUser for /api/*, signed in or not", async () => {
+    state.user = { id: "u" };
+    for (const p of ["/api/session", "/api/agents", "/api/workspace/active"]) await proxy(req(p));
+    expect(state.getUserCalls).toBe(0);
+  });
+
+  it("a page request refreshes the session once and forwards the verified user", async () => {
+    state.user = { id: "u1" };
+    const res = await proxy(withHeaders("/agents", { rsc: "1" }));
+    expect(passes(res)).toBe(true);
+    expect(state.getUserCalls).toBe(1);
+    expect(verifyForwardedUser(forwarded(res))?.id).toBe("u1");
+    expect(res.headers.get("server-timing")).toMatch(/proxy-auth;dur=/);
+  });
+
+  it("strips a client-sent forwarded-user header on every path", async () => {
+    const forged = "eyJpZCI6ImF0dGFja2VyIn0.forged";
+    // Signed out page: redirected, nothing forwarded.
+    const page = await proxy(withHeaders("/agents", { [FORWARDED_USER_HEADER]: forged }));
+    expect(page.status).toBe(307);
+    for (const p of ["/api/session", "/", "/login"]) {
+      const res = await proxy(withHeaders(p, { [FORWARDED_USER_HEADER]: forged }));
+      expect(passes(res), p).toBe(true);
+      expect(forwarded(res), p).toBeNull();
+      expect(res.headers.get("x-middleware-override-headers") ?? "", p).not.toContain(FORWARDED_USER_HEADER);
+    }
+    const prefetch = await proxy(withHeaders("/agents", { [FORWARDED_USER_HEADER]: forged, "next-router-prefetch": "1" }));
+    expect(forwarded(prefetch)).toBeNull();
+    state.mode = "local";
+    expect(forwarded(await proxy(withHeaders("/agents", { [FORWARDED_USER_HEADER]: forged })))).toBeNull();
+  });
+
+  it("signed in: the forwarded header is the proxy's own, never the client's", async () => {
+    state.user = { id: "u1" };
+    const res = await proxy(withHeaders("/agents", { [FORWARDED_USER_HEADER]: "x.y" }));
+    expect(verifyForwardedUser(forwarded(res))?.id).toBe("u1");
+    expect(verifyForwardedUser("x.y")).toBeNull();
   });
 });

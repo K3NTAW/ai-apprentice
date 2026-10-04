@@ -2,7 +2,7 @@ import { z } from "zod";
 import { requireRole } from "@/lib/auth/context";
 import { AgentNotFoundError } from "@/lib/store";
 import { SessionSchema } from "@/lib/types";
-import { notFound, parseBody, withApi } from "./_http";
+import { notFound, parseBody, withApi, withMutation } from "./_http";
 
 export const runtime = "nodejs";
 
@@ -14,7 +14,7 @@ const CreateBody = z.object({
 
 // capture: owner or expert. teach: any member.
 export async function POST(req: Request) {
-  return withApi(async ({ ctx, store }) => {
+  return withMutation(["sessions"], async ({ ctx, store }) => {
     const body = await parseBody(req, CreateBody);
     if (!body.ok) return body.res;
     if (body.data.kind === "capture") {

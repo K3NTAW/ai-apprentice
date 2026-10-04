@@ -2,6 +2,7 @@
 // From md width up a 248 px left column; at phone width a top bar with the logo, the nav row and the user menu
 // (recent sessions and the switcher fold away), as the canvas phone artboards show.
 import Link from "next/link";
+import HoverPrefetchLink from "./HoverPrefetchLink";
 import type { ReactNode } from "react";
 import type { Membership, Role } from "@/lib/auth/context";
 import HideInApp, { ShowInApp } from "./HideInApp";
@@ -113,7 +114,7 @@ function RecentList({ recent }: { recent: RecentSessions }) {
               {g.label}
             </span>
             {g.items.map((s) => (
-              <Link key={s.id} href={s.href} className="ui-rb">
+              <HoverPrefetchLink key={s.id} href={s.href} className="ui-rb">
                 <span className="truncate text-[13px]" style={{ fontWeight: s.live ? 500 : undefined }}>
                   {s.title}
                 </span>
@@ -121,7 +122,7 @@ function RecentList({ recent }: { recent: RecentSessions }) {
                   {s.live && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--rd)" }} />}
                   {s.meta}
                 </span>
-              </Link>
+              </HoverPrefetchLink>
             ))}
           </div>
         ))

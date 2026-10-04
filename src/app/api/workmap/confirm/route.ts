@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { redactText } from "@/lib/redact";
-import { notFound, parseBody, requireCreatorOrOwner, withApi } from "../../session/_http";
+import { notFound, parseBody, requireCreatorOrOwner, withMutation } from "../../session/_http";
 
 export const runtime = "nodejs";
 // Vercel function limit: 60 s fits the plan (model calls can take tens of seconds).
@@ -9,7 +9,7 @@ export const maxDuration = 60;
 const Body = z.object({ session_id: z.string(), confirmed: z.boolean(), correction: z.string().optional() });
 
 export function POST(req: Request): Promise<Response> {
-  return withApi(async (api) => {
+  return withMutation(["sessions"], async (api) => {
     const body = await parseBody(req, Body);
     if (!body.ok) return body.res;
     const { session_id, confirmed } = body.data;

@@ -1,5 +1,6 @@
 // Control room: captured workflows per expert, learners and their mastery, quick actions.
 import Link from "next/link";
+import HoverPrefetchLink from "@/components/shell/HoverPrefetchLink";
 import type { Role } from "@/lib/auth/context";
 import type { DashboardSummary, MasteryRow, WorkflowStatus } from "@/lib/dashboard/summary";
 import { canCapture } from "@/components/shell/ShellHeader";
@@ -76,12 +77,12 @@ export default function Dashboard({ summary, role }: { summary: DashboardSummary
                   <ul className="flex flex-col divide-y divide-line">
                     {e.workflows.map((w) => (
                       <li key={w.sessionId}>
-                        <Link href={w.href} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5 hover:bg-panel-2">
+                        <HoverPrefetchLink href={w.href} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5 hover:bg-panel-2">
                           <span>{w.task}</span>
                           <span className={`rounded px-1.5 py-0.5 text-xs ${STATUS_STYLE[w.status]}`}>{w.status}</span>
                           {w.counts && <span className="text-muted">{w.counts}</span>}
                           <span className="ml-auto font-mono text-xs text-muted">{w.updated}</span>
-                        </Link>
+                        </HoverPrefetchLink>
                       </li>
                     ))}
                   </ul>

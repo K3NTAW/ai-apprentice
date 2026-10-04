@@ -2,6 +2,7 @@
 
 // Work Map list: the workspace's capture sessions that have a Work Map, newest first.
 import Link from "next/link";
+import HoverPrefetchLink from "@/components/shell/HoverPrefetchLink";
 import { useEffect, useState } from "react";
 import { WORKMAPS_MAX_LIMIT, type WorkMapsResponse } from "@/lib/workmap/items";
 import { mapListRows, type MapListRow } from "./list";
@@ -46,12 +47,12 @@ export default function MapListPage() {
         <ul className="flex flex-col divide-y divide-line text-sm">
           {rows.map((r) => (
             <li key={r.id}>
-              <Link href={r.href} className="flex flex-col gap-1 py-2 hover:bg-panel-2 sm:flex-row sm:items-center sm:gap-4">
+              <HoverPrefetchLink href={r.href} className="flex flex-col gap-1 py-2 hover:bg-panel-2 sm:flex-row sm:items-center sm:gap-4">
                 <span className="font-medium">{r.expert}</span>
                 <span className="font-mono text-muted">{r.date}</span>
                 {r.confirmed && <span className="self-start rounded bg-green-100 px-1.5 py-0.5 text-xs text-green-800">confirmed</span>}
                 <span className="text-muted sm:ml-auto">{r.counts}</span>
-              </Link>
+              </HoverPrefetchLink>
             </li>
           ))}
         </ul>

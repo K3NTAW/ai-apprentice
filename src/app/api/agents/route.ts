@@ -1,5 +1,5 @@
 import { requireRole } from "@/lib/auth/context";
-import { parseBody, withApi } from "../session/_http";
+import { parseBody, withApi, withMutation } from "../session/_http";
 import { CreateAgentBody } from "./_lib";
 
 export const runtime = "nodejs";
@@ -11,7 +11,7 @@ export async function GET() {
 
 // Owner or expert.
 export async function POST(req: Request) {
-  return withApi(async ({ ctx, store }) => {
+  return withMutation(["agents"], async ({ ctx, store }) => {
     const denied = requireRole(ctx, ["owner", "expert"]);
     if (denied) return denied;
     const body = await parseBody(req, CreateAgentBody);

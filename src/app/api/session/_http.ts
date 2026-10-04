@@ -1,6 +1,7 @@
 // Shared helpers for the /api/session route handlers.
 import type { z } from "zod";
 import { type RequestContext, requireContext } from "@/lib/auth/context";
+import { revalidateScopes, type Scope } from "@/lib/cache/readMostly";
 import {
   getStore,
   InvalidOffRecordRangeError,
@@ -73,6 +74,18 @@ export async function withApi(fn: (api: Api) => Promise<Response>): Promise<Resp
   const t1 = performance.now();
   const res = await handle(() => fn({ ctx, store: storeFor(ctx) }));
   return withServerTiming(res, { auth, db: performance.now() - t1 });
+}
+
+/**
+ * withApi for writes: after a 2xx response the scopes' read-mostly caches of the active workspace are expired
+ * (sessions: sidebar recents and agent stats; agents: the agent list), so the next page render reads fresh data.
+ */
+export async function withMutation(scopes: Scope[], fn: (api: Api) => Promise<Response>): Promise<Response> {
+  return withApi(async (api) => {
+    const res = await fn(api);
+    if (res.ok) revalidateScopes(scopes, api.ctx);
+    return res;
+  });
 }
 
 /**

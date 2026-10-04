@@ -1,6 +1,7 @@
 // Shared layout for the app pages. Reads the request context on the server; the proxy handles sign-in redirects.
 // Sidebar from md width up, a top bar at phone width (ShellHeader handles both), as Shell.dc.html.
 import { getRequestContext, type RequestContext } from "@/lib/auth/context";
+import { readMostly } from "@/lib/cache/readMostly";
 import { getStore } from "@/lib/store";
 import ShellHeader, { type ShellUser } from "./ShellHeader";
 import { groupRecent, RECENT_LIMIT, type RecentSessions } from "./recent";
@@ -19,11 +20,18 @@ export async function shellUser(): Promise<ShellUser | null> {
   return result.kind === "ok" ? toShellUser(result.ctx) : null;
 }
 
-/** Latest capture and teach sessions of the request-context workspace; a store error never breaks the page. */
+/**
+ * Latest capture and teach sessions of the request-context workspace; a store error never breaks the page.
+ * Supabase mode caches the rows for a few seconds per user and workspace (session writes expire the sessions tag).
+ */
 export async function recentSessions(ctx: RequestContext, now = new Date()): Promise<RecentSessions> {
   try {
-    const store = ctx.supabase ? getStore({ supabase: ctx.supabase, workspaceId: ctx.workspaceId, userId: ctx.userId }) : getStore();
-    return { kind: "ok", groups: groupRecent(await store.recentSessions(RECENT_LIMIT), now) };
+    const { supabase } = ctx;
+    const store = supabase ? getStore({ supabase, workspaceId: ctx.workspaceId, userId: ctx.userId }) : getStore();
+    const rows = supabase
+      ? await readMostly("recent-sessions", ctx, ["sessions"], () => store.recentSessions(RECENT_LIMIT))
+      : await store.recentSessions(RECENT_LIMIT);
+    return { kind: "ok", groups: groupRecent(rows, now) };
   } catch {
     return { kind: "error" };
   }
