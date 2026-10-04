@@ -29,7 +29,7 @@ describe("landing page", () => {
   it("says it runs next to the apps you already use and never mentions the ERP sandbox", async () => {
     const html = render();
     expect(html).toContain("Runs next to Outlook, Excel, PowerPoint and any browser tab. Nothing to integrate.");
-    expect(html).not.toMatch(/ERP|sandbox/i);
+    expect(html).not.toMatch(/\bERP\b|sandbox/i); // word match: the canvas copy names PowerPoint
     const { default: ShellHeader } = await import("@/components/shell/ShellHeader");
     const nav = renderToStaticMarkup(<ShellHeader user={null} />);
     expect(nav).not.toMatch(/ERP|\/erp/);
