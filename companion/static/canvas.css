@@ -1,0 +1,46 @@
+/* Canvas tokens and shared classes, copied from the design canvas (docs/design/canvas, .gl block in Dock.dc.html,
+   Buddy.dc.html, FloatPanel.dc.html). Light only, like the canvas. Fonts are bundled (static/fonts, OFL), never remote. */
+@font-face { font-family: Geist; src: url("fonts/Geist-Variable.woff2") format("woff2"); font-weight: 100 900; font-style: normal; font-display: swap; }
+@font-face { font-family: "Geist Mono"; src: url("fonts/GeistMono-Variable.woff2") format("woff2"); font-weight: 100 900; font-style: normal; font-display: swap; }
+:root {
+  color-scheme: light;
+  --tx: #111111; --mu: #626262; --fa: #8C8C8C; --ln: rgba(0,0,0,.08); --ln2: rgba(0,0,0,.12); --s2: rgba(0,0,0,.04); --s3: rgba(0,0,0,.07);
+  --bl: #0F7FFF; --bls: rgba(15,127,255,.12); --gr: #13784B; --grs: rgba(19,120,75,.12); --rd: #E5484D; --rds: rgba(229,72,77,.12);
+  --te: #0B7468; --tes: rgba(11,116,104,.12); --co: #C2410C; --cos: rgba(194,65,12,.11);
+  --glass-bg: rgba(251,251,251,.84); --glass-border: rgba(255,255,255,.7); --glass-blur: blur(24px) saturate(1.5);
+  --halo: #FF7A45; --tile: linear-gradient(180deg, #2C2C31, #0A0A0C); --off-bg: #ECECEC;
+  --font: Geist, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.gl { color: var(--tx); font-family: var(--font); font-size: 13px; line-height: 1.45; -webkit-font-smoothing: antialiased; }
+.gl *, .gl *::before, .gl *::after { box-sizing: border-box; }
+.gl p { margin: 0; }
+.glass {
+  background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border); box-shadow: 0 10px 24px #0000001f, 0 30px 80px rgba(0,0,0,.22), inset 0 1px 1px #fffc;
+}
+.pill { background: #FFFFFF; border: 1px solid rgba(0,0,0,.06); box-shadow: 0 10px 24px #0000001f, inset 0 1px 1px #fffc; }
+.xs { font-size: 12px; } .mu { color: var(--mu); } .fa { color: var(--fa); }
+.eb { font-size: 12px; color: var(--mu); font-weight: 500; }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 36px; padding: 0 14px; border-radius: 999px;
+  font-family: inherit; font-size: 13px; font-weight: 500; border: 1px solid transparent; cursor: pointer; white-space: nowrap; line-height: 1;
+}
+.bk { background: #111111; color: #FFFFFF; box-shadow: inset 0 1px 1px rgba(255,255,255,.25), 0 4px 10px rgba(0,0,0,.18); }
+.bw { background: #FFFFFF; color: #111111; border-color: rgba(0,0,0,.1); box-shadow: inset 0 1px 1px #fffc, 0 1px 2px rgba(0,0,0,.06); }
+.bt { background: transparent; color: var(--mu); }
+.btn:focus-visible { outline: 2px solid var(--bl); outline-offset: 2px; }
+.btn:disabled { opacity: .45; cursor: default; }
+.kc {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 6px;
+  background: #FFFFFF; border: 1px solid rgba(0,0,0,.12); border-bottom-width: 2px; font-family: var(--mono); font-size: 11px; font-weight: 500; color: #111111; line-height: 1;
+}
+.ic { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.tile { background: var(--tile); display: flex; align-items: center; justify-content: center; flex: none; }
+.rec { width: 8px; height: 8px; border-radius: 50%; background: var(--rd); display: inline-block; flex: none; animation: aa-pulse 1.4s ease-in-out infinite; }
+.hidden { display: none !important; }
+@keyframes aa-pulse { 50% { opacity: .3; } }
+@keyframes aa-dash { to { stroke-dashoffset: -40; } }
+@keyframes aa-halo { 50% { box-shadow: 0 0 0 2.5px #FF7A45, 0 0 0 14px rgba(255,122,69,.1), 0 0 52px 16px rgba(255,122,69,.22); } }
+@media (prefers-reduced-motion: reduce) { .gl *, .gl { animation: none !important; } }

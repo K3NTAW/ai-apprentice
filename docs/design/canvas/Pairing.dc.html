@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Pairing window</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;family=Instrument+Serif:ital@0;1&amp;display=swap">
+<style>
+body{margin:0}
+.gl{--tx:#111111;--mu:#626262;--fa:#8C8C8C;--ln:rgba(0,0,0,.08);--bl:#0F7FFF;--gr:#13784B;--grs:rgba(19,120,75,.12);--rd:#C93030;--rds:rgba(201,48,48,.1);color:var(--tx);font-family:Geist,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased;color-scheme:light}
+.gl *,.gl *::before,.gl *::after{box-sizing:border-box}
+.gl p,.gl h1{margin:0}
+.glass{background:rgba(251,251,251,.92);-webkit-backdrop-filter:blur(28px) saturate(1.5);backdrop-filter:blur(28px) saturate(1.5);border:1px solid rgba(255,255,255,.7);box-shadow:0 10px 24px #0000001f,0 40px 100px rgba(0,0,0,.35),inset 0 1px 1px #fffc}
+.pill{background:#FFFFFF;border:1px solid rgba(0,0,0,.06);box-shadow:0 4px 12px rgba(0,0,0,.06),inset 0 1px 1px #fffc}
+.xs{font-size:12px}.mu{color:var(--mu)}.fa{color:var(--fa)}
+.mono{font-family:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace;font-variant-numeric:tabular-nums}
+.serif{font-family:"Instrument Serif",Georgia,serif;font-style:italic;font-weight:400}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:32px;padding:0 12px;border-radius:999px;font-family:inherit;font-size:13px;font-weight:500;border:1px solid transparent;cursor:pointer;white-space:nowrap;line-height:1}
+.bk{background:#111111;color:#FFFFFF;box-shadow:inset 0 1px 1px rgba(255,255,255,.25),0 4px 10px rgba(0,0,0,.18)}
+.bw{background:#FFFFFF;color:#111111;border-color:rgba(0,0,0,.1);box-shadow:inset 0 1px 1px #fffc,0 1px 2px rgba(0,0,0,.06)}
+.btn:focus-visible{outline:2px solid var(--bl);outline-offset:2px}
+.dg{width:52px;height:68px;border-radius:14px;display:inline-flex;align-items:center;justify-content:center;font-family:"Geist Mono",ui-monospace,monospace;font-size:36px;font-weight:600;background:#FFFFFF;border:1px solid rgba(0,0,0,.08);box-shadow:0 4px 12px rgba(0,0,0,.06),inset 0 1px 1px #fffc}
+.row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px 0;border-top:1px solid var(--ln)}
+.ok{display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:999px;font-size:12px;font-weight:500;background:var(--grs);color:var(--gr)}
+.no{display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:999px;font-size:12px;font-weight:500;background:var(--rds);color:var(--rd)}
+.sp{width:14px;height:14px;border-radius:50%;border:2px solid rgba(15,127,255,.25);border-top-color:#0F7FFF;animation:aa-spin .9s linear infinite;flex:none}
+@keyframes aa-spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.gl *{animation:none!important}}
+</style>
+</helmet>
+<div style="position: relative; width: 1440px; height: 900px; overflow: hidden">
+<dc-import name="Desktop" app="mail" recording="false" hint-size="1440px,900px"></dc-import>
+<div style="position: absolute; inset: 0; background: rgba(10,12,18,.28)"></div>
+
+<section class="gl glass" aria-label="Pair AI Apprentice" style="position: absolute; left: 490px; top: 92px; width: 460px; border-radius: 24px; overflow: hidden">
+<div style="height: 40px; display: flex; align-items: center; gap: 8px; padding: 0 14px">
+<span style="width: 12px; height: 12px; border-radius: 50%; background: #FF5F57"></span><span style="width: 12px; height: 12px; border-radius: 50%; background: #FEBC2E"></span><span style="width: 12px; height: 12px; border-radius: 50%; background: #D0D0D0"></span>
+<span class="xs mu" style="margin-left: auto; margin-right: auto; padding-right: 50px">ai apprentice</span>
+</div>
+<div style="padding: 8px 28px 26px; display: flex; flex-direction: column; gap: 20px; align-items: center; text-align: center">
+<span style="width: 84px; height: 84px; border-radius: 24px; background: linear-gradient(180deg, #2C2C31, #0A0A0C); display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 20px rgba(0,0,0,.25)"><dc-import name="Avatar" shape="round" face="smile" tone="#ECEAE5" accent="#0F7FFF" mood="idle" size="72" hint-size="72px,72px"></dc-import></span>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<h1 style="font-size: 26px; line-height: 1.15; letter-spacing: -0.02em; font-weight: 600">Pair this Mac</h1>
+<p class="mu" style="font-size: 14px">Type this code in the control room under <span style="color: var(--tx); font-weight: 500">Install companion</span>.</p>
+</div>
+<div style="display: flex; align-items: center; gap: 8px" aria-label="Pairing code 482 913">
+<span class="dg">4</span><span class="dg">8</span><span class="dg">2</span>
+<span style="width: 10px; height: 3px; border-radius: 2px; background: #C8C8C8"></span>
+<span class="dg">9</span><span class="dg">1</span><span class="dg">3</span>
+</div>
+<div style="display: flex; align-items: center; gap: 10px; justify-content: center">
+<span class="sp"></span>
+<span style="font-weight: 500">waiting for the control room</span>
+<span class="xs mono fa">expires in 9:41</span>
+</div>
+<div class="pill" style="width: 100%; border-radius: 18px; padding: 4px 16px 6px; text-align: left">
+<div style="padding: 10px 0 6px" class="xs mu">what pip needs on this Mac</div>
+<div class="row"><span style="display: flex; flex-direction: column"><span style="font-weight: 500">Screen Recording</span><span class="xs fa">to see which app and window you are in</span></span><span class="ok">allowed</span></div>
+<div class="row"><span style="display: flex; flex-direction: column"><span style="font-weight: 500">Accessibility</span><span class="xs fa">to know the field you type in and point at it</span></span><span style="display: flex; gap: 6px; align-items: center"><span class="no">missing</span><button class="btn bk" type="button">Open Settings</button></span></div>
+<div class="row"><span style="display: flex; flex-direction: column"><span style="font-weight: 500">Microphone</span><span class="xs fa">for spoken answers, never off the record</span></span><span class="ok">allowed</span></div>
+</div>
+<span class="xs fa">control room: <span class="mono">app.ai-apprentice.example/install</span></span>
+</div>
+</section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

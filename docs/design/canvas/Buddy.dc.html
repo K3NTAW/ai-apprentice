@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Cursor buddy</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;family=Instrument+Serif:ital@0;1&amp;display=swap">
+<style>
+body{margin:0}
+.gl{--tx:#111111;--mu:#626262;--fa:#8C8C8C;--bl:#0F7FFF;color:var(--tx);font-family:Geist,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased;color-scheme:light}
+.gl *,.gl *::before,.gl *::after{box-sizing:border-box}
+.gl p{margin:0}
+.glass{background:rgba(251,251,251,.86);-webkit-backdrop-filter:blur(24px) saturate(1.5);backdrop-filter:blur(24px) saturate(1.5);border:1px solid rgba(255,255,255,.7);box-shadow:0 10px 24px #0000001f,0 24px 60px rgba(0,0,0,.18),inset 0 1px 1px #fffc}
+.xs{font-size:12px}.mu{color:var(--mu)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:32px;padding:0 12px;border-radius:999px;font-family:inherit;font-size:13px;font-weight:500;border:1px solid transparent;cursor:pointer;white-space:nowrap;line-height:1}
+.bk{background:#111111;color:#FFFFFF;box-shadow:inset 0 1px 1px rgba(255,255,255,.25),0 4px 10px rgba(0,0,0,.18)}
+.bw{background:#FFFFFF;color:#111111;border-color:rgba(0,0,0,.1);box-shadow:inset 0 1px 1px #fffc,0 1px 2px rgba(0,0,0,.06)}
+.btn:focus-visible{outline:2px solid var(--bl);outline-offset:2px}
+.ic{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.halo{position:absolute;border-radius:8px;box-shadow:0 0 0 2.5px #FF7A45,0 0 0 9px rgba(255,122,69,.22),0 0 40px 12px rgba(255,122,69,.35);animation:aa-halo 1.8s ease-in-out infinite;pointer-events:none}
+@keyframes aa-halo{50%{box-shadow:0 0 0 2.5px #FF7A45,0 0 0 14px rgba(255,122,69,.1),0 0 52px 16px rgba(255,122,69,.22)}}
+@keyframes aa-dash{to{stroke-dashoffset:-40}}
+@media (prefers-reduced-motion:reduce){.gl *,.gl{animation:none!important}}
+</style>
+</helmet>
+<div style="position: relative; width: 1440px; height: 900px; overflow: hidden">
+<dc-import name="Desktop" app="sheet" e4="{{e4}}" hint-size="1440px,900px"></dc-import>
+
+<sc-if value="{{ glance }}" hint-placeholder-val="{{ true }}">
+<svg class="gl" width="1440" height="900" viewBox="0 0 1440 900" style="position: absolute; left: 0; top: 0; pointer-events: none" aria-hidden="true"><path d="M600 548 C 760 420, 960 250, 1104 286" fill="none" stroke="#0F7FFF" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="2 9" style="animation: aa-dash 1.2s linear infinite"></path></svg>
+<svg width="18" height="26" viewBox="0 0 16 22" style="position: absolute; left: 560px; top: 520px" aria-hidden="true"><path d="M1 1v17l4.5-4 3 6.5 3-1.4-3-6.4H14z" fill="#0E1117" stroke="#FFFFFF" stroke-width="1.2"></path></svg>
+<div style="position: absolute; left: 580px; top: 540px; width: 22px; height: 22px; border-radius: 50%; border: 2px dashed rgba(15,127,255,.55)"></div>
+<div style="position: absolute; left: 1100px; top: 268px">
+<dc-import name="Avatar" shape="blob" face="curious" tone="#ECEAE5" accent="#0F7FFF" mood="talking" size="46" hint-size="46px,46px"></dc-import>
+</div>
+<div class="gl glass" style="position: absolute; left: 1102px; top: 320px; width: 286px; padding: 12px 14px; border-radius: 6px 20px 20px 20px; display: flex; flex-direction: column; gap: 6px">
+<span class="xs mu">pip · glance</span>
+<p style="font-size: 14px; line-height: 1.4; font-weight: 500">This one goes to Brno. Sabine always adds a second approver here.</p>
+</div>
+</sc-if>
+
+<sc-if value="{{ stop }}" hint-placeholder-val="{{ false }}">
+<div class="gl halo" style="left: 792px; top: 310px; width: 134px; height: 40px"></div>
+<svg width="10" height="22" viewBox="0 0 10 22" style="position: absolute; left: 846px; top: 319px" aria-hidden="true"><path d="M1 1h3.5M5.5 1H9M5 1v20M1 21h3.5M5.5 21H9" fill="none" stroke="#0E1117" stroke-width="1.6"></path></svg>
+<div style="position: absolute; left: 936px; top: 286px">
+<dc-import name="Avatar" shape="blob" face="smile" tone="#ECEAE5" accent="#0F7FFF" mood="stop" size="52" hint-size="52px,52px"></dc-import>
+</div>
+<div class="gl glass" style="position: absolute; left: 940px; top: 346px; width: 340px; padding: 14px 16px; border-radius: 6px 22px 22px 22px; display: flex; flex-direction: column; gap: 10px">
+<span class="xs" style="color: #C2410C; font-weight: 600">pip · stop and ask</span>
+<p style="font-size: 17px; line-height: 1.35; font-weight: 600; letter-spacing: -0.01em">Sabine would stop here. Why do you think?</p>
+<div style="display: flex; gap: 8px; flex-wrap: wrap">
+<button class="btn bk" type="button"><svg class="ic" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"></path><path d="M3 3v5h5"></path></svg>Replay Sabine's moment</button>
+<button class="btn bw" type="button">I'm not sure</button>
+</div>
+<span class="xs mu">answer out loud · hold ⌃⌥</span>
+</div>
+</sc-if>
+
+<div class="gl glass" style="position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; height: 48px; padding: 0 8px 0 8px; border-radius: 999px">
+<span style="width: 34px; height: 34px; border-radius: 11px; background: linear-gradient(180deg, #2C2C31, #0A0A0C); display: flex; align-items: center; justify-content: center"><dc-import name="Avatar" shape="blob" face="smile" tone="#ECEAE5" accent="#0F7FFF" mood="still" size="30" hint-size="30px,30px"></dc-import></span>
+<span style="font-weight: 600">teaching lena</span>
+<span class="mu">step 4 of 7 · code to a cost center</span>
+<span style="display: inline-flex; gap: 3px"><span style="width: 18px; height: 5px; border-radius: 3px; background: #13784B"></span><span style="width: 18px; height: 5px; border-radius: 3px; background: #D99A1E"></span><span style="width: 18px; height: 5px; border-radius: 3px; background: #13784B"></span><span style="width: 18px; height: 5px; border-radius: 3px; background: #0F7FFF"></span><span style="width: 18px; height: 5px; border-radius: 3px; background: rgba(0,0,0,.12)"></span><span style="width: 18px; height: 5px; border-radius: 3px; background: rgba(0,0,0,.12)"></span><span style="width: 18px; height: 5px; border-radius: 3px; background: rgba(0,0,0,.12)"></span></span>
+<button class="btn bw" type="button">Off the record</button>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"moment":{"editor":"enum","options":["glance","stop"],"default":"glance"},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const stop = this.props.moment === 'stop';
+    return { stop, glance: !stop, e4: stop ? '4711' : '' };
+  }
+}
+</script>
+</body>
+</html>

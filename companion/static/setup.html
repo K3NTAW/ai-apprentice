@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'" />
+    <title>AI Apprentice</title>
+    <link rel="stylesheet" href="canvas.css" />
+    <link rel="stylesheet" href="setup.css" />
+  </head>
+  <body class="gl">
+    <main class="glass sheet">
+      <span class="eb">ai apprentice · first run</span>
+      <h1>Paste your AI Apprentice URL</h1>
+      <p class="mu">The address of the AI Apprentice app itself, not the website about it, for example <code class="mono">https://app.your-company.example</code>. It must start with <code class="mono">https://</code>.</p>
+      <p class="mu">The window then opens straight into your agents, or the sign-in if you are not signed in yet.</p>
+      <form id="form">
+        <input id="url" class="field mono" type="url" placeholder="https://" autocomplete="off" spellcheck="false" required />
+        <button type="submit" class="btn bk">Save and open</button>
+      </form>
+      <p id="error" class="xs error" role="alert"></p>
+    </main>
+    <script src="setup.js"></script>
+  </body>
+</html>

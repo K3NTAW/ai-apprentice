@@ -1,0 +1,47 @@
+/* Floating panel, 1:1 with FloatPanel.dc.html. The window material (vibrancy/mica/acrylic) shows through only when
+   main picked one; the solid fallback paints the canvas glass colour. */
+html, body { margin: 0; height: 100%; }
+body { background: transparent; overflow: hidden; user-select: none; }
+.sheet {
+  box-sizing: border-box; height: 100%; padding: 22px; display: flex; flex-direction: column; gap: 16px; overflow-y: auto;
+  /* The panel is an opaque frameless window: the OS rounds its corners, so the sheet fills it edge to edge. */
+  background: rgba(250,250,252,.94); border: 0; border-radius: 0; box-shadow: inset 0 1px 1px #fffc;
+}
+html[data-material="vibrancy"] .sheet, html[data-material="mica"] .sheet, html[data-material="acrylic"] .sheet { background: rgba(250,250,252,.92); }
+.pill { box-shadow: 0 4px 12px rgba(0,0,0,.06), inset 0 1px 1px #fffc; }
+.titlebar { -webkit-app-region: drag; display: flex; align-items: center; gap: 14px; }
+.titlebar button { -webkit-app-region: no-drag; }
+.logo { width: 56px; height: 56px; border-radius: 17px; }
+.orb { width: 18px; height: 18px; border-radius: 50%; background: var(--bl); box-shadow: 0 0 12px rgba(15,127,255,.6); }
+.who { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.brand { font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+.state.ok { color: var(--gr); }
+.btn.sq { width: 32px; height: 32px; padding: 0; }
+.card { border-radius: 18px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+.session { display: flex; flex-direction: column; gap: 16px; }
+.between { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.tags { display: inline-flex; gap: 6px; }
+.tag { display: inline-flex; align-items: center; height: 22px; padding: 0 9px; border-radius: 999px; font-size: 12px; font-weight: 500; background: var(--s3); color: var(--mu); }
+.tag.off { background: var(--cos); color: var(--co); }
+.title { font-weight: 600; font-size: 14px; }
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; padding-top: 4px; }
+.stats > span { display: flex; flex-direction: column; }
+.num { font-size: 17px; font-weight: 600; }
+.text { white-space: pre-wrap; word-wrap: break-word; max-height: 72px; overflow-y: auto; user-select: text; }
+.question { font-size: 15px; font-weight: 500; }
+.answer { font-size: 15px; color: var(--bl); }
+.actions { display: flex; gap: 8px; }
+.actions .btn { flex: 1; }
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.colsec { display: flex; flex-direction: column; }
+.colsec .head { padding-bottom: 6px; }
+.hint { padding-bottom: 4px; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 0; border-top: 1px solid var(--ln); flex-wrap: wrap; }
+.kc.keys { cursor: pointer; min-width: 64px; height: 22px; }
+.kc.keys:focus-visible { outline: 2px solid var(--bl); outline-offset: 2px; }
+.error { flex-basis: 100%; color: var(--rd); font-size: 12px; }
+.stack { display: flex; flex-direction: column; }
+.stack .btn { justify-content: space-between; }
+.link { height: 28px; padding: 0; }
+.toggle { cursor: pointer; }
+.footer { display: flex; gap: 8px; justify-content: space-between; padding-top: 2px; }

@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Component sheet</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;family=Instrument+Serif:ital@0;1&amp;display=swap">
+<style>
+body{margin:0}
+.aa{--bg:#050505;--s1:#121212;--s2:#1C1C1C;--s3:#2A2A2A;--ln:rgba(255,255,255,.08);--ln2:rgba(255,255,255,.14);--tx:#FFFFFF;--mu:#9E9E9E;--fa:#858585;--ac:#4280FF;--ac2:#7AA6FF;--acs:rgba(66,128,255,.12);--pb:#FFFFFF;--pf:#0A0A0A;--cmp:#1F1F21;--am:#F5A524;--ams:rgba(245,165,36,.15);--gr:#3FCF8E;--grs:rgba(63,207,142,.14);--rd:#FF6B6B;--rds:rgba(255,107,107,.14);--vi:#B39DFF;--vis:rgba(179,157,255,.15);--te:#3DD6C2;--tes:rgba(61,214,194,.14);--co:#FF8A65;--cos:rgba(255,138,101,.16);--stage:linear-gradient(180deg, #232327 0%, #0A0A0C 100%);--sh:0 24px 64px rgba(0,0,0,.55);background:var(--bg);color:var(--tx);font-family:Geist,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;color-scheme:dark}
+.aa *,.aa *::before,.aa *::after{box-sizing:border-box}
+.aa h1,.aa h2,.aa h3,.aa p{margin:0}
+.td{font-size:64px;line-height:1.02;letter-spacing:-.035em;font-weight:600;background:linear-gradient(180deg,var(--tx) 30%,color-mix(in oklab,var(--tx) 70%,transparent));-webkit-background-clip:text;background-clip:text;color:transparent}
+.t1{font-size:36px;line-height:1.1;letter-spacing:-.025em;font-weight:600}
+.t2{font-size:24px;line-height:1.2;letter-spacing:-.02em;font-weight:600}
+.t3{font-size:17px;line-height:1.35;letter-spacing:-.01em;font-weight:600}
+.sm{font-size:13px}.xs{font-size:12px}.mu{color:var(--mu)}.fa{color:var(--fa)}
+.eb{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--mu);font-weight:500}
+.mono{font-family:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace;font-variant-numeric:tabular-nums}
+.qs{font-family:"Instrument Serif",Georgia,serif;font-style:italic;font-weight:400}
+.card{background:var(--s1);border:1px solid var(--ln);border-radius:16px}
+.sec{display:flex;flex-direction:column;gap:18px;padding:28px;border-radius:20px;border:1px solid var(--ln);background:var(--s1)}
+.sec>h2{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--mu);font-weight:500}
+.row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:40px;padding:0 18px;border-radius:999px;font-family:inherit;font-size:14px;font-weight:500;border:1px solid transparent;cursor:pointer;white-space:nowrap;line-height:1}
+.bp{background:var(--pb);color:var(--pf)}.bs{background:var(--s2);border-color:var(--ln2);color:var(--tx)}.bg{background:transparent;color:var(--mu)}.bd{background:var(--rds);color:var(--rd)}
+.bl{height:48px;padding:0 24px;font-size:15px}.bsm{height:32px;padding:0 12px;font-size:13px}
+.btn:focus-visible,.inp:focus-visible,.tab:focus-visible,.sw:focus-visible{outline:2px solid var(--ac2);outline-offset:2px}
+.bdg{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 9px;border-radius:999px;font-size:12px;font-weight:500;white-space:nowrap;line-height:1}
+.bdg::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.k-lim{background:var(--tes);color:var(--te)}.k-exc{background:var(--vis);color:var(--vi)}.k-stop{background:var(--cos);color:var(--co)}.k-jc{background:var(--ams);color:var(--am)}.k-ok{background:var(--grs);color:var(--gr)}.k-pend{background:var(--s3);color:var(--mu)}.k-ac{background:var(--acs);color:var(--ac2)}.k-rd{background:var(--rds);color:var(--rd)}
+.inp{display:block;width:100%;height:44px;border-radius:12px;background:var(--s2);border:1px solid var(--ln2);color:var(--tx);padding:0 14px;font-family:inherit;font-size:14px}
+.inp::placeholder{color:var(--fa)}
+.lbl{display:block;font-size:13px;color:var(--mu);font-weight:500;margin-bottom:6px}
+.code{width:44px;height:52px;border-radius:12px;background:var(--s2);border:1px solid var(--ln2);color:var(--tx);font-family:"Geist Mono",ui-monospace,monospace;font-size:22px;text-align:center}
+.kc{display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:26px;padding:0 7px;border-radius:7px;background:var(--s3);border:1px solid var(--ln2);border-bottom-width:2px;font-family:"Geist Mono",ui-monospace,Menlo,monospace;font-size:13px;font-weight:500;color:var(--tx);line-height:1}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--ln)}
+.tab{padding:12px 14px;color:var(--mu);font-family:inherit;font-size:14px;font-weight:500;background:none;border:0;border-bottom:2px solid transparent;margin-bottom:-1px;cursor:pointer}
+.tab.on{color:var(--tx);border-bottom-color:var(--tx)}
+.bar{position:relative;height:8px;border-radius:99px;background:var(--s3)}
+.bar i{position:absolute;left:0;top:0;bottom:0;border-radius:99px;background:var(--ac);display:block}
+.bar i.lo{background:var(--am)}
+.bar b{position:absolute;left:75%;top:-5px;bottom:-5px;width:2px;border-radius:2px;background:var(--tx);opacity:.6;display:block}
+.bub{background:var(--s2);border:1px solid var(--ln2);border-radius:18px 18px 18px 6px;padding:12px 16px}
+.ic{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.halo{position:absolute;border-radius:10px;box-shadow:0 0 0 2.5px #FF7A45,0 0 0 9px rgba(255,122,69,.22),0 0 40px 12px rgba(255,122,69,.32);animation:aa-halo 1.8s ease-in-out infinite;pointer-events:none}
+@keyframes aa-halo{50%{box-shadow:0 0 0 2.5px #FF7A45,0 0 0 14px rgba(255,122,69,.1),0 0 52px 16px rgba(255,122,69,.2)}}
+.sw{width:40px;height:24px;border-radius:99px;background:var(--s3);border:1px solid var(--ln2);position:relative;padding:0;cursor:pointer;flex:none}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:var(--mu)}
+.sw.on{background:var(--ac);border-color:var(--ac)}.sw.on::after{left:19px;background:#fff}
+.seg{display:inline-flex;padding:3px;border-radius:999px;background:var(--s2);border:1px solid var(--ln)}
+.seg button{height:30px;padding:0 14px;border-radius:999px;border:0;background:none;color:var(--mu);font-family:inherit;font-size:13px;font-weight:500;cursor:pointer}
+.seg button.on{background:var(--s3);color:var(--tx)}
+.sw-c{display:flex;flex-direction:column;gap:8px;min-width:0}
+.chip{height:64px;border-radius:12px;border:1px solid var(--ln2)}
+.tile{width:100%;aspect-ratio:1;max-width:100%;border-radius:18px;background:var(--stage);display:flex;align-items:center;justify-content:center}
+.dotc{display:flex;flex-direction:column;align-items:center;gap:10px;min-width:96px}
+.gls{background:rgba(251,251,251,.9);border:1px solid rgba(255,255,255,.7);box-shadow:0 10px 24px #0000001f,inset 0 1px 1px #fffc;color:#111111}
+.bk{background:#111111;color:#FFFFFF;box-shadow:inset 0 1px 1px rgba(255,255,255,.25),0 4px 10px rgba(0,0,0,.18)}
+.bw{background:#FFFFFF;color:#111111;border-color:rgba(0,0,0,.1);box-shadow:inset 0 1px 1px #fffc,0 1px 2px rgba(0,0,0,.06)}
+@media (prefers-reduced-motion:reduce){.aa *{animation:none!important}}
+</style>
+</helmet>
+<div class="aa" style="width: 1440px; min-height: 2900px; padding: 56px; display: flex; flex-direction: column; gap: 24px; background: var(--bg)">
+
+<div style="display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; flex-wrap: wrap; padding-bottom: 8px">
+<div style="display: flex; flex-direction: column; gap: 10px"><span class="eb">AI Apprentice · design system v0.1</span><h1 class="td">Components</h1></div>
+<p class="mu" style="max-width: 560px">Control room follows Grok: near-black, monochrome, white primary pills, 24 px composer, electric blue only as a signal. Desktop companion follows Clicky: frosted glass, black pills, a blue pointer. Clay bots are the only playful element. The expert's own words are set in Instrument Serif italic.</p>
+</div>
+
+<div class="sec">
+<h2>Colour</h2>
+<div style="display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 14px">
+<div class="sw-c"><div class="chip" style="background: #050505"></div><span class="sm">Base</span><span class="xs mono fa">#050505</span></div>
+<div class="sw-c"><div class="chip" style="background: #121212"></div><span class="sm">Card</span><span class="xs mono fa">#121212</span></div>
+<div class="sw-c"><div class="chip" style="background: #1F1F21"></div><span class="sm">Composer</span><span class="xs mono fa">#1F1F21</span></div>
+<div class="sw-c"><div class="chip" style="background: rgba(255,255,255,.08)"></div><span class="sm">Border</span><span class="xs mono fa">white 8% / 14%</span></div>
+<div class="sw-c"><div class="chip" style="background: #FFFFFF"></div><span class="sm">Text · primary button</span><span class="xs mono fa">#FFFFFF</span></div>
+<div class="sw-c"><div class="chip" style="background: #9E9E9E"></div><span class="sm">Secondary text</span><span class="xs mono fa">#9E9E9E</span></div>
+<div class="sw-c"><div class="chip" style="background: #4280FF"></div><span class="sm">Electric blue · signal</span><span class="xs mono fa">#4280FF</span></div>
+<div class="sw-c"><div class="chip" style="background: #0F7FFF"></div><span class="sm">Pointer blue</span><span class="xs mono fa">#0F7FFF · companion</span></div>
+<div class="sw-c"><div class="chip" style="background: #3DD6C2"></div><span class="sm">Limit</span><span class="xs mono fa">#3DD6C2</span></div>
+<div class="sw-c"><div class="chip" style="background: #B39DFF"></div><span class="sm">Exception</span><span class="xs mono fa">#B39DFF</span></div>
+<div class="sw-c"><div class="chip" style="background: #FF8A65"></div><span class="sm">Stop and ask · halo</span><span class="xs mono fa">#FF8A65</span></div>
+<div class="sw-c"><div class="chip" style="background: #F5A524"></div><span class="sm">Judgment call · below 75%</span><span class="xs mono fa">#F5A524</span></div>
+<div class="sw-c"><div class="chip" style="background: #3FCF8E"></div><span class="sm">Confirmed · mastered</span><span class="xs mono fa">#3FCF8E</span></div>
+<div class="sw-c"><div class="chip" style="background: #FF6B6B"></div><span class="sm">Danger · recording</span><span class="xs mono fa">#FF6B6B</span></div>
+<div class="sw-c"><div class="chip" style="background: rgba(251,251,251,.9)"></div><span class="sm">Glass</span><span class="xs mono fa">#FBFBFB 90%</span></div>
+<div class="sw-c"><div class="chip" style="background: #111111"></div><span class="sm">Companion ink</span><span class="xs mono fa">#111111</span></div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px; padding-top: 6px">
+<span class="xs fa">Clay palette, body and accent, 12 colours plus hex</span>
+<div style="display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 10px">
+<sc-for list="{{ palette }}" as="c" hint-placeholder-count="12">
+<div class="sw-c"><div style="height: 48px; border-radius: 50%; aspect-ratio: 1; max-width: 100%; background: {{c.bg}}; border: 1.5px solid #0A0A0C"></div><span class="xs">{{c.n}}</span><span class="xs mono fa">{{c.hex}}</span></div>
+</sc-for>
+</div>
+</div>
+</div>
+
+<div style="display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px">
+<div class="sec">
+<h2>Type · Geist, Geist Mono, Instrument Serif</h2>
+<div style="display: flex; flex-direction: column; gap: 14px">
+<div class="row" style="justify-content: space-between"><span class="td" style="font-size: 56px">Display</span><span class="xs mono fa">64 / 600 / -3.5%</span></div>
+<div class="row" style="justify-content: space-between"><span class="t1">Heading 1</span><span class="xs mono fa">36 / 600</span></div>
+<div class="row" style="justify-content: space-between"><span class="t2">Heading 2</span><span class="xs mono fa">24 / 600</span></div>
+<div class="row" style="justify-content: space-between"><span class="t3">Heading 3</span><span class="xs mono fa">17 / 600</span></div>
+<div class="row" style="justify-content: space-between"><span>Body text for reading</span><span class="xs mono fa">14 / 400</span></div>
+<div class="row" style="justify-content: space-between"><span class="sm mu">Small, secondary</span><span class="xs mono fa">13 / 400</span></div>
+<div class="row" style="justify-content: space-between"><span class="eb">Eyebrow label</span><span class="xs mono fa">12 / 500 / caps</span></div>
+<div class="row" style="justify-content: space-between"><span class="mono">03:12 · 7,200.00 · 0400</span><span class="xs mono fa">Mono 13</span></div>
+<div class="row" style="justify-content: space-between"><span class="qs" style="font-size: 34px">"Equipment over €5,000 is always capex."</span><span class="xs mono fa">Serif italic 38</span></div>
+</div>
+</div>
+
+<div class="sec">
+<h2>Buttons</h2>
+<div class="row"><button class="btn bp" type="button">Primary</button><button class="btn bs" type="button">Secondary</button><button class="btn bg" type="button">Ghost</button><button class="btn bd" type="button">Danger</button></div>
+<div class="row"><button class="btn bp bl" type="button"><svg class="ic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3"></path></svg>Train</button><button class="btn bs" type="button">Default 40</button><button class="btn bs bsm" type="button">Small 32</button><button class="btn bs" type="button" aria-label="Add" style="width: 40px; padding: 0"><svg class="ic" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg></button><button class="btn bp" type="button" disabled="{{ true }}" style="opacity: .45; cursor: default">Disabled</button></div>
+<div class="row" style="padding: 16px; border-radius: 16px; background: linear-gradient(135deg, #DDE3EE, #C9D1DF)"><span class="xs" style="color: #3A3F48; width: 100%">Companion on glass</span><button class="btn bk" type="button">End task</button><button class="btn bw" type="button">Off the record</button><button class="btn bw" type="button" aria-label="Pause" style="width: 40px; padding: 0; color: #111111"><svg class="ic" viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"></path></svg></button></div>
+<h2 style="font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--mu); font-weight: 500; padding-top: 8px">Keycaps</h2>
+<div class="row"><span style="display: inline-flex; gap: 4px"><span class="kc">⌘</span><span class="kc">⇧</span><span class="kc">T</span></span><span style="display: inline-flex; gap: 4px"><span class="kc">⌥</span><span class="kc">⇧</span><span class="kc">A</span></span><span style="display: inline-flex; gap: 4px"><span class="kc">⌃</span><span class="kc">⌘</span><span class="kc">V</span></span><span style="display: inline-flex; gap: 4px"><span class="kc">⌘</span><span class="kc">D</span></span><span style="display: inline-flex; gap: 4px"><span class="kc">⌃</span><span class="kc">⌥</span></span></div>
+</div>
+</div>
+
+<div style="display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px">
+<div class="sec">
+<h2>Inputs</h2>
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px">
+<div><label class="lbl" for="c-name">Agent name</label><input class="inp" id="c-name" type="text" value="Pip"></div>
+<div><label class="lbl" for="c-empty">Work email</label><input class="inp" id="c-empty" type="email" placeholder="name@company.com"></div>
+<div><label class="lbl" for="c-focus">Focused</label><input class="inp" id="c-focus" type="text" value="Senior AP Clerk" style="border-color: var(--ac); box-shadow: 0 0 0 3px var(--acs)"></div>
+<div><label class="lbl" for="c-err">With error</label><input class="inp" id="c-err" type="email" value="sabine.keller@" style="border-color: var(--rd)"><span class="xs" style="color: var(--rd); display: block; margin-top: 6px">Add the part after @, for example example.com</span></div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px"><span class="lbl" style="margin: 0">Pairing code</span>
+<div class="row" style="gap: 6px"><input class="code" aria-label="Digit 1" value="4"><input class="code" aria-label="Digit 2" value="8"><input class="code" aria-label="Digit 3" value="2"><span class="fa">·</span><input class="code" aria-label="Digit 4" value="9"><input class="code" aria-label="Digit 5"><input class="code" aria-label="Digit 6"></div></div>
+<div class="row" style="justify-content: space-between"><span class="row" style="gap: 10px"><button class="sw on" type="button" aria-pressed="true" aria-label="Switch on"></button><span class="sm">On</span><button class="sw" type="button" aria-pressed="false" aria-label="Switch off"></button><span class="sm">Off</span></span><div class="seg"><button class="on" type="button">Expert</button><button type="button">Learner</button><button type="button">Owner</button></div></div>
+</div>
+
+<div class="sec">
+<h2>Tabs, badges, score bars</h2>
+<div class="tabs"><button class="tab on" type="button">Processes <span class="xs mono fa">6</span></button><button class="tab" type="button">Shortcuts <span class="xs mono fa">23</span></button><button class="tab" type="button">Guardrails <span class="xs mono fa">14</span></button><button class="tab" type="button">Learners <span class="xs mono fa">3</span></button><button class="tab" type="button">Settings</button></div>
+<div class="row"><span class="bdg k-ok">Confirmed</span><span class="bdg k-pend">Not yet confirmed</span><span class="bdg k-lim">Limit</span><span class="bdg k-exc">Exception</span><span class="bdg k-stop">Stop and ask</span><span class="bdg k-jc">Judgment call</span><span class="bdg k-ac">Training now</span><span class="bdg k-ok">Mastered</span><span class="bdg k-jc">Practice next</span><span class="bdg k-rd">Missing</span></div>
+<div style="display: flex; flex-direction: column; gap: 16px; padding-top: 6px">
+<div style="display: flex; flex-direction: column; gap: 7px"><div class="sm" style="display: flex; justify-content: space-between"><span>Knows why · above threshold</span><span class="mono">92%</span></div><div class="bar"><i style="width: 92%"></i><b></b></div></div>
+<div style="display: flex; flex-direction: column; gap: 7px"><div class="sm" style="display: flex; justify-content: space-between"><span>Knows when to stop · below threshold</span><span class="mono">68%</span></div><div class="bar"><i class="lo" style="width: 68%"></i><b></b></div></div>
+<span class="xs fa">The tick marks 75%, the bar every step must clear.</span>
+</div>
+</div>
+</div>
+
+<div style="display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px">
+<div class="sec">
+<h2>Timeline dots</h2>
+<div style="position: relative; display: flex; justify-content: space-between; padding: 6px 0">
+<div style="position: absolute; left: 48px; right: 48px; top: 24px; height: 2px; background: var(--ln2)"></div>
+<div class="dotc"><span style="height: 36px; display: flex; align-items: center"><span style="position: relative; width: 14px; height: 14px; border-radius: 50%; background: var(--ac); box-shadow: 0 0 0 4px var(--s1)"></span></span><span class="xs mu">Step</span></div>
+<div class="dotc"><span style="height: 36px; display: flex; align-items: center"><span style="position: relative; width: 24px; height: 24px; border-radius: 50%; background: var(--am); box-shadow: 0 0 0 4px var(--s1)"></span></span><span class="xs mu">Judgment call</span></div>
+<div class="dotc"><span style="height: 36px; display: flex; align-items: center"><span style="position: relative; width: 24px; height: 24px; border-radius: 50%; background: var(--am); box-shadow: 0 0 0 4px var(--s1), 0 0 0 6px var(--tx)"></span></span><span class="xs mu">Selected</span></div>
+<div class="dotc"><span style="height: 36px; display: flex; align-items: center"><span style="position: relative; width: 14px; height: 14px; border-radius: 50%; background: var(--gr); box-shadow: 0 0 0 4px var(--s1)"></span></span><span class="xs mu">Mastered</span></div>
+<div class="dotc"><span style="height: 36px; display: flex; align-items: center"><span style="position: relative; width: 14px; height: 14px; border-radius: 50%; background: var(--s1); border: 2px solid var(--ln2); box-shadow: 0 0 0 4px var(--s1)"></span></span><span class="xs mu">Upcoming</span></div>
+</div>
+<h2 style="font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--mu); font-weight: 500; padding-top: 4px">Bubbles, halo, toast</h2>
+<div style="display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap">
+<div class="bub" style="max-width: 300px"><span class="xs mu" style="display: block">Pip · at a pause</span>You moved that one to capex. What made you do that?</div>
+<div class="bub qs" style="max-width: 280px; border-radius: 18px 18px 6px 18px; background: var(--s3); border-color: transparent; color: var(--tx); font-size: 21px; line-height: 1.2">Equipment over €5,000 is always capex.</div>
+</div>
+<div style="display: flex; gap: 28px; align-items: center; flex-wrap: wrap; padding: 22px; border-radius: 16px; background: #F3F4F6">
+<div style="position: relative; width: 150px"><span class="xs" style="display: block; color: #6A707C; margin-bottom: 4px">Cost center</span><span class="mono" style="display: flex; align-items: center; height: 36px; padding: 0 10px; border: 1px solid #D3D7DE; background: #FFFFFF; color: #111111; border-radius: 6px">4711</span><span class="halo" style="left: 0; right: 0; bottom: 0; height: 36px; border-radius: 6px"></span></div>
+<div class="gls" style="padding: 12px 14px; border-radius: 6px 20px 20px 20px; max-width: 260px"><span class="xs" style="display: block; color: #C2410C; font-weight: 600">pip · stop and ask</span><span style="font-weight: 600">Sabine would stop here. Why do you think?</span></div>
+</div>
+<div class="card" style="display: flex; align-items: center; gap: 12px; padding: 12px 16px; box-shadow: var(--sh); max-width: 420px; background: var(--s2); border-color: var(--ln2)"><span style="width: 22px; height: 22px; border-radius: 50%; background: var(--grs); color: var(--gr); display: inline-flex; align-items: center; justify-content: center"><svg class="ic" viewBox="0 0 24 24" style="width: 14px; height: 14px"><path d="m5 12 5 5 9-10"></path></svg></span><span style="flex: 1">Work Map confirmed. Lena can learn it now.</span><button class="btn bg bsm" type="button">Undo</button></div>
+</div>
+
+<div class="sec">
+<h2>Cards and empty state</h2>
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px">
+<div class="card" style="padding: 14px; display: flex; flex-direction: column; gap: 12px; background: var(--bg)">
+<div style="position: relative; height: 150px; border-radius: 12px; background: var(--stage); display: flex; align-items: center; justify-content: center"><span class="bdg k-ok" style="position: absolute; left: 10px; top: 10px">Ready to teach</span><dc-import name="Avatar" shape="blob" face="smile" tone="#ECEAE5" accent="#3A4EFD" mood="idle" size="104" hint-size="104px,104px"></dc-import></div>
+<div style="padding: 0 4px"><div class="t2">Pip</div><div class="mu">Senior AP Clerk</div><div class="sm mu">learns from <span style="color: var(--tx)">Sabine Keller</span></div></div>
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 10px 4px 2px; border-top: 1px solid var(--ln)"><span><span class="mono" style="font-weight: 600; display: block">6</span><span class="xs fa">Proc.</span></span><span><span class="mono" style="font-weight: 600; display: block">23</span><span class="xs fa">Keys</span></span><span><span class="mono" style="font-weight: 600; display: block">14</span><span class="xs fa">Guard.</span></span><span><span class="mono" style="font-weight: 600; display: block">3</span><span class="xs fa">Learn.</span></span></div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 14px">
+<div class="card" style="padding: 18px; display: flex; flex-direction: column; gap: 6px"><span class="t3">Basic card</span><span class="sm mu">1 px border, 16 px radius, no shadow. Shadow only for things that float.</span></div>
+<div class="card" style="padding: 18px; display: flex; flex-direction: column; align-items: center; gap: 10px; border-style: dashed; border-color: var(--ln2); background: transparent; text-align: center; flex: 1; justify-content: center"><span style="width: 44px; height: 44px; border-radius: 50%; background: var(--s2); color: var(--ac2); display: inline-flex; align-items: center; justify-content: center"><svg class="ic" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg></span><span class="t3">New agent</span></div>
+</div>
+</div>
+<div class="card" style="padding: 28px; display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; background: var(--bg)">
+<dc-import name="Avatar" shape="round" face="calm" tone="#8E95A3" accent="#62A9F3" mood="idle" size="88" hint-size="88px,88px"></dc-import>
+<span class="t3">No agents yet</span>
+<span class="sm mu" style="max-width: 340px">An agent learns from one expert while they work. Start with the person you would miss most.</span>
+<button class="btn bp bsm" type="button">Create your first agent</button>
+</div>
+</div>
+</div>
+
+<div class="sec">
+<h2>Clay avatar · 8 states · blob and star</h2>
+<div style="display: grid; grid-template-columns: 120px repeat(8, minmax(0, 1fr)); gap: 12px; align-items: center">
+<span></span>
+<sc-for list="{{ moods }}" as="m" hint-placeholder-count="8"><span class="xs mu" style="text-align: center">{{m.label}}</span></sc-for>
+<span class="sm">Blob · smile<span class="xs fa" style="display: block">Clay · indigo</span></span>
+<sc-for list="{{ moods }}" as="m" hint-placeholder-count="8"><div class="tile"><dc-import name="Avatar" shape="blob" face="smile" tone="#ECEAE5" accent="#3A4EFD" mood="{{m.id}}" size="96" hint-size="96px,96px"></dc-import></div></sc-for>
+<span class="sm">Star · wink<span class="xs fa" style="display: block">Sun · pink</span></span>
+<sc-for list="{{ moods }}" as="m" hint-placeholder-count="8"><div class="tile"><dc-import name="Avatar" shape="star" face="wink" tone="#F3C354" accent="#E775C0" mood="{{m.id}}" size="96" hint-size="96px,96px"></dc-import></div></sc-for>
+</div>
+<div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; padding-top: 8px">
+<sc-for list="{{ shapes }}" as="s" hint-placeholder-count="6">
+<div style="display: flex; flex-direction: column; gap: 8px; align-items: center"><div class="tile" style="max-width: 140px"><dc-import name="Avatar" shape="{{s.shape}}" face="{{s.face}}" tone="{{s.tone}}" accent="{{s.accent}}" mood="idle" size="104" hint-size="104px,104px"></dc-import></div><span class="xs mu">{{s.label}}</span></div>
+</sc-for>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":2900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const pal = [['Clay', '#ECEAE5'], ['Sun', '#F3C354'], ['Orange', '#F3A150'], ['Coral', '#ED6D65'], ['Pink', '#E775C0'], ['Violet', '#A27DF8'], ['Indigo', '#3A4EFD'], ['Blue', '#62A9F3'], ['Teal', '#4FC7B8'], ['Mint', '#65D9A5'], ['Lime', '#B5DB5A'], ['Slate', '#8E95A3']];
+    const palette = pal.map(([n, hex]) => ({ n, hex, bg: 'radial-gradient(75% 75% at 34% 30%, color-mix(in oklab, ' + hex + ' 30%, white) 0%, ' + hex + ' 46%, color-mix(in oklab, ' + hex + ' 74%, black) 100%)' }));
+    const moods = ['idle', 'listening', 'thinking', 'talking', 'asking', 'stop', 'happy', 'paused'].map((id) => ({ id, label: id.charAt(0).toUpperCase() + id.slice(1) }));
+    const shapes = [
+      { shape: 'blob', face: 'smile', tone: '#ECEAE5', accent: '#3A4EFD', label: 'Blob · smile' },
+      { shape: 'round', face: 'calm', tone: '#A27DF8', accent: '#E775C0', label: 'Round · calm' },
+      { shape: 'square', face: 'focus', tone: '#65D9A5', accent: '#A27DF8', label: 'Square · focus' },
+      { shape: 'pill', face: 'robot', tone: '#F3C354', accent: '#3A4EFD', label: 'Pill · robot' },
+      { shape: 'bean', face: 'wink', tone: '#F3A150', accent: '#62A9F3', label: 'Bean · wink' },
+      { shape: 'star', face: 'curious', tone: '#ED6D65', accent: '#F3C354', label: 'Star · curious' }
+    ];
+    return { palette, moods, shapes };
+  }
+}
+</script>
+</body>
+</html>

@@ -8,3 +8,23 @@ wt/
 .orchestrator/daemon.lock
 graphify-out/
 .mcp.json
+node_modules
+.next/
+out/
+.env
+.env.*
+!.env.example
+frames
+data
+spikes/out/
+*.tsbuildinfo
+next-env.d.ts
+.DS_Store
+coverage/
+e2e/live/out/
+
+# desktop companion build output
+companion/dist/
+companion/out/
+companion/release/
+*.app

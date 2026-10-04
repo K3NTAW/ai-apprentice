@@ -1,0 +1,19 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src data:" />
+    <link rel="stylesheet" href="canvas.css" />
+    <link rel="stylesheet" href="overlay.css" />
+  </head>
+  <body class="gl">
+    <svg id="path" class="flight hidden" aria-hidden="true"><path id="path-line" d=""></path></svg>
+    <div id="root"></div>
+    <div id="buddy" class="buddy idle hidden"><span class="core"></span><span class="ring"></span><span class="dot d1"></span><span class="dot d2"></span><span class="dot d3"></span><img id="avatar" class="avatar" alt="" draggable="false" /></div>
+    <div id="say" class="glass caption say hidden"></div>
+    <script src="avatarSrc.js"></script>
+    <script src="flightPath.js"></script>
+    <script src="scheduler.js"></script>
+    <script src="overlay.js"></script>
+  </body>
+</html>

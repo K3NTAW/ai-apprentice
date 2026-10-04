@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>New agent</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;family=Instrument+Serif:ital@0;1&amp;display=swap">
+<style>
+body{margin:0}
+.aa{--bg:#050505;--s1:#121212;--s2:#1C1C1C;--s3:#2A2A2A;--ln:rgba(255,255,255,.08);--ln2:rgba(255,255,255,.14);--tx:#FFFFFF;--mu:#9E9E9E;--fa:#858585;--ac:#4280FF;--ac2:#7AA6FF;--acs:rgba(66,128,255,.12);--pb:#FFFFFF;--pf:#0A0A0A;--cmp:#1F1F21;--am:#F5A524;--ams:rgba(245,165,36,.15);--gr:#3FCF8E;--grs:rgba(63,207,142,.14);--rd:#FF6B6B;--rds:rgba(255,107,107,.14);--stage:linear-gradient(180deg, #232327 0%, #0A0A0C 100%);--sh:0 24px 64px rgba(0,0,0,.55);background:var(--bg);color:var(--tx);font-family:Geist,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;color-scheme:dark}
+.aa *,.aa *::before,.aa *::after{box-sizing:border-box}
+.aa h1,.aa h2,.aa h3,.aa p{margin:0}
+.aa a{color:var(--ac2)}
+.t1{font-size:36px;line-height:1.1;letter-spacing:-.025em;font-weight:600;text-wrap:balance}
+.t2{font-size:24px;line-height:1.2;letter-spacing:-.02em;font-weight:600}
+.t3{font-size:17px;line-height:1.35;letter-spacing:-.01em;font-weight:600}
+.sm{font-size:13px}.xs{font-size:12px}.mu{color:var(--mu)}.fa{color:var(--fa)}
+.eb{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--mu);font-weight:500}
+.mono{font-family:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace;font-variant-numeric:tabular-nums}
+.card{background:var(--s1);border:1px solid var(--ln);border-radius:16px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:40px;padding:0 18px;border-radius:999px;font-family:inherit;font-size:14px;font-weight:500;border:1px solid transparent;cursor:pointer;text-decoration:none;white-space:nowrap;line-height:1}
+.bp{background:var(--pb);color:var(--pf)}.bs{background:var(--s2);border-color:var(--ln2);color:var(--tx)}.bg{background:transparent;color:var(--mu)}
+.aa a.btn.bp{color:var(--pf)}.aa a.btn.bs{color:var(--tx)}.aa a.btn.bg{color:var(--mu)}
+.bl{height:48px;padding:0 24px;font-size:15px}.bsm{height:32px;padding:0 12px;font-size:13px}
+.btn:focus-visible,.inp:focus-visible{outline:2px solid var(--ac2);outline-offset:2px}
+.bdg{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 9px;border-radius:999px;font-size:12px;font-weight:500;white-space:nowrap;line-height:1}
+.bdg::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.k-ok{background:var(--grs);color:var(--gr)}.k-pend{background:var(--s3);color:var(--mu)}.k-ac{background:var(--acs);color:var(--ac2)}.k-rd{background:var(--rds);color:var(--rd)}
+.inp{display:block;width:100%;height:44px;border-radius:12px;background:var(--s2);border:1px solid var(--ln2);color:var(--tx);padding:0 14px;font-family:inherit;font-size:14px}
+textarea.inp{height:auto;padding:12px 14px;line-height:1.5;resize:none}
+.lbl{display:block;font-size:13px;color:var(--mu);font-weight:500;margin-bottom:6px}
+.ic{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.bub{background:var(--s2);border:1px solid var(--ln2);border-radius:18px 18px 18px 6px;padding:12px 16px}
+.av{width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:600;font-size:11px;flex:none;background:var(--s3);color:var(--tx)}
+.step{display:flex;align-items:center;gap:10px;color:var(--fa);font-weight:500}
+.step .n{width:28px;height:28px;border-radius:50%;border:1px solid var(--ln2);display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-family:"Geist Mono",ui-monospace,monospace}
+.step.on{color:var(--tx)}.step.on .n{background:var(--pb);border-color:var(--pb);color:var(--pf)}
+.step.done{color:var(--mu)}.step.done .n{background:var(--grs);border-color:transparent;color:var(--gr)}
+.tile{display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 6px 8px;border-radius:12px;border:1px solid var(--ln);background:var(--s2);color:var(--mu);font-family:inherit;font-size:12px;cursor:pointer}
+.tile.on{border-color:var(--ac);color:var(--tx);box-shadow:0 0 0 1px var(--ac)}
+.sw2{width:28px;height:28px;border-radius:50%;border:0;cursor:pointer;padding:0}
+.code{width:48px;height:56px;border-radius:12px;background:var(--s2);border:1px solid var(--ln2);color:var(--tx);font-family:"Geist Mono",ui-monospace,monospace;font-size:24px;text-align:center}
+</style>
+</helmet>
+<div class="aa" style="min-height: 900px; display: flex; flex-wrap: wrap; background: var(--bg)">
+<div style="flex: 1 0 248px; border-right: 1px solid var(--ln)">
+<dc-import name="Sidebar" active="agents" hint-size="248px,900px"></dc-import>
+</div>
+<main style="flex: 999 1 560px; min-width: 0; padding: 36px 40px 56px; display: flex; flex-direction: column; gap: 28px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<a class="sm" href="Gallery.dc.html" style="color: var(--mu); text-decoration: none">Agents /</a>
+<h1 class="t1">New agent</h1>
+</div>
+<ol style="list-style: none; margin: 0; padding: 0; display: flex; gap: 12px; align-items: center; flex-wrap: wrap" aria-label="Steps">
+<li class="{{s1}}"><span class="n">1</span>Details</li>
+<li style="width: 48px; height: 1px; background: var(--ln2)"></li>
+<li class="{{s2}}"><span class="n">2</span>Avatar</li>
+<li style="width: 48px; height: 1px; background: var(--ln2)"></li>
+<li class="{{s3}}"><span class="n">3</span>Install and train</li>
+</ol>
+
+<sc-if value="{{ is1 }}" hint-placeholder-val="{{ true }}">
+<div style="display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start">
+<form class="card" style="flex: 3 1 480px; min-width: 0; padding: 28px; display: flex; flex-direction: column; gap: 20px">
+<div style="display: flex; flex-direction: column; gap: 4px"><h2 class="t2">Who is it, and who does it learn from?</h2><p class="mu">You can change all of this later.</p></div>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px">
+<div><label class="lbl" for="na-name">Agent name</label><input class="inp" id="na-name" type="text" value="Pip"></div>
+<div><label class="lbl" for="na-role">Role it will fill</label><input class="inp" id="na-role" type="text" value="Senior AP Clerk"></div>
+</div>
+<div>
+<label class="lbl" for="na-expert">Expert it learns from</label>
+<div style="position: relative">
+<span class="av" style="position: absolute; left: 10px; top: 8px; background: #3A2A1A; color: #FFC98A">SK</span>
+<input class="inp" id="na-expert" type="text" value="Sabine Keller · sabine.keller@example.com" style="padding-left: 48px">
+</div>
+<p class="xs fa" style="margin-top: 6px">Only the expert can train this agent. They confirm every step before anyone learns from it.</p>
+</div>
+<div><label class="lbl" for="na-first">First task to learn</label><textarea class="inp" id="na-first" rows="3">Coding incoming supplier invoices, including capex or opex and the second approval for the Czech subsidiary.</textarea></div>
+<div style="display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding-top: 4px">
+<a class="btn bg" href="Gallery.dc.html">Cancel</a>
+<a class="btn bp" href="NewAgent2.dc.html">Continue</a>
+</div>
+</form>
+<div style="flex: 2 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 12px">
+<span class="eb">Card preview</span>
+<div class="card" style="padding: 16px; display: flex; flex-direction: column; gap: 14px">
+<div style="height: 168px; border-radius: 12px; background: var(--stage); display: flex; align-items: center; justify-content: center"><dc-import name="Avatar" shape="round" face="smile" tone="#8E95A3" accent="#62A9F3" mood="idle" size="112" hint-size="112px,112px"></dc-import></div>
+<div style="padding: 0 4px; display: flex; flex-direction: column; gap: 2px"><span class="t2">Pip</span><span class="mu">Senior AP Clerk</span><span class="sm mu">learns from <span style="color: var(--tx)">Sabine Keller</span></span></div>
+<span class="bdg k-pend" style="align-self: flex-start; margin-left: 4px">Not trained yet</span>
+</div>
+<p class="xs fa">Next you give it a face. The default is a grey round shape.</p>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ is2 }}" hint-placeholder-val="{{ false }}">
+<div class="card" style="padding: 0; display: flex; flex-wrap: wrap; overflow: hidden">
+<div style="flex: 1 1 380px; min-width: 0; min-height: 520px; background: var(--stage); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; padding: 32px">
+<dc-import name="Avatar" shape="blob" face="smile" tone="#ECEAE5" accent="#3A4EFD" mood="happy" size="240" hint-size="240px,240px"></dc-import>
+<div style="text-align: center"><div class="t2">Pip</div><div class="mu">Senior AP Clerk</div></div>
+</div>
+<div style="flex: 1 1 420px; min-width: 0; padding: 28px; display: flex; flex-direction: column; gap: 22px; border-left: 1px solid var(--ln)">
+<div style="display: flex; flex-direction: column; gap: 4px"><h2 class="t2">Give Pip a face</h2><p class="mu">Learners see this avatar next to their cursor, so pick something friendly and easy to spot.</p></div>
+<div style="display: flex; flex-direction: column; gap: 10px"><span class="lbl" style="margin: 0">Shape</span>
+<div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px">
+<button class="tile on" type="button"><dc-import name="Avatar" shape="blob" face="smile" tone="#ECEAE5" accent="#3A4EFD" mood="calm" size="40" hint-size="40px,40px"></dc-import>Blob</button>
+<button class="tile" type="button"><dc-import name="Avatar" shape="round" face="smile" tone="#ECEAE5" accent="#3A4EFD" mood="calm" size="40" hint-size="40px,40px"></dc-import>Round</button>
+<button class="tile" type="button"><dc-import name="Avatar" shape="square" face="smile" tone="#ECEAE5" accent="#3A4EFD" mood="calm" size="40" hint-size="40px,40px"></dc-import>Square</button>
+<button class="tile" type="button"><dc-import name="Avatar" shape="pill" face="smile" tone="#ECEAE5" accent="#3A4EFD" mood="calm" size="40" hint-size="40px,40px"></dc-import>Pill</button>
+<button class="tile" type="button"><dc-import name="Avatar" shape="bean" face="smile" tone="#ECEAE5" accent="#3A4EFD" mood="calm" size="40" hint-size="40px,40px"></dc-import>Bean</button>
+<button class="tile" type="button"><dc-import name="Avatar" shape="star" face="smile" tone="#ECEAE5" accent="#3A4EFD" mood="calm" size="40" hint-size="40px,40px"></dc-import>Star</button>
+</div></div>
+<div style="display: flex; flex-direction: column; gap: 10px"><span class="lbl" style="margin: 0">Face</span>
+<div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px">
+<button class="tile on" type="button"><dc-import name="Avatar" shape="round" face="smile" tone="#ECEAE5" accent="#3A4EFD" mood="calm" size="40" hint-size="40px,40px"></dc-import>Smile</button>
+<button class="tile" type="button"><dc-import name="Avatar" shape="round" face="focus" tone="#ECEAE5" accent="#3A4EFD" mood="calm" size="40" hint-size="40px,40px"></dc-import>Focus</button>
+<button class="tile" type="button"><dc-import name="Avatar" shape="round" face="curious" tone="#ECEAE5" accent="#3A4EFD" mood="calm" size="40" hint-size="40px,40px"></dc-import>Curious</button>
+<button class="tile" type="button"><dc-import name="Avatar" shape="round" face="calm" tone="#ECEAE5" accent="#3A4EFD" mood="calm" size="40" hint-size="40px,40px"></dc-import>Calm</button>
+<button class="tile" type="button"><dc-import name="Avatar" shape="round" face="wink" tone="#ECEAE5" accent="#3A4EFD" mood="calm" size="40" hint-size="40px,40px"></dc-import>Wink</button>
+<button class="tile" type="button"><dc-import name="Avatar" shape="round" face="robot" tone="#ECEAE5" accent="#3A4EFD" mood="calm" size="40" hint-size="40px,40px"></dc-import>Robot</button>
+</div></div>
+<div style="display: flex; gap: 28px; flex-wrap: wrap">
+<div style="display: flex; flex-direction: column; gap: 10px"><span class="lbl" style="margin: 0">Body colour</span>
+<div style="display: flex; gap: 8px; flex-wrap: wrap">
+<button class="sw2" type="button" aria-label="Clay" style="background: #ECEAE5; box-shadow: 0 0 0 2px var(--s1), 0 0 0 4px var(--tx)"></button>
+<button class="sw2" type="button" aria-label="Sun" style="background: #F3C354"></button>
+<button class="sw2" type="button" aria-label="Mint" style="background: #65D9A5"></button>
+<button class="sw2" type="button" aria-label="Orange" style="background: #F3A150"></button>
+<button class="sw2" type="button" aria-label="Violet" style="background: #A27DF8"></button>
+<button class="sw2" type="button" aria-label="Slate" style="background: #8E95A3"></button>
+</div></div>
+<div style="display: flex; flex-direction: column; gap: 10px"><span class="lbl" style="margin: 0">Accent</span>
+<div style="display: flex; gap: 8px; flex-wrap: wrap">
+<button class="sw2" type="button" aria-label="Indigo" style="background: #3A4EFD; box-shadow: 0 0 0 2px var(--s1), 0 0 0 4px var(--tx)"></button>
+<button class="sw2" type="button" aria-label="Blue" style="background: #62A9F3"></button>
+<button class="sw2" type="button" aria-label="Pink" style="background: #E775C0"></button>
+<button class="sw2" type="button" aria-label="Lime" style="background: #B5DB5A"></button>
+</div></div>
+</div>
+<a class="sm" href="Studio.dc.html" style="align-self: flex-start">Open the full avatar studio</a>
+<div style="display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: auto">
+<a class="btn bg" href="NewAgent.dc.html">Back</a>
+<a class="btn bp" href="NewAgent3.dc.html">Continue</a>
+</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ is3 }}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start">
+<div style="flex: 3 1 520px; min-width: 0; display: flex; flex-direction: column; gap: 14px">
+<div class="card" style="padding: 22px 24px; display: flex; gap: 18px; align-items: center; flex-wrap: wrap">
+<span class="mono" style="width: 32px; height: 32px; border-radius: 50%; background: var(--grs); color: var(--gr); display: inline-flex; align-items: center; justify-content: center; flex: none"><svg class="ic" viewBox="0 0 24 24" style="width: 16px; height: 16px"><path d="m5 12 5 5 9-10"></path></svg></span>
+<div style="flex: 1; min-width: 220px; display: flex; flex-direction: column; gap: 2px"><span class="t3">Install the companion</span><span class="sm mu">A small Mac app that watches the screen while you train and puts Pip next to the learner's cursor.</span></div>
+<span class="bdg k-ok">Installed · v0.9.2</span>
+</div>
+<div class="card" style="padding: 22px 24px; display: flex; flex-direction: column; gap: 16px">
+<div style="display: flex; gap: 18px; align-items: center; flex-wrap: wrap">
+<span class="mono" style="width: 32px; height: 32px; border-radius: 50%; background: var(--grs); color: var(--gr); display: inline-flex; align-items: center; justify-content: center; flex: none"><svg class="ic" viewBox="0 0 24 24" style="width: 16px; height: 16px"><path d="m5 12 5 5 9-10"></path></svg></span>
+<div style="flex: 1; min-width: 220px; display: flex; flex-direction: column; gap: 2px"><span class="t3">Pair it with this workspace</span><span class="sm mu">Type the 6-digit code shown in the companion window.</span></div>
+<span class="bdg k-ok">Paired · Sabine's MacBook Pro</span>
+</div>
+<div style="display: flex; gap: 8px; align-items: center; padding-left: 50px; flex-wrap: wrap">
+<input class="code" aria-label="Digit 1" value="4" readOnly="{{ true }}"><input class="code" aria-label="Digit 2" value="8" readOnly="{{ true }}"><input class="code" aria-label="Digit 3" value="2" readOnly="{{ true }}">
+<span class="fa" style="width: 10px; text-align: center">·</span>
+<input class="code" aria-label="Digit 4" value="9" readOnly="{{ true }}"><input class="code" aria-label="Digit 5" value="1" readOnly="{{ true }}"><input class="code" aria-label="Digit 6" value="3" readOnly="{{ true }}">
+</div>
+</div>
+<div class="card" style="padding: 22px 24px; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; gap: 18px; align-items: center; flex-wrap: wrap">
+<span class="mono" style="width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--ac); color: var(--ac2); display: inline-flex; align-items: center; justify-content: center; font-size: 13px; flex: none">3</span>
+<div style="flex: 1; min-width: 220px; display: flex; flex-direction: column; gap: 2px"><span class="t3">Allow what the companion needs</span><span class="sm mu">macOS asks once. You can revoke any of these in System Settings.</span></div>
+<span class="bdg k-rd">1 missing</span>
+</div>
+<div style="display: flex; flex-direction: column; padding-left: 50px">
+<div style="display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--ln)"><span class="bdg k-ok" style="width: 92px">Allowed</span><span style="flex: 1">Screen Recording<span class="xs fa" style="display: block">To see which app and window you are in</span></span></div>
+<div style="display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--ln)"><span class="bdg k-rd" style="width: 92px">Missing</span><span style="flex: 1">Accessibility<span class="xs fa" style="display: block">To know which field you are typing in and to point at it</span></span><button class="btn bs bsm" type="button">Open System Settings</button></div>
+<div style="display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--ln)"><span class="bdg k-ok" style="width: 92px">Allowed</span><span style="flex: 1">Microphone<span class="xs fa" style="display: block">For your spoken answers. Nothing is recorded off the record.</span></span></div>
+</div>
+</div>
+<div style="display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap">
+<a class="btn bg" href="NewAgent2.dc.html">Back</a>
+<a class="btn bp bl" href="Capture.dc.html"><svg class="ic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3"></path></svg>Start training</a>
+</div>
+</div>
+<div class="card" style="flex: 2 1 320px; min-width: 0; padding: 28px; display: flex; flex-direction: column; align-items: center; gap: 18px; background: var(--stage)">
+<dc-import name="Avatar" shape="blob" face="smile" tone="#ECEAE5" accent="#3A4EFD" mood="listening" size="160" hint-size="160px,160px"></dc-import>
+<div class="bub" style="max-width: 320px"><div class="xs mu" style="margin-bottom: 2px">Pip</div>Do one real task the way you always do. I stay quiet while you type. When you pause, I may ask one short question.</div>
+<div style="width: 100%; display: flex; flex-direction: column; gap: 8px; padding-top: 8px; border-top: 1px solid var(--ln)">
+<span class="xs fa">Good first tasks</span>
+<span class="sm">Code three to five supplier invoices</span>
+<span class="sm">Include one that needs a judgment call</span>
+<span class="sm">Say "off the record" for anything private</span>
+</div>
+</div>
+</div>
+</sc-if>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"step":{"editor":"enum","options":["1","2","3"],"default":"1"},"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const s = String(this.props.step ?? '1');
+    const cls = (n) => (String(n) === s ? 'step on' : (Number(n) < Number(s) ? 'step done' : 'step'));
+    return { is1: s === '1', is2: s === '2', is3: s === '3', s1: cls(1), s2: cls(2), s3: cls(3) };
+  }
+}
+</script>
+</body>
+</html>

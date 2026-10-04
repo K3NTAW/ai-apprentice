@@ -1,0 +1,417 @@
+{
+  "v": 3,
+  "attachments": {},
+  "boards": {
+    "Agent.dc.html": {
+      "expand": "fill",
+      "h": 1120,
+      "is_interactive": true,
+      "title": "7 Agent · Processes",
+      "w": 1440,
+      "x": 0,
+      "y": 7240
+    },
+    "AgentGuardrails.dc.html": {
+      "expand": "fill",
+      "h": 1120,
+      "title": "7 Agent · Guardrails",
+      "w": 1440,
+      "x": 3040,
+      "y": 7240
+    },
+    "AgentLearners.dc.html": {
+      "expand": "fill",
+      "h": 1120,
+      "title": "7 Agent · Learners",
+      "w": 1440,
+      "x": 4560,
+      "y": 7240
+    },
+    "AgentSettings.dc.html": {
+      "expand": "fill",
+      "h": 1120,
+      "title": "7 Agent · Settings",
+      "w": 1440,
+      "x": 6080,
+      "y": 7240
+    },
+    "AgentShortcuts.dc.html": {
+      "expand": "fill",
+      "h": 1120,
+      "title": "7 Agent · Shortcuts",
+      "w": 1440,
+      "x": 1520,
+      "y": 7240
+    },
+    "Avatar.dc.html": {
+      "h": 240,
+      "title": "Clay avatar (tweakable)",
+      "w": 240,
+      "x": 1520,
+      "y": 13120
+    },
+    "Buddy.dc.html": {
+      "h": 900,
+      "title": "15 Cursor buddy · glance",
+      "w": 1440,
+      "x": 3040,
+      "y": 11820
+    },
+    "BuddyStop.dc.html": {
+      "h": 900,
+      "title": "15 Cursor buddy · stop",
+      "w": 1440,
+      "x": 4560,
+      "y": 11820
+    },
+    "Capture.dc.html": {
+      "expand": "fill",
+      "h": 1160,
+      "title": "8 Capture console",
+      "w": 1440,
+      "x": 0,
+      "y": 8760
+    },
+    "Components.dc.html": {
+      "h": 2900,
+      "title": "19 Component sheet",
+      "w": 1440,
+      "x": 0,
+      "y": 13120
+    },
+    "Debrief.dc.html": {
+      "expand": "fill",
+      "h": 1160,
+      "title": "9 Debrief and teach-back",
+      "w": 1440,
+      "x": 1520,
+      "y": 8760
+    },
+    "Desktop.dc.html": {
+      "h": 900,
+      "title": "Mock desktop background",
+      "w": 1440,
+      "x": 2168,
+      "y": 13120
+    },
+    "Dock.dc.html": {
+      "h": 900,
+      "title": "14 Side dock · training",
+      "w": 1440,
+      "x": 0,
+      "y": 11820
+    },
+    "DockCollapsed.dc.html": {
+      "h": 900,
+      "title": "14 Side dock · collapsed 56 px tab",
+      "w": 1440,
+      "x": 1520,
+      "y": 11820
+    },
+    "FloatPanel.dc.html": {
+      "h": 900,
+      "title": "16 Floating panel ⌥⇧A",
+      "w": 1440,
+      "x": 6080,
+      "y": 11820
+    },
+    "Gallery.dc.html": {
+      "expand": "fill",
+      "h": 1360,
+      "title": "4 Agents gallery · dark",
+      "w": 1440,
+      "x": 1520,
+      "y": 3400
+    },
+    "GalleryEmpty.dc.html": {
+      "expand": "fill",
+      "h": 1180,
+      "title": "4 Agents gallery · empty",
+      "w": 1440,
+      "x": 4560,
+      "y": 3400
+    },
+    "GalleryLight.dc.html": {
+      "expand": "fill",
+      "h": 1360,
+      "title": "4 Agents gallery · light",
+      "w": 1440,
+      "x": 3040,
+      "y": 3400
+    },
+    "GalleryPhone.dc.html": {
+      "h": 2000,
+      "title": "4 Agents gallery · phone",
+      "w": 390,
+      "x": 6080,
+      "y": 3400
+    },
+    "LandingLight.dc.html": {
+      "expand": "fill",
+      "h": 2300,
+      "title": "1 Landing · light",
+      "w": 1440,
+      "x": 1520,
+      "y": 0
+    },
+    "LandingPhone.dc.html": {
+      "h": 2500,
+      "title": "1 Landing · phone",
+      "w": 390,
+      "x": 3040,
+      "y": 0
+    },
+    "Learn.dc.html": {
+      "expand": "fill",
+      "h": 1000,
+      "title": "11 Learn",
+      "w": 1440,
+      "x": 0,
+      "y": 10320
+    },
+    "Login.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "title": "2 Login · magic link",
+      "w": 1440,
+      "x": 3510,
+      "y": 0
+    },
+    "LoginSent.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "title": "2 Login · check your email",
+      "w": 1440,
+      "x": 5030,
+      "y": 0
+    },
+    "Main.dc.html": {
+      "expand": "fill",
+      "h": 2300,
+      "title": "1 Landing · dark",
+      "w": 1440,
+      "x": 0,
+      "y": 0
+    },
+    "NewAgent.dc.html": {
+      "expand": "fill",
+      "h": 1000,
+      "title": "5 New agent · 1 Details",
+      "w": 1440,
+      "x": 0,
+      "y": 5800
+    },
+    "NewAgent2.dc.html": {
+      "expand": "fill",
+      "h": 1000,
+      "title": "5 New agent · 2 Avatar",
+      "w": 1440,
+      "x": 1520,
+      "y": 5800
+    },
+    "NewAgent3.dc.html": {
+      "expand": "fill",
+      "h": 1000,
+      "title": "5 New agent · 3 Install and train",
+      "w": 1440,
+      "x": 3040,
+      "y": 5800
+    },
+    "OffRecord.dc.html": {
+      "h": 900,
+      "title": "18 Off the record",
+      "w": 1440,
+      "x": 9120,
+      "y": 11820
+    },
+    "Pairing.dc.html": {
+      "h": 900,
+      "title": "17 Pairing window",
+      "w": 1440,
+      "x": 7600,
+      "y": 11820
+    },
+    "Shell.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "title": "3 App shell",
+      "w": 1440,
+      "x": 0,
+      "y": 3400
+    },
+    "Sidebar.dc.html": {
+      "h": 900,
+      "title": "Sidebar",
+      "w": 248,
+      "x": 1840,
+      "y": 13120
+    },
+    "Studio.dc.html": {
+      "expand": "fill",
+      "h": 1040,
+      "is_interactive": true,
+      "title": "6 Avatar studio",
+      "w": 1440,
+      "x": 4560,
+      "y": 5800
+    },
+    "Teach.dc.html": {
+      "expand": "fill",
+      "h": 1100,
+      "title": "12 Teach console",
+      "w": 1440,
+      "x": 1520,
+      "y": 10320
+    },
+    "TeachSummary.dc.html": {
+      "expand": "fill",
+      "h": 1100,
+      "title": "12 Teach · Mastered / Practice next",
+      "w": 1440,
+      "x": 3040,
+      "y": 10320
+    },
+    "WorkMap.dc.html": {
+      "expand": "fill",
+      "h": 1160,
+      "is_interactive": true,
+      "title": "10 Work Map · dark",
+      "w": 1440,
+      "x": 3040,
+      "y": 8760
+    },
+    "WorkMapLight.dc.html": {
+      "expand": "fill",
+      "h": 1160,
+      "title": "10 Work Map · light",
+      "w": 1440,
+      "x": 4560,
+      "y": 8760
+    },
+    "Workspace.dc.html": {
+      "expand": "fill",
+      "h": 1000,
+      "title": "13 Workspace",
+      "w": 1440,
+      "x": 4560,
+      "y": 10320
+    }
+  },
+  "createdOnFiles": {
+    "at": "2026-10-04T10:00:00Z",
+    "v": 1
+  },
+  "designSystems": [],
+  "launch": {
+    "view": "canvas"
+  },
+  "notes": {
+    "n1": {
+      "kind": "title1",
+      "maxW": 6470,
+      "text": "Web control room · public site and sign-in",
+      "w": 240,
+      "x": 0,
+      "y": -320
+    },
+    "n2": {
+      "kind": "title1",
+      "maxW": 6470,
+      "text": "Web control room · shell and agents",
+      "w": 240,
+      "x": 0,
+      "y": 3080
+    },
+    "n3": {
+      "kind": "title1",
+      "maxW": 6000,
+      "text": "Create an agent",
+      "w": 240,
+      "x": 0,
+      "y": 5480
+    },
+    "n4": {
+      "kind": "title1",
+      "maxW": 7520,
+      "text": "Agent page",
+      "w": 240,
+      "x": 0,
+      "y": 6920
+    },
+    "n5": {
+      "kind": "title1",
+      "maxW": 6000,
+      "text": "Train · capture, debrief, Work Map",
+      "w": 240,
+      "x": 0,
+      "y": 8440
+    },
+    "n6": {
+      "kind": "title1",
+      "maxW": 6000,
+      "text": "Teach and workspace",
+      "w": 240,
+      "x": 0,
+      "y": 10000
+    },
+    "n7": {
+      "kind": "title1",
+      "maxW": 8000,
+      "text": "Desktop companion",
+      "w": 240,
+      "x": 0,
+      "y": 11500
+    },
+    "n8": {
+      "kind": "title1",
+      "maxW": 3608,
+      "text": "Components and building blocks",
+      "w": 240,
+      "x": 0,
+      "y": 12800
+    }
+  },
+  "order": [
+    "Main.dc.html",
+    "LandingLight.dc.html",
+    "LandingPhone.dc.html",
+    "Login.dc.html",
+    "LoginSent.dc.html",
+    "Shell.dc.html",
+    "Gallery.dc.html",
+    "GalleryLight.dc.html",
+    "GalleryEmpty.dc.html",
+    "GalleryPhone.dc.html",
+    "NewAgent.dc.html",
+    "NewAgent2.dc.html",
+    "NewAgent3.dc.html",
+    "Studio.dc.html",
+    "Agent.dc.html",
+    "AgentShortcuts.dc.html",
+    "AgentGuardrails.dc.html",
+    "AgentLearners.dc.html",
+    "AgentSettings.dc.html",
+    "Capture.dc.html",
+    "Debrief.dc.html",
+    "WorkMap.dc.html",
+    "WorkMapLight.dc.html",
+    "Learn.dc.html",
+    "Teach.dc.html",
+    "TeachSummary.dc.html",
+    "Workspace.dc.html",
+    "Dock.dc.html",
+    "DockCollapsed.dc.html",
+    "Buddy.dc.html",
+    "BuddyStop.dc.html",
+    "FloatPanel.dc.html",
+    "Pairing.dc.html",
+    "OffRecord.dc.html",
+    "Components.dc.html",
+    "Avatar.dc.html",
+    "Sidebar.dc.html",
+    "Desktop.dc.html"
+  ],
+  "pages": [],
+  "title": "AI Apprentice: app design"
+}

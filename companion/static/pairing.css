@@ -1,0 +1,14 @@
+:root { color-scheme: light dark; }
+body {
+  margin: 0;
+  padding: 14px 18px;
+  font: 13px -apple-system, BlinkMacSystemFont, sans-serif;
+  user-select: none;
+}
+.label { opacity: 0.7; }
+.code { font-size: 40px; font-weight: 600; letter-spacing: 4px; font-variant-numeric: tabular-nums; user-select: text; }
+.state { margin: 4px 0 8px; }
+.state.paired { color: #1a7f37; }
+.missing { display: flex; flex-direction: column; gap: 4px; }
+.footer { position: fixed; right: 18px; bottom: 12px; }
+button { font: inherit; }

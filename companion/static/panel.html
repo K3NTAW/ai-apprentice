@@ -1,0 +1,63 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'" />
+    <title>AI Apprentice companion</title>
+    <link rel="stylesheet" href="canvas.css" />
+    <link rel="stylesheet" href="panel.css" />
+  </head>
+  <body class="gl">
+    <main class="glass sheet" aria-label="AI Apprentice panel">
+      <header class="titlebar">
+        <span class="tile logo"><span class="orb"></span></span>
+        <div class="who"><span class="brand">AI Apprentice</span><span id="state" class="xs mu state"></span><span id="perm" class="xs mu state"></span></div>
+        <button id="hide" class="btn bw sq" type="button" title="Hide" aria-label="Close panel"><svg class="ic" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"></path></svg></button>
+      </header>
+
+      <section id="session" class="session">
+        <div class="pill card">
+          <div class="between"><span id="mode" class="eb"></span><span class="tags"><span id="offrec" class="tag off hidden">off the record</span><span id="paused" class="tag hidden">paused</span></span></div>
+          <span id="title" class="title"></span>
+          <span id="expert" class="xs mu"></span>
+          <div class="stats">
+            <span><span id="asked" class="mono num">0</span><span class="xs fa">asked</span></span>
+            <span><span id="guardrails" class="mono num">0</span><span class="xs fa">guardrails</span></span>
+          </div>
+        </div>
+        <div class="pill card">
+          <span class="eb">last question</span>
+          <p id="question" class="question text"></p>
+          <span class="eb">last answer</span>
+          <p id="answer" class="answer text"></p>
+        </div>
+        <div class="actions">
+          <button data-action="pause_toggle" type="button" class="btn bw">Pause</button>
+          <button data-action="off_record_toggle" type="button" class="btn bw">Off the record</button>
+          <button data-action="end_task" type="button" class="btn bw">End task</button>
+        </div>
+      </section>
+
+      <div class="cols">
+        <section class="colsec">
+          <span class="eb head">shortcuts</span>
+          <div id="talk-hint" class="xs mu hint"></div>
+          <div id="shortcuts"></div>
+          <div class="row"><button id="reset" type="button" class="btn bt link">Reset to defaults</button></div>
+          <label class="row toggle"><span>Cursor buddy</span><input id="buddy" type="checkbox" /></label>
+          <div id="buddy-forced" class="xs mu hidden">Buddy is off (COMPANION_BUDDY): halos only.</div>
+        </section>
+        <section id="permissions" class="colsec hidden">
+          <span class="eb head">permissions</span>
+          <div id="missing" class="stack"></div>
+        </section>
+      </div>
+
+      <footer class="footer">
+        <span></span>
+        <button id="control-room" type="button" class="btn bk">Open control room<svg class="ic" viewBox="0 0 24 24"><path d="M7 17 17 7M9 7h8v8"></path></svg></button>
+      </footer>
+    </main>
+    <script src="panel.js"></script>
+  </body>
+</html>

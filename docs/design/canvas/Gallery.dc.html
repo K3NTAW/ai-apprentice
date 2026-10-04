@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Agents</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;family=Instrument+Serif:ital@0;1&amp;display=swap">
+<style>
+body{margin:0}
+.aa{--bg:#050505;--s1:#121212;--s2:#1C1C1C;--s3:#2A2A2A;--ln:rgba(255,255,255,.08);--ln2:rgba(255,255,255,.14);--tx:#FFFFFF;--mu:#9E9E9E;--fa:#858585;--ac:#4280FF;--ac2:#7AA6FF;--acs:rgba(66,128,255,.12);--pb:#FFFFFF;--pf:#0A0A0A;--cmp:#1F1F21;--am:#F5A524;--ams:rgba(245,165,36,.15);--gr:#3FCF8E;--grs:rgba(63,207,142,.14);--rd:#FF6B6B;--rds:rgba(255,107,107,.14);--stage:linear-gradient(180deg, #232327 0%, #0A0A0C 100%);--sh:0 24px 64px rgba(0,0,0,.55);background:var(--bg);color:var(--tx);font-family:Geist,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;color-scheme:dark}
+.aa.lt{--bg:#FFFFFF;--s1:#F7F7F7;--s2:#F0F0F0;--s3:#E4E4E4;--ln:rgba(0,0,0,.08);--ln2:rgba(0,0,0,.14);--tx:#0A0A0A;--mu:#5E5E5E;--fa:#757575;--ac:#1F5FFF;--ac2:#1F5FFF;--acs:rgba(31,95,255,.08);--pb:#0A0A0A;--pf:#FFFFFF;--cmp:#F2F2F2;--am:#A86400;--ams:rgba(245,165,36,.18);--gr:#13784B;--grs:rgba(19,120,75,.11);--rd:#C93030;--rds:rgba(201,48,48,.09);--stage:linear-gradient(180deg, #F4F3EF 0%, #E4E2DC 100%);--sh:0 20px 50px rgba(14,18,28,.12);color-scheme:light}
+.aa *,.aa *::before,.aa *::after{box-sizing:border-box}
+.aa h1,.aa h2,.aa h3,.aa p{margin:0}
+.aa a{color:var(--ac2)}
+.t1{font-size:36px;line-height:1.1;letter-spacing:-.025em;font-weight:600;text-wrap:balance}
+.t2{font-size:24px;line-height:1.2;letter-spacing:-.02em;font-weight:600}
+.t3{font-size:17px;line-height:1.35;letter-spacing:-.01em;font-weight:600}
+.sm{font-size:13px}.xs{font-size:12px}.mu{color:var(--mu)}.fa{color:var(--fa)}
+.eb{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--mu);font-weight:500}
+.mono{font-family:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace;font-variant-numeric:tabular-nums}
+.card{background:var(--s1);border:1px solid var(--ln);border-radius:16px}
+.aa a.card{color:var(--tx);text-decoration:none}
+.aa a.card:hover{border-color:var(--ln2)}
+.aa a.card:focus-visible{outline:2px solid var(--ac2);outline-offset:2px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:40px;padding:0 18px;border-radius:999px;font-family:inherit;font-size:14px;font-weight:500;border:1px solid transparent;cursor:pointer;text-decoration:none;white-space:nowrap;line-height:1}
+.bp{background:var(--pb);color:var(--pf)}.bs{background:var(--s2);border-color:var(--ln2);color:var(--tx)}
+.aa a.btn.bp{color:var(--pf)}.aa a.btn.bs{color:var(--tx)}
+.btn:focus-visible,.inp:focus-visible{outline:2px solid var(--ac2);outline-offset:2px}
+.bdg{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 9px;border-radius:999px;font-size:12px;font-weight:500;white-space:nowrap;line-height:1}
+.bdg::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.k-ok{background:var(--grs);color:var(--gr)}.k-ac{background:var(--acs);color:var(--ac2)}.k-pend{background:var(--s3);color:var(--mu)}
+.inp{display:block;width:100%;height:40px;border-radius:999px;background:var(--s2);border:1px solid var(--ln);color:var(--tx);padding:0 14px 0 38px;font-family:inherit;font-size:14px}
+.inp::placeholder{color:var(--fa)}
+.ic{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.av{width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:600;font-size:10px;flex:none;background:var(--s3);color:var(--tx)}
+.seg{display:inline-flex;padding:3px;border-radius:999px;background:var(--s2);border:1px solid var(--ln)}
+.seg button{height:30px;padding:0 14px;border-radius:999px;border:0;background:none;color:var(--mu);font-family:inherit;font-size:13px;font-weight:500;cursor:pointer}
+.seg button.on{background:var(--s1);color:var(--tx);box-shadow:0 0 0 1px var(--ln2)}
+</style>
+</helmet>
+<div class="aa {{lt}}" style="min-height: 900px; display: flex; flex-wrap: wrap; background: var(--bg)">
+<div style="flex: 1 0 248px; border-right: 1px solid var(--ln)">
+<dc-import name="Sidebar" active="agents" theme="{{theme}}" hint-size="248px,900px"></dc-import>
+</div>
+<main style="flex: 999 1 560px; min-width: 0; padding: 40px 40px 56px; display: flex; flex-direction: column; gap: 28px">
+<section style="display: flex; flex-direction: column; align-items: center; gap: 22px; padding: 28px 0 12px">
+<h1 class="t1" style="text-align: center; font-weight: 500">Good afternoon, Sabine</h1>
+<form style="position: relative; width: 100%; max-width: 760px; border-radius: 28px; background: var(--cmp); border: 1px solid var(--ln2); padding: 14px 14px 12px 20px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 1px 0 rgba(255,255,255,.04) inset">
+<label for="home-ask" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Ask an agent or start a session</label>
+<input id="home-ask" type="text" placeholder="Ask how something is done, or start a session" style="width: 100%; border: 0; background: transparent; color: var(--tx); font-family: inherit; font-size: 17px; height: 32px; outline: none">
+<div style="display: flex; align-items: center; gap: 8px">
+<button class="btn bs" type="button" aria-label="Attach" style="width: 36px; height: 36px; padding: 0"><svg class="ic" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg></button>
+<button class="btn bs" type="button" style="height: 36px; padding: 0 12px 0 6px; gap: 6px"><dc-import name="Avatar" shape="blob" face="smile" tone="#ECEAE5" accent="#3A4EFD" mood="still" size="26" hint-size="26px,26px"></dc-import>Pip<svg class="ic" viewBox="0 0 24 24" style="width: 14px; height: 14px"><path d="m7 10 5 5 5-5"></path></svg></button>
+<span style="flex: 1"></span>
+<button class="btn bg" type="button" aria-label="Speak" style="width: 36px; height: 36px; padding: 0"><svg class="ic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3"></path></svg></button>
+<button class="btn bp" type="submit" aria-label="Send" style="width: 36px; height: 36px; padding: 0"><svg class="ic" viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"></path></svg></button>
+</div>
+</form>
+<div style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: center">
+<a class="btn bs bsm" href="Capture.dc.html"><svg class="ic" viewBox="0 0 24 24" style="width: 15px; height: 15px"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3"></path></svg>Train Pip</a>
+<a class="btn bs bsm" href="Learn.dc.html"><svg class="ic" viewBox="0 0 24 24" style="width: 15px; height: 15px"><path d="M3 7.5 12 4l9 3.5-9 3.5z"></path><path d="M7 9.5V15c0 1.5 2.5 3 5 3s5-1.5 5-3V9.5"></path></svg>Teach a new employee</a>
+<a class="btn bs bsm" href="WorkMap.dc.html"><svg class="ic" viewBox="0 0 24 24" style="width: 15px; height: 15px"><circle cx="5" cy="12" r="2"></circle><circle cx="12" cy="12" r="3"></circle><circle cx="19" cy="12" r="2"></circle><path d="M7 12h2M15 12h2"></path></svg>Open a Work Map</a>
+<a class="btn bs bsm" href="Workspace.dc.html"><svg class="ic" viewBox="0 0 24 24" style="width: 15px; height: 15px"><circle cx="9" cy="8" r="3"></circle><path d="M3 19c0-3 2.7-5 6-5s6 2 6 5M19 8v6M16 11h6"></path></svg>Invite an expert</a>
+</div>
+</section>
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap">
+<div style="display: flex; align-items: baseline; gap: 12px"><h2 class="t2">Agents</h2><span class="sm fa">Each one learns from one expert</span></div>
+<div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap">
+<div style="position: relative; width: 240px; max-width: 100%"><svg class="ic" viewBox="0 0 24 24" style="position: absolute; left: 13px; top: 11px; width: 16px; height: 16px; color: var(--fa)"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg><label for="agent-search" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Search agents</label><input class="inp" id="agent-search" type="search" placeholder="Search agents or experts"></div>
+<a class="btn bp" href="NewAgent.dc.html"><svg class="ic" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg>New agent</a>
+</div>
+</div>
+
+<sc-if value="{{ hasAgents }}" hint-placeholder-val="{{ true }}">
+<div style="display: flex; flex-direction: column; gap: 20px">
+<div class="seg" role="tablist" aria-label="Filter agents" style="align-self: flex-start">
+<button class="on" type="button" role="tab" aria-selected="true">All 5</button>
+<button type="button" role="tab" aria-selected="false">Ready to teach 4</button>
+<button type="button" role="tab" aria-selected="false">Training 1</button>
+</div>
+<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 16px">
+<sc-for list="{{ agents }}" as="a" hint-placeholder-count="5">
+<a class="card" href="Agent.dc.html" style="padding: 16px; display: flex; flex-direction: column; gap: 16px">
+<div style="position: relative; height: 176px; border-radius: 12px; background: var(--stage); display: flex; align-items: center; justify-content: center">
+<span class="{{a.statusCls}}" style="position: absolute; left: 12px; top: 12px">{{a.status}}</span>
+<span class="xs fa" style="position: absolute; right: 12px; top: 13px">{{a.last}}</span>
+<dc-import name="Avatar" shape="{{a.shape}}" face="{{a.face}}" tone="{{a.tone}}" accent="{{a.accent}}" mood="{{a.mood}}" size="124" hint-size="124px,124px"></dc-import>
+</div>
+<div style="display: flex; flex-direction: column; gap: 4px; padding: 0 4px">
+<h2 class="t2">{{a.nm}}</h2>
+<span class="mu" style="font-size: 15px">{{a.role}}</span>
+<span class="sm" style="display: flex; align-items: center; gap: 8px; margin-top: 4px"><span class="av" style="background: {{a.expBg}}; color: {{a.expFg}}">{{a.ini}}</span><span class="mu">learns from</span> {{a.expert}}</span>
+</div>
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; padding: 12px 4px 4px; border-top: 1px solid var(--ln)">
+<div style="display: flex; flex-direction: column"><span class="t3 mono">{{a.p}}</span><span class="xs fa">Processes</span></div>
+<div style="display: flex; flex-direction: column"><span class="t3 mono">{{a.s}}</span><span class="xs fa">Shortcuts</span></div>
+<div style="display: flex; flex-direction: column"><span class="t3 mono">{{a.g}}</span><span class="xs fa">Guardrails</span></div>
+<div style="display: flex; flex-direction: column"><span class="t3 mono">{{a.l}}</span><span class="xs fa">Learners</span></div>
+</div>
+</a>
+</sc-for>
+<a class="card" href="NewAgent.dc.html" style="padding: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; min-height: 380px; border-style: dashed; border-color: var(--ln2); background: transparent; text-align: center">
+<span style="width: 56px; height: 56px; border-radius: 50%; background: var(--s2); display: inline-flex; align-items: center; justify-content: center; color: var(--ac2)"><svg class="ic" viewBox="0 0 24 24" style="width: 24px; height: 24px"><path d="M12 5v14M5 12h14"></path></svg></span>
+<span class="t3">New agent</span>
+<span class="sm mu" style="max-width: 220px">Name it, give it a face, then train it on real work.</span>
+</a>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ empty }}" hint-placeholder-val="{{ false }}">
+<div class="card" style="padding: 64px 32px; display: flex; flex-direction: column; align-items: center; gap: 20px; text-align: center">
+<dc-import name="Avatar" shape="round" face="calm" tone="#8E95A3" accent="#62A9F3" mood="idle" size="140" hint-size="140px,140px"></dc-import>
+<div style="display: flex; flex-direction: column; gap: 8px; max-width: 480px">
+<h2 class="t2">No agents yet</h2>
+<p class="mu" style="font-size: 15px">An agent learns from one expert while they work. Start with the person whose know-how you would miss most if they left tomorrow.</p>
+</div>
+<div style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center">
+<a class="btn bp" href="NewAgent.dc.html"><svg class="ic" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg>Create your first agent</a>
+<a class="btn bs" href="NewAgent3.dc.html">Install the companion</a>
+</div>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; width: 100%; max-width: 720px; margin-top: 16px">
+<div style="padding: 16px; border-radius: 12px; background: var(--s2); text-align: left; display: flex; flex-direction: column; gap: 4px"><span class="mono xs fa">1</span><span class="sm" style="font-weight: 600">Name it</span><span class="xs mu">Role and the expert it learns from</span></div>
+<div style="padding: 16px; border-radius: 12px; background: var(--s2); text-align: left; display: flex; flex-direction: column; gap: 4px"><span class="mono xs fa">2</span><span class="sm" style="font-weight: 600">Give it a face</span><span class="xs mu">Shape, face and colours in the studio</span></div>
+<div style="padding: 16px; border-radius: 12px; background: var(--s2); text-align: left; display: flex; flex-direction: column; gap: 4px"><span class="mono xs fa">3</span><span class="sm" style="font-weight: 600">Train it</span><span class="xs mu">The expert does one real task</span></div>
+</div>
+</div>
+</sc-if>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"empty":{"editor":"boolean","default":false},"$preview":{"width":1440,"height":1360}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const light = this.props.theme === 'light';
+    const e = this.props.empty;
+    const empty = e === true || e === 'true';
+    const ready = 'bdg k-ok';
+    const agents = [
+      { nm: 'Pip', role: 'Senior AP Clerk', expert: 'Sabine Keller', ini: 'SK', expBg: '#3A2A1A', expFg: '#FFC98A', shape: 'blob', face: 'smile', tone: '#ECEAE5', accent: '#3A4EFD', mood: 'idle', p: 6, s: 23, g: 14, l: 3, status: 'Ready to teach', statusCls: ready, last: 'Trained 2026-10-02' },
+      { nm: 'Juno', role: 'Senior Sales Person', expert: 'Marco Bianchi', ini: 'MB', expBg: '#1E2F3F', expFg: '#8CCBFF', shape: 'bean', face: 'wink', tone: '#F3A150', accent: '#62A9F3', mood: 'idle', p: 4, s: 11, g: 9, l: 2, status: 'Ready to teach', statusCls: ready, last: 'Trained 2026-09-27' },
+      { nm: 'Otto', role: 'Plant Controller', expert: 'Urs Gerber', ini: 'UG', expBg: '#1E3A2F', expFg: '#7EE0B0', shape: 'square', face: 'focus', tone: '#65D9A5', accent: '#A27DF8', mood: 'idle', p: 3, s: 17, g: 8, l: 1, status: 'Ready to teach', statusCls: ready, last: 'Trained 2026-09-21' },
+      { nm: 'Nova', role: 'Payroll Specialist', expert: 'Brigitte Roth', ini: 'BR', expBg: '#3A1E2E', expFg: '#FFA3C8', shape: 'round', face: 'calm', tone: '#A27DF8', accent: '#E775C0', mood: 'listening', p: 2, s: 6, g: 11, l: 0, status: 'Training now', statusCls: 'bdg k-ac', last: 'Live · 14:05' },
+      { nm: 'Bolt', role: 'IT Service Desk Lead', expert: 'Reto Frei', ini: 'RF', expBg: '#2B2440', expFg: '#C9B8FF', shape: 'pill', face: 'robot', tone: '#F3C354', accent: '#3A4EFD', mood: 'idle', p: 5, s: 31, g: 6, l: 4, status: 'Ready to teach', statusCls: ready, last: 'Trained 2026-09-15' }
+    ];
+    return { lt: light ? 'lt' : '', theme: light ? 'light' : 'dark', agents, empty, hasAgents: !empty };
+  }
+}
+</script>
+</body>
+</html>

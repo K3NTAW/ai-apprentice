@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Clay avatar</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+@keyframes aa-bob{0%,100%{transform:translateY(0) rotate(0)}50%{transform:translateY(-3px) rotate(-1.5deg)}}
+@keyframes aa-ring{0%{transform:scale(.88);opacity:.8}100%{transform:scale(1.24);opacity:0}}
+@keyframes aa-talk{0%,100%{transform:scaleY(.35)}50%{transform:scaleY(1)}}
+@keyframes aa-think{0%,100%{opacity:.25}50%{opacity:1}}
+@keyframes aa-blink{0%,93%,100%{transform:scaleY(1) rotate(var(--r,0deg))}96%{transform:scaleY(.12) rotate(var(--r,0deg))}}
+@keyframes aa-wave{0%,100%{opacity:.25}50%{opacity:1}}
+@media (prefers-reduced-motion:reduce){.aa-av *{animation:none!important}}
+</style>
+</helmet>
+<div class="aa-av" style="position: relative; width: {{size}}px; height: {{size}}px; flex: none; font-family: Geist, ui-sans-serif, system-ui, sans-serif">
+<div style="position: absolute; left: 0; top: 0; width: 100px; height: 100px; transform: scale({{k}}); transform-origin: 0 0">
+
+<sc-if value="{{ m.listening }}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; left: 4px; top: 4px; width: 92px; height: 92px; border-radius: 50%; border: 2px solid {{accent}}; animation: aa-ring 2s ease-out infinite"></div>
+<div style="position: absolute; left: 4px; top: 4px; width: 92px; height: 92px; border-radius: 50%; border: 2px solid {{accent}}; animation: aa-ring 2s ease-out 1s infinite"></div>
+</sc-if>
+<sc-if value="{{ m.stop }}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; left: 2px; top: 2px; width: 96px; height: 96px; border-radius: 50%; box-shadow: 0 0 0 2px #FF8A65, 0 0 22px 4px rgba(255,138,101,.45)"></div>
+</sc-if>
+
+<div style="position: absolute; left: 0; top: 0; width: 100px; height: 100px; animation: {{anim}}; filter: {{filt}}">
+<div style="position: absolute; left: 22px; top: 90px; width: 56px; height: 7px; border-radius: 50%; background: rgba(0,0,0,.35); filter: blur(3px)"></div>
+
+<div style="position: absolute; left: 0; top: 0; width: 100px; height: 100px; filter: drop-shadow(1.6px 0 0 #0A0A0C) drop-shadow(-1.6px 0 0 #0A0A0C) drop-shadow(0 1.6px 0 #0A0A0C) drop-shadow(0 -1.6px 0 #0A0A0C)">
+<div style="position: absolute; left: {{b.bl}}px; top: {{b.bt}}px; width: 12px; height: 12px; border-radius: 50%; background: {{beadBg}}"></div>
+<div style="position: absolute; left: {{b.l}}px; top: {{b.t}}px; width: {{b.w}}px; height: {{b.h}}px; border-radius: {{b.r}}; clip-path: {{b.clip}}; transform: rotate({{b.rot}}deg); background: {{bodyBg}}; box-shadow: inset -5px -7px 12px rgba(0,0,0,.18), inset 4px 5px 10px rgba(255,255,255,.55)"></div>
+</div>
+<div style="position: absolute; left: {{hl.l}}px; top: {{hl.t}}px; width: {{hl.w}}px; height: {{hl.h}}px; border-radius: 50%; background: rgba(255,255,255,.7); filter: blur(2px); transform: rotate(-28deg)"></div>
+
+<div style="position: absolute; left: {{b.fx}}px; top: {{b.fy}}px; width: 100px; height: 100px; transform: scale({{b.fs}}); transform-origin: 50% 50%">
+<div style="position: absolute; left: 27px; top: 55px; width: 10px; height: 5px; border-radius: 50%; background: {{accent}}; opacity: .45; filter: blur(.6px)"></div>
+<div style="position: absolute; left: 63px; top: 55px; width: 10px; height: 5px; border-radius: 50%; background: {{accent}}; opacity: .45; filter: blur(.6px)"></div>
+
+<sc-if value="{{ eye.dots }}" hint-placeholder-val="{{ true }}">
+<div style="--r: -12deg; position: absolute; left: 35px; top: 36px; width: 9px; height: 14px; border-radius: 50%; background: #0A0A0C; transform: rotate(-12deg); animation: {{blink}}"></div>
+<div style="--r: -12deg; position: absolute; left: 56px; top: 34px; width: 9px; height: 14px; border-radius: 50%; background: #0A0A0C; transform: rotate(-12deg); animation: {{blink}}"></div>
+</sc-if>
+<sc-if value="{{ eye.bars }}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; left: 32px; top: 42px; width: 14px; height: 5px; border-radius: 3px; background: #0A0A0C; transform: rotate(-6deg)"></div>
+<div style="position: absolute; left: 54px; top: 40px; width: 14px; height: 5px; border-radius: 3px; background: #0A0A0C; transform: rotate(-6deg)"></div>
+</sc-if>
+<sc-if value="{{ eye.curious }}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; left: 35px; top: 38px; width: 8px; height: 12px; border-radius: 50%; background: #0A0A0C; transform: rotate(-10deg)"></div>
+<div style="position: absolute; left: 54px; top: 33px; width: 12px; height: 17px; border-radius: 50%; background: #0A0A0C; transform: rotate(-10deg)"></div>
+<div style="position: absolute; left: 53px; top: 26px; width: 13px; height: 3px; border-radius: 2px; background: #0A0A0C; transform: rotate(-16deg)"></div>
+</sc-if>
+<sc-if value="{{ eye.calm }}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; left: 32px; top: 40px; width: 14px; height: 8px; border-bottom: 3.5px solid #0A0A0C; border-radius: 0 0 9px 9px"></div>
+<div style="position: absolute; left: 54px; top: 39px; width: 14px; height: 8px; border-bottom: 3.5px solid #0A0A0C; border-radius: 0 0 9px 9px"></div>
+</sc-if>
+<sc-if value="{{ eye.wink }}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; left: 35px; top: 36px; width: 9px; height: 14px; border-radius: 50%; background: #0A0A0C; transform: rotate(-12deg)"></div>
+<div style="position: absolute; left: 54px; top: 42px; width: 14px; height: 8px; border-top: 3.5px solid #0A0A0C; border-radius: 9px 9px 0 0"></div>
+</sc-if>
+<sc-if value="{{ eye.robot }}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; left: 32px; top: 36px; width: 14px; height: 13px; border-radius: 4px; background: #0A0A0C"></div>
+<div style="position: absolute; left: 54px; top: 36px; width: 14px; height: 13px; border-radius: 4px; background: #0A0A0C"></div>
+<div style="position: absolute; left: 36px; top: 40px; width: 5px; height: 5px; border-radius: 1px; background: {{accent}}; box-shadow: 0 0 5px {{accent}}"></div>
+<div style="position: absolute; left: 58px; top: 40px; width: 5px; height: 5px; border-radius: 1px; background: {{accent}}; box-shadow: 0 0 5px {{accent}}"></div>
+</sc-if>
+<sc-if value="{{ eye.happy }}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; left: 32px; top: 41px; width: 14px; height: 9px; border-top: 3.5px solid #0A0A0C; border-radius: 9px 9px 0 0"></div>
+<div style="position: absolute; left: 54px; top: 40px; width: 14px; height: 9px; border-top: 3.5px solid #0A0A0C; border-radius: 9px 9px 0 0"></div>
+</sc-if>
+<sc-if value="{{ eye.closed }}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; left: 33px; top: 44px; width: 12px; height: 3.5px; border-radius: 2px; background: #0A0A0C"></div>
+<div style="position: absolute; left: 55px; top: 43px; width: 12px; height: 3.5px; border-radius: 2px; background: #0A0A0C"></div>
+</sc-if>
+
+<sc-if value="{{ mouth.smile }}" hint-placeholder-val="{{ true }}">
+<div style="position: absolute; left: 43px; top: 54px; width: 15px; height: 7px; border-bottom: 3.5px solid #0A0A0C; border-radius: 0 0 10px 10px"></div>
+</sc-if>
+<sc-if value="{{ mouth.calm }}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; left: 45px; top: 56px; width: 11px; height: 5px; border-bottom: 3px solid #0A0A0C; border-radius: 0 0 8px 8px"></div>
+</sc-if>
+<sc-if value="{{ mouth.flat }}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; left: 45px; top: 58px; width: 11px; height: 3.5px; border-radius: 2px; background: #0A0A0C"></div>
+</sc-if>
+<sc-if value="{{ mouth.o }}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; left: 46px; top: 55px; width: 9px; height: 10px; border-radius: 50%; background: #0A0A0C"></div>
+</sc-if>
+<sc-if value="{{ mouth.open }}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; left: 44px; top: 54px; width: 13px; height: 11px; border-radius: 50%; background: #0A0A0C; animation: aa-talk .45s ease-in-out infinite"></div>
+</sc-if>
+<sc-if value="{{ mouth.big }}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; left: 41px; top: 53px; width: 19px; height: 11px; border-radius: 3px 3px 12px 12px; background: #0A0A0C"></div>
+</sc-if>
+<sc-if value="{{ mouth.robot }}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; left: 40px; top: 57px; width: 21px; height: 6px; border-radius: 2px; background: repeating-linear-gradient(90deg, #0A0A0C 0 3px, transparent 3px 5px)"></div>
+</sc-if>
+</div>
+</div>
+
+<sc-if value="{{ m.thinking }}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; left: 64px; top: 0; width: 34px; height: 17px; border-radius: 10px; background: #FFFFFF; border: 1.5px solid #0A0A0C; display: flex; align-items: center; justify-content: center; gap: 3px">
+<div style="width: 4px; height: 4px; border-radius: 50%; background: #0A0A0C; animation: aa-think 1.2s infinite"></div>
+<div style="width: 4px; height: 4px; border-radius: 50%; background: #0A0A0C; animation: aa-think 1.2s .2s infinite"></div>
+<div style="width: 4px; height: 4px; border-radius: 50%; background: #0A0A0C; animation: aa-think 1.2s .4s infinite"></div>
+</div>
+</sc-if>
+<sc-if value="{{ m.talking }}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; left: 86px; top: 36px; width: 8px; height: 16px; border-right: 2.5px solid {{accent}}; border-radius: 50%; animation: aa-wave 1s infinite"></div>
+<div style="position: absolute; left: 90px; top: 31px; width: 10px; height: 26px; border-right: 2.5px solid {{accent}}; border-radius: 50%; animation: aa-wave 1s .3s infinite"></div>
+</sc-if>
+<sc-if value="{{ m.asking }}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; left: 72px; top: -2px; width: 24px; height: 24px; border-radius: 50%; background: {{accent}}; border: 1.5px solid #0A0A0C; color: #FFFFFF; font-weight: 700; font-size: 14px; line-height: 21px; text-align: center">?</div>
+</sc-if>
+<sc-if value="{{ m.stop }}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; left: 72px; top: -2px; width: 24px; height: 24px; border-radius: 50%; background: #FF8A65; border: 1.5px solid #0A0A0C; color: #0A0A0C; font-weight: 700; font-size: 14px; line-height: 21px; text-align: center">!</div>
+</sc-if>
+<sc-if value="{{ m.happy }}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; left: 82px; top: 8px; width: 9px; height: 9px; background: {{accent}}; transform: rotate(45deg); border-radius: 2px"></div>
+<div style="position: absolute; left: 8px; top: 20px; width: 6px; height: 6px; background: {{accent}}; transform: rotate(45deg); border-radius: 1px"></div>
+</sc-if>
+<sc-if value="{{ m.paused }}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; left: 72px; top: -2px; width: 24px; height: 24px; border-radius: 50%; background: #2A2A2E; border: 1.5px solid #0A0A0C; display: flex; align-items: center; justify-content: center; gap: 3px">
+<div style="width: 3px; height: 9px; border-radius: 1px; background: #E5E5E5"></div>
+<div style="width: 3px; height: 9px; border-radius: 1px; background: #E5E5E5"></div>
+</div>
+</sc-if>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"shape":{"editor":"enum","options":["blob","round","square","pill","bean","star"],"default":"blob"},"face":{"editor":"enum","options":["smile","focus","curious","calm","wink","robot"],"default":"smile"},"mood":{"editor":"enum","options":["idle","listening","thinking","talking","asking","stop","happy","paused"],"default":"idle"},"tone":{"editor":"color","default":"#ECEAE5"},"accent":{"editor":"color","default":"#3A4EFD"},"size":{"editor":"int","min":24,"max":400,"default":200},"$preview":{"width":240,"height":240}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const p = this.props;
+    const shape = p.shape || 'blob';
+    const face = p.face || 'smile';
+    const mood = p.mood || 'idle';
+    const tone = p.tone || '#ECEAE5';
+    const accent = p.accent || '#3A4EFD';
+    const size = Number(p.size) || 200;
+    const S = {
+      blob: { l: 12, t: 15, w: 76, h: 72, r: '58% 42% 54% 46% / 52% 56% 44% 48%', rot: 0, fx: 0, fy: 2, fs: 1, bl: 64, bt: 9 },
+      round: { l: 12, t: 12, w: 76, h: 76, r: '50%', rot: 0, fx: 0, fy: 2, fs: 1, bl: 66, bt: 8 },
+      square: { l: 13, t: 13, w: 74, h: 74, r: '28%', rot: 0, fx: 0, fy: 2, fs: 1, bl: 68, bt: 7 },
+      pill: { l: 21, t: 9, w: 58, h: 82, r: '29px', rot: 0, fx: 0, fy: 0, fs: 0.88, bl: 58, bt: 4 },
+      bean: { l: 8, t: 19, w: 84, h: 64, r: '48% 52% 44% 56% / 62% 58% 42% 38%', rot: -6, fx: 0, fy: 3, fs: 1, bl: 66, bt: 13 },
+      star: { l: 6, t: 6, w: 88, h: 88, r: '0', rot: 0, fx: 0, fy: 8, fs: 0.76, bl: 44, bt: -3,
+        clip: 'polygon(50% 2%, 63% 27%, 97.6% 36.5%, 72% 60%, 79.4% 92.5%, 50% 80%, 20.6% 92.5%, 28% 60%, 2.4% 36.5%, 37% 27%)' }
+    };
+    const b = Object.assign({ clip: 'none' }, S[shape] || S.blob);
+    const hl = { l: b.l + b.w * 0.2, t: b.t + b.h * 0.12, w: b.w * 0.22, h: b.h * 0.11 };
+    const eyeBy = { smile: 'dots', focus: 'bars', curious: 'curious', calm: 'calm', wink: 'wink', robot: 'robot' };
+    const mouthBy = { smile: 'smile', focus: 'flat', curious: 'o', calm: 'calm', wink: 'smile', robot: 'robot' };
+    let eye = eyeBy[face] || 'dots';
+    let mouth = mouthBy[face] || 'smile';
+    if (mood === 'happy') { if (face !== 'robot') eye = 'happy'; mouth = face === 'robot' ? 'robot' : 'big'; }
+    if (mood === 'paused') { if (face !== 'robot') eye = 'closed'; mouth = 'flat'; }
+    if (mood === 'talking') mouth = 'open';
+    if (mood === 'asking') mouth = 'o';
+    if (mood === 'stop' || mood === 'thinking') mouth = face === 'robot' ? 'robot' : 'flat';
+    const flag = (k, keys) => { const o = {}; keys.forEach((x) => { o[x] = x === k; }); return o; };
+    return {
+      size, k: size / 100, accent, b, hl,
+      bodyBg: 'radial-gradient(75% 75% at 34% 30%, color-mix(in oklab, ' + tone + ' 30%, white) 0%, ' + tone + ' 46%, color-mix(in oklab, ' + tone + ' 74%, black) 100%)',
+      beadBg: 'radial-gradient(circle at 35% 30%, color-mix(in oklab, ' + accent + ' 45%, white), ' + accent + ' 65%)',
+      eye: flag(eye, ['dots', 'bars', 'curious', 'calm', 'wink', 'robot', 'happy', 'closed']),
+      mouth: flag(mouth, ['smile', 'calm', 'flat', 'o', 'open', 'big', 'robot']),
+      m: flag(mood, ['idle', 'listening', 'thinking', 'talking', 'asking', 'stop', 'happy', 'paused']),
+      anim: (mood === 'idle' || mood === 'listening' || mood === 'talking') ? 'aa-bob 3.4s ease-in-out infinite' : (mood === 'happy' ? 'aa-bob 1.1s ease-in-out infinite' : 'none'),
+      filt: mood === 'paused' ? 'grayscale(1) brightness(.72)' : 'none',
+      blink: (mood === 'idle' || mood === 'listening') ? 'aa-blink 4.5s infinite' : 'none'
+    };
+  }
+}
+</script>
+</body>
+</html>
