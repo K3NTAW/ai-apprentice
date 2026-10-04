@@ -1,5 +1,6 @@
 // The app's 'Get the desktop app' page body: the macOS builds from the GitHub release (src/lib/downloads.ts),
 // Windows 'Coming soon' without a link, and the first-launch steps for the unsigned build.
+// Download buttons are small and self-start so the flex-col card does not stretch them to its width.
 import { DESKTOP_RELEASE, INSTALL_STEPS } from "@/lib/downloads";
 
 const BUILDS = [
@@ -30,7 +31,10 @@ export default function DesktopDownloads() {
                 Version {DESKTOP_RELEASE.version} · {b.build.size}
               </p>
             </div>
-            <a href={b.build.href} rel="noreferrer" className={`ui-btn ${b.cls} mt-auto`}>
+            <a href={b.build.href} rel="noreferrer" className={`ui-btn ${b.cls} ui-bsm mt-auto self-start`}>
+              <svg className="ui-ic" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 20h14" />
+              </svg>
               Download for macOS ({b.label})
             </a>
           </section>

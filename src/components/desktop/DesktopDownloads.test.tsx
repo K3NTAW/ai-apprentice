@@ -11,11 +11,24 @@ describe("Get the desktop app", () => {
   it("links the macOS builds to the GitHub release, the same URLs as the marketing site", () => {
     expect([DESKTOP_RELEASE.macArm64.href, DESKTOP_RELEASE.macX64.href]).toEqual([ARM, X64]);
     const html = renderToStaticMarkup(<DesktopDownloads />);
-    expect(html).toContain(`href="${ARM}" rel="noreferrer" class="ui-btn ui-bp mt-auto">Download for macOS (Apple silicon)<`);
-    expect(html).toContain(`href="${X64}" rel="noreferrer" class="ui-btn ui-bs mt-auto">Download for macOS (Intel)<`);
+    expect(html).toContain(`href="${ARM}" rel="noreferrer" class="ui-btn ui-bp ui-bsm mt-auto self-start"><svg class="ui-ic"`);
+    expect(html).toContain(`href="${X64}" rel="noreferrer" class="ui-btn ui-bs ui-bsm mt-auto self-start"><svg class="ui-ic"`);
+    expect(html).toContain("</svg>Download for macOS (Apple silicon)<");
+    expect(html).toContain("</svg>Download for macOS (Intel)<");
     expect(html).toContain("Version 0.1.0 · 130 MB");
     expect(html).toContain("Version 0.1.0 · 134 MB");
     expect(html).toContain(`href="${DESKTOP_RELEASE.page}"`);
+  });
+
+  it("download buttons are compact: small size, not stretched to the card width", () => {
+    const html = renderToStaticMarkup(<DesktopDownloads />);
+    const btns = html.match(/<a [^>]*class="ui-btn[^"]*"/g) ?? [];
+    expect(btns).toHaveLength(2);
+    for (const b of btns) {
+      expect(b).toContain("ui-bsm");
+      expect(b).toContain("self-start");
+      expect(b).not.toMatch(/w-full|self-stretch/);
+    }
   });
 
   it("Windows reads 'Coming soon' without a link", () => {
