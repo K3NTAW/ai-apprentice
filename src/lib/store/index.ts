@@ -23,6 +23,7 @@ export {
   PROCESS_TITLE_MAX,
   SessionLinkedError,
   SessionNotFoundError,
+  TeachUnavailableError,
 } from "./types";
 export type { SessionDigest } from "@/lib/types";
 export type { Process, ProcessChangeKind, ProcessInput, ProcessPatch, ProcessVersion, ListProcessesOptions } from "./types";

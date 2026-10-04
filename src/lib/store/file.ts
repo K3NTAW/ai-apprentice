@@ -13,6 +13,7 @@ import {
   type ScreenEvent,
   type Session,
   type SessionDigest,
+  type TeachProgress,
   type TranscriptEntry,
   type WorkMap,
   WorkMapSchema,
@@ -397,6 +398,12 @@ function saveWorkMap(id: string, workmap: WorkMap): Promise<Session> {
   });
 }
 
+function saveTeach(id: string, teach: TeachProgress): Promise<Session> {
+  return mutate(id, (s) => {
+    s.teach = teach;
+  });
+}
+
 function endSession(id: string): Promise<Session> {
   return mutate(id, (s) => {
     s.ended_at ??= new Date().toISOString();
@@ -617,6 +624,7 @@ export const fileStore: SessionStore = {
   setOffRecord,
   saveWorkMap,
   endSession,
+  saveTeach,
   saveFrame,
   readFrame,
   listAgents,

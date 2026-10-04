@@ -9,7 +9,8 @@
 // Processes: RLS by workspace, no insert policy on processes or process_versions (direct inserts answer 42501),
 // the cascades (agent -> processes -> versions) and sessions.process_id on delete set null.
 // missingTables answers every query on those tables with PostgREST PGRST205 (migration not applied); with
-// 'processes' missing, selecting sessions.process_id answers 42703 and both rpcs PGRST202.
+// 'processes' missing, selecting sessions.process_id answers 42703 and both rpcs PGRST202. With 'sessions.teach'
+// in missingTables (migration 20261004040000 not applied), selecting sessions.teach answers 42703 and writing it PGRST204.
 // rpc('create_process'): workmap_valid (22023), the agent and session checks (P0002), the unique source session
 // (on conflict do nothing, then 23505 'process_exists'), created_at from the session on backfill, version 1 and
 // the session link. rpc('update_process'): workmap_valid, the version check (PT409) only for a Work Map change,
@@ -42,7 +43,7 @@ const PKS: Record<string, string[]> = {
 const SERIAL = new Set(["session_events", "session_transcript"]);
 // Nullable columns come back as null, like Postgres, when an insert leaves them out.
 const DEFAULTS: Record<string, Row> = {
-  sessions: { created_by: null, expert: null, ended_at: null, workmap: null, off_record_ranges: [], agent_id: null, process_id: null },
+  sessions: { created_by: null, expert: null, ended_at: null, workmap: null, off_record_ranges: [], agent_id: null, process_id: null, teach: null },
   processes: { created_by: null, archived_at: null, version: 1, confirmed: false, source_session_id: null },
   process_versions: { source_session_id: null, changed_by: null },
   agents: { created_by: null, expert_name: null },
@@ -524,6 +525,12 @@ class FakeQuery {
       return { data: null, error: { message: `Could not find the table 'public.${this.table}' in the schema cache`, code: "PGRST205" }, count: null, status: 404 };
     if (this.table === "sessions" && this.fake.missingTables.has("processes") && this.columns?.includes("process_id"))
       return { data: null, error: { message: "column sessions.process_id does not exist", code: "42703" }, count: null, status: 400 };
+    if (this.table === "sessions" && this.fake.missingTables.has("sessions.teach")) {
+      if (this.columns?.includes("teach"))
+        return { data: null, error: { message: "column sessions.teach does not exist", code: "42703" }, count: null, status: 400 };
+      if (this.op === "update" && "teach" in this.values)
+        return { data: null, error: { message: "Could not find the 'teach' column of 'sessions' in the schema cache", code: "PGRST204" }, count: null, status: 400 };
+    }
     const failure = this.fake.takeFailure(this.table);
     if (failure) return { data: null, error: failure as FakeError, count: null, status: 400 };
     const all = this.fake.tables[this.table];

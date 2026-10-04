@@ -25,6 +25,7 @@ import {
   type ScreenEvent,
   type Session,
   type SessionDigest,
+  type TeachProgress,
   type TranscriptEntry,
 } from "@/lib/types";
 import {
@@ -43,6 +44,7 @@ import {
   processNewestFirst,
   ProcessDeletedError,
   ProcessesUnavailableError,
+  TeachUnavailableError,
   ProcessExistsError,
   ProcessNotFoundError,
   ProcessVersionConflictError,
@@ -76,6 +78,8 @@ type SessionRow = {
   agent_id?: string | null;
   // Present once migration 20261004030000_processes is applied.
   process_id?: string | null;
+  // Present once migration 20261004040000_session_teach is applied.
+  teach?: TeachProgress | null;
 };
 type ProcessRow = Process;
 type ProcessVersionRow = ProcessVersion & { workspace_id: string };
@@ -158,6 +162,13 @@ export function isProcessesMissing(error: unknown): boolean {
   // public.update_process missing (42883 undefined function, PostgREST PGRST202).
   if (e.code === "42883" || e.code === "PGRST202") return mentions;
   return false;
+}
+
+/** Migration 20261004040000_session_teach not applied: undefined column sessions.teach (42703, PostgREST PGRST204). */
+export function isTeachMissing(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const e = error as { code?: unknown; message?: unknown };
+  return (e.code === "42703" || e.code === "PGRST204") && typeof e.message === "string" && /teach/i.test(e.message);
 }
 
 /**
@@ -343,6 +354,7 @@ export function createSupabaseStore(
       ...(frameList.length > 0 ? { frames: frameList } : {}),
       ...(row.agent_id ? { agent_id: row.agent_id } : {}),
       ...(row.process_id ? { process_id: row.process_id } : {}),
+      ...(row.teach ? { teach: row.teach } : {}),
     });
   }
 
@@ -512,7 +524,8 @@ export function createSupabaseStore(
     },
 
     // sessions.process_id is read when migration 20261004030000_processes is applied; without it the digests
-    // are read without the column (every session then counts as not linked to a process).
+    // are read without the column (every session then counts as not linked to a process). The same for
+    // sessions.teach and migration 20261004040000_session_teach (no saved teach progress then).
     async listSessionDigests() {
       const cols = "id,kind,expert,agent_id,started_at,ended_at,workmap,off_record_ranges,created_by";
       const read = (c: string) =>
@@ -524,10 +537,19 @@ export function createSupabaseStore(
             .order("started_at", { ascending: false })
             .order("id", { ascending: false }),
         );
-      const rows = await read(`${cols},process_id`).catch((err: unknown) => {
-        if (isProcessesMissing((err as { cause?: unknown }).cause)) return read(cols);
-        throw err;
-      });
+      let optional = ["process_id", "teach"];
+      let rows: Omit<SessionRow, "workspace_id">[];
+      for (;;) {
+        try {
+          rows = await read([cols, ...optional].join(","));
+          break;
+        } catch (err) {
+          const cause = (err as { cause?: unknown }).cause;
+          const drop = optional.find((c) => (c === "teach" ? isTeachMissing(cause) : isProcessesMissing(cause)));
+          if (!drop) throw err;
+          optional = optional.filter((c) => c !== drop);
+        }
+      }
       return rows.map(
         (r): SessionDigest => ({
           id: r.id,
@@ -539,6 +561,7 @@ export function createSupabaseStore(
           off_record_ranges: r.off_record_ranges ?? [],
           ...(r.agent_id ? { agent_id: r.agent_id } : {}),
           ...(r.process_id ? { process_id: r.process_id } : {}),
+          ...(r.teach ? { teach: r.teach } : {}),
           created_by: r.created_by,
         }),
       );
@@ -643,6 +666,17 @@ export function createSupabaseStore(
     async saveWorkMap(id, workmap) {
       assertId(id);
       await updateRow(id, { workmap });
+      return load(id);
+    },
+
+    async saveTeach(id, teach) {
+      assertId(id);
+      try {
+        await updateRow(id, { teach });
+      } catch (err) {
+        if (isTeachMissing((err as { cause?: unknown }).cause)) throw new TeachUnavailableError();
+        throw err;
+      }
       return load(id);
     },
 
