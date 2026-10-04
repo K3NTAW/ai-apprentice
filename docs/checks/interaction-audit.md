@@ -237,16 +237,21 @@ dead (no action, fails the guard).
 | /agents/preview/[id]?tab=learners | a | Shortcuts | Opens /agents/pip | works |
 | /agents/preview/[id]?tab=learners | a | Teach a new employee | Opens /learn | works |
 | /agents/preview/[id]?tab=learners | a | Train | Opens /capture | works |
+| /agents/preview/[id]?tab=processes | a | Add to this process | Opens /capture | works |
 | /agents/preview/[id]?tab=processes | a | Agents / Pip | Opens /agents | works |
+| /agents/preview/[id]?tab=processes | a | Edit | Opens /processes/pip-process | works |
 | /agents/preview/[id]?tab=processes | a | Guardrails 8 | Opens /agents/pip | works |
 | /agents/preview/[id]?tab=processes | a | Learners 3 | Opens /agents/pip | works |
 | /agents/preview/[id]?tab=processes | a | Open map | Opens /map/pip-1 | works |
 | /agents/preview/[id]?tab=processes | a | Processes 2 | Opens /agents/pip | works |
+| /agents/preview/[id]?tab=processes | a | Retrain from scratch | Opens /capture | works |
 | /agents/preview/[id]?tab=processes | a | Settings | Opens /agents/pip | works |
 | /agents/preview/[id]?tab=processes | a | Shortcuts | Opens /agents/pip | works |
 | /agents/preview/[id]?tab=processes | a | Teach a new employee | Opens /learn | works |
 | /agents/preview/[id]?tab=processes | a | Train | Opens /capture | works |
 | /agents/preview/[id]?tab=processes | a | Train a new process | Opens /capture | works |
+| /agents/preview/[id]?tab=processes | button | Archive | Runs 'Archive' in place | works |
+| /agents/preview/[id]?tab=processes | button | Delete | Runs 'Delete' in place | works |
 | /agents/preview/[id]?tab=settings | a | Agents / Pip | Opens /agents | works |
 | /agents/preview/[id]?tab=settings | a | Edit avatar | Opens /agents/pip/studio | works |
 | /agents/preview/[id]?tab=settings | a | Guardrails 8 | Opens /agents/pip | works |
@@ -320,6 +325,20 @@ dead (no action, fails the guard).
 | /map/preview | button | 7 · 24:30 Post in the ERP and file the PDF | Runs '7 · 24:30 Post in the ERP and file the PDF' in place | works |
 | /map/preview | button | Next step | Runs 'Next step' in place | works |
 | /map/preview | button | Previous step | Runs 'Previous step' in place | works |
+| /processes/preview | a | Add to this process | Opens /capture | works |
+| /processes/preview | a | Agent / Processes / Code incoming supplier invoices | Opens /agents/pip | works |
+| /processes/preview | a | Retrain from scratch | Opens /capture | works |
+| /processes/preview | button | Add guardrail | Runs 'Add guardrail' in place | works |
+| /processes/preview | button | Archive | Runs 'Archive' in place | works |
+| /processes/preview | button | Delete | Runs 'Delete' in place | works |
+| /processes/preview | button | Delete process | Runs 'Delete process' in place | works |
+| /processes/preview | button | Delete step | Runs 'Delete step' in place | works |
+| /processes/preview | button | Move down | Runs 'Move down' in place | works |
+| /processes/preview | button | Move up | Runs 'Move up' in place | works |
+| /processes/preview | button | Rename | Runs 'Rename' in place | works |
+| /processes/preview | button | Restore | Runs 'Restore' in place | works |
+| /processes/preview | button | Save | Runs 'Save' in place | works |
+| /processes/preview | button | Save step | Runs 'Save step' in place | works |
 | /shell (signed in) | a | Account and workspace | Opens /workspace | works |
 | /shell (signed in) | a | Agents | Opens /agents | works |
 | /shell (signed in) | a | AI Apprentice home | Opens / | works |

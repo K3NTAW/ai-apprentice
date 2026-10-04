@@ -1,4 +1,4 @@
-# Manual checks: processes slice (a) (T-0212, fix rounds T-0219, T-0225, T-0233)
+# Manual checks: processes slice (a) (T-0212, fix rounds T-0219, T-0225, T-0233), (c) and (d) (T-0235)
 
 Data model, API and the read side: agent cards, header, filter tabs, the agent page tabs, Learn and Teach read the
 agent's processes merged with legacy confirmed sessions (agentWorkMaps). Slices b-d wire the debrief, merge and editing.
@@ -56,6 +56,22 @@ After `supabase db push`:
 16. Edit a step title of a process (PATCH workmap), then open it from Learn: the link carries `&process=<id>` and
     Teach shows the edited title. An old `/teach?session=<id>` link still opens that session's Work Map.
 17. Before the migration: the debrief shows no process choice (503) and the session stays a legacy Work Map.
+18. Slice (d), Processes tab: each process row has Edit, Add to this process, Retrain from scratch and, as owner,
+    Archive and Delete (both ask first). As expert, no Archive or Delete; as learner, only Details. Legacy session rows
+    have no actions.
+19. /processes/<id> as owner or expert: Rename changes the title without a new version. Edit a step's title, decision
+    or reason and Save step: version +1 ('Edited' in the history). A changed reason or guardrail quote shows
+    'edited by <your name>'; the version before keeps the original quote (`GET /api/processes/<id>/versions`).
+20. Move up / Move down and Delete step (asks first) renumber the steps; a shortcut of a deleted step loses its step.
+    Add, edit and delete a guardrail; each saves a new version.
+21. Restore on an older version (asks first) makes it the current Work Map as a new version; the history only grows.
+    Two tabs editing the same version: the second save says the process changed meanwhile (409), nothing is lost.
+22. As owner, Archive (asks first) hides the process from the agent page and Learn; its page shows Archived and
+    Restore. Delete process (asks first) goes back to the agent page; the process and its versions are gone.
+23. Add to this process opens `/capture?agent=<a>&process=<id>&mode=extend`; at the end of that debrief the Work
+    Map is added to the process without the choice ('extended' in the history). Retrain from scratch (`mode=replace`)
+    replaces it ('replaced', the old version kept).
+24. Before the migration, /processes/<id> says 'Processes are not available yet.'
 
 Rollback: supabase/rollbacks/20261004030000_processes.down.sql (lossy: drops processes, versions and sessions.process_id),
 then `supabase migration repair --status reverted 20261004030000`.
