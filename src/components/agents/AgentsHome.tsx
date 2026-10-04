@@ -4,7 +4,7 @@
 // '+' button opens Capture (/capture?agent=<id>) with the agent from the picker pill. The mic dictates into the box,
 // Send submits it. The chip row below links to Capture, Learn, the Work Maps and the workspace invites.
 import Link from "next/link";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState, useSyncExternalStore, type FormEvent } from "react";
 import { Badge, buttonClass } from "@/components/ui";
 import { HOME_LABEL, HOME_PLACEHOLDER, homeAction, searchHome, type HomeEntry } from "@/lib/agents/home";
 import AgentAvatar from "./AgentAvatar";
@@ -19,6 +19,8 @@ function MicIcon({ size = 18 }: { size?: number }) {
     </svg>
   );
 }
+
+const noSubscribe = () => () => {};
 
 type Recognition = { lang: string; onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null; start: () => void };
 type RecognitionCtor = new () => Recognition;
@@ -46,8 +48,7 @@ export default function AgentsHome({ greeting, cards, canCreate, index, initialQ
   const results = action.kind === "search" ? action.results : searchHome(query, index);
   const selected = cards.find((c) => c.id === agentId) ?? null;
   // The mic dictates into the box where the browser supports speech recognition; disabled otherwise.
-  const [speech, setSpeech] = useState(false);
-  useEffect(() => setSpeech(recognitionCtor() !== null), []);
+  const speech = useSyncExternalStore(noSubscribe, () => recognitionCtor() !== null, () => false);
   function listen() {
     const Ctor = recognitionCtor();
     if (!Ctor) return;
