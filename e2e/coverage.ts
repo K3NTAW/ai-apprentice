@@ -14,7 +14,7 @@ export type Inventory = Array<{ name: string; tag: string; role: string | null; 
 
 export async function inventory(page: Page, scope = "body"): Promise<Inventory> {
   return page.locator(scope).evaluate((root) => {
-    const sel = 'button, a[href], [role="button"], [role="menuitem"], [role="tab"]';
+    const sel = 'button, a[href], summary, [role="button"], [role="menuitem"], [role="tab"]';
     const out: Array<{ name: string; tag: string; role: string | null; href: string | null }> = [];
     for (const el of Array.from(root.querySelectorAll<HTMLElement>(sel))) {
       const r = el.getBoundingClientRect();

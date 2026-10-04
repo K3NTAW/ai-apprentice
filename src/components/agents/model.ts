@@ -183,26 +183,31 @@ export type ShortcutRow = { chord: string; app: string; what: string; why: strin
 export function agentShortcuts(agentId: string, sessions: readonly SessionDigest[]): ShortcutRow[] {
   const seen = new Set<string>();
   const rows: ShortcutRow[] = [];
-  for (const s of confirmedOf(agentId, sessions))
+  const add = (s: SessionDigest, raw: unknown, n: number | undefined) => {
+    const p = ShortcutSchema.safeParse(raw);
+    if (!p.success) return;
+    const key = `${p.data.chord.toLowerCase()}|${(p.data.app ?? "").toLowerCase()}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    rows.push({
+      chord: p.data.chord,
+      app: p.data.app ?? "",
+      what: p.data.what ?? "",
+      why: p.data.why ?? "",
+      task: s.workmap!.task || "Untitled capture",
+      href: `/map/${encodeURIComponent(s.id)}${n === undefined ? "" : `#step-${n}`}`,
+    });
+  };
+  for (const s of confirmedOf(agentId, sessions)) {
+    // Contract: WorkMap.shortcuts (effect and a quoted why), the same list the agent stats count.
+    for (const sc of s.workmap!.shortcuts ?? []) add(s, { chord: sc.chord, app: sc.app, what: sc.effect, why: sc.why?.quote }, sc.step);
+    // Older maps carried shortcuts per step.
     for (const step of s.workmap!.steps) {
       const list = (step as { shortcuts?: unknown }).shortcuts;
       if (!Array.isArray(list)) continue;
-      for (const raw of list) {
-        const p = ShortcutSchema.safeParse(raw);
-        if (!p.success) continue;
-        const key = `${p.data.chord.toLowerCase()}|${(p.data.app ?? "").toLowerCase()}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        rows.push({
-          chord: p.data.chord,
-          app: p.data.app ?? "",
-          what: p.data.what ?? "",
-          why: p.data.why ?? "",
-          task: s.workmap!.task || "Untitled capture",
-          href: `/map/${encodeURIComponent(s.id)}#step-${step.n}`,
-        });
-      }
+      for (const raw of list) add(s, raw, step.n);
     }
+  }
   return rows;
 }
 

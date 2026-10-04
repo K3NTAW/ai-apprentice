@@ -82,6 +82,24 @@ describe("agent page", () => {
     expect(html).toContain("Saves retyping the terms.");
   });
 
+  it("shortcuts glossary reads the WorkMap.shortcuts contract the stats count (T-0172 e2e)", () => {
+    const base = SESSIONS.find((s) => s.agent_id === AGENT_A.id && s.workmap?.confirmed_by_expert)!;
+    const s = {
+      ...base,
+      id: "s-contract",
+      workmap: {
+        ...base.workmap!,
+        steps: base.workmap!.steps.map((st) => ({ ...st, shortcuts: undefined })),
+        shortcuts: [{ chord: "Cmd+Enter", app: "Invoices", effect: "Send for approval", why: { quote: "Faster than the button", t: 121 }, first_t: 120, count: 3, step: 3 }],
+      },
+    };
+    const rows = agentShortcuts(AGENT_A.id, [s]);
+    expect(rows).toEqual([
+      { chord: "Cmd+Enter", app: "Invoices", what: "Send for approval", why: "Faster than the button", task: base.workmap!.task, href: "/map/s-contract#step-3" },
+    ]);
+    expect(agentStats(AGENT_A.id, [s]).shortcuts).toBe(rows.length);
+  });
+
   it("empty tabs explain themselves", () => {
     const empty = { processes: [], shortcuts: [], guardrails: [], learners: [] };
     expect(render("shortcuts", empty)).toContain("No shortcuts recorded yet");
