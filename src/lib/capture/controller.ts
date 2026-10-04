@@ -11,7 +11,9 @@ import {
 } from "@/lib/types";
 import type { EventBus } from "@/lib/perception/eventBus";
 import type { ActivityTracker } from "@/lib/perception/activity";
-import { COMPANION_STALE_MS, type AskGate, type CompanionActivity } from "@/lib/voice/askGate";
+import { COMPANION_STALE_MS, SETTLED_WAITS, type AskGate, type CompanionActivity } from "@/lib/voice/askGate";
+import { redactText } from "@/lib/redact";
+import { LINK_AFTER_S, isExplanation, linkNarration } from "./narration";
 import { offRecordRegExp } from "@/lib/agents/settings";
 import { redactScreenEvent } from "@/lib/perception/redactEvent";
 import type { CompanionClient } from "@/lib/companion/client";
@@ -26,6 +28,14 @@ export const MAX_WAIT_MS = 20000;
 export const ACTIVITY_THROTTLE_MS = 1000;
 export const RECENT_EVENTS = 8;
 export const FEED_SIZE = 6;
+/** dock.now at most once per NOW_MIN_MS (the latest line wins); dock.ack at most once per ACK_MIN_MS. */
+export const NOW_MIN_MS = 1000;
+export const ACK_MIN_MS = 5000;
+export const NOW_TEXT_MAX = 120;
+export const ACK_TEXT = "got it";
+/** Transcript text kept per utterance; the same final repeated within DEDUPE_MS is dropped. */
+export const TRANSCRIPT_TEXT_MAX = 2000;
+export const DEDUPE_MS = 3000;
 
 const QUESTIONS: DecisionQuestionName[] = ["event_class", "screen_explains_it", "ask_timing"];
 const OFF_RE = /\boff the record\b/i;
@@ -84,7 +94,7 @@ export type CaptureControllerOptions = {
 };
 
 export type CaptureCompanion = Pick<CompanionClient, "buddyState" | "buddySay" | "buddyPoint" | "buddyClear" | "sessionState"> &
-  Partial<Pick<CompanionClient, "dockShow" | "dockHide" | "dockLearned">>;
+  Partial<Pick<CompanionClient, "dockShow" | "dockHide" | "dockLearned" | "dockNow" | "dockAck">>;
 /** Voice agent status and mode (useVoiceAgent); null in text mode. */
 export type AgentPresence = { status: string | null; mode: string | null };
 
@@ -148,6 +158,7 @@ export function createCaptureController(opts: CaptureControllerOptions) {
   // Last companion activity with its local receive time; null when absent or disconnected.
   let companion: { typing: boolean; idle_ms: number; at: number } | null = null;
   let unsubscribe: (() => void) | null = null;
+  let lastEventAt: number | null = null;
   // Once a kind hits its daily cap, the loop stops calling it for this session.
   const limited = new Set<LimitedKind>();
   let running = false;
@@ -165,6 +176,47 @@ export function createCaptureController(opts: CaptureControllerOptions) {
   // dock.learned lines already sent, keyed on kind + normalised text.
   const learnedSent = new Set<string>();
   let docked = false;
+  // Live 'Now' line: last sent time and the line held back by the rate limit.
+  let nowSentAt = -Infinity;
+  let nowHeld: { text: string; app?: string } | null = null;
+  let nowShown = false;
+  let ackAt = -Infinity;
+  // Events the expert explained in unprompted narration, and recent explanations (session t) for events still to come.
+  const explained = new Set<string>();
+  const explanations: { t: number }[] = [];
+  let lastExpert: { text: string; at: number } | null = null;
+  let warnedInputs = false;
+
+  const clean = (raw: string, max: number) => (redactScreenEvent({ to: raw.replace(/\s+/g, " ").trim() }).to ?? "").slice(0, max);
+
+  /** The dock's live 'Now' line: redacted, rate-limited, never off the record. Empty text clears it. */
+  function dockNow(raw: string, app?: string) {
+    if (!learning || !buddy?.dockNow) return;
+    if (raw && offRecord) return;
+    const text = raw ? clean(raw, NOW_TEXT_MAX) : "";
+    const cleanApp = app ? clean(app, 64) : "";
+    const line = { text, ...(cleanApp ? { app: cleanApp } : {}) };
+    if (text && now() - nowSentAt < NOW_MIN_MS) {
+      nowHeld = line;
+      return;
+    }
+    nowHeld = null;
+    if (!text && !nowShown) return;
+    nowSentAt = now();
+    nowShown = Boolean(text);
+    buddy.dockNow(line.text, line.app);
+  }
+
+  function flushNow() {
+    if (nowHeld && !offRecord && now() - nowSentAt >= NOW_MIN_MS) dockNow(nowHeld.text, nowHeld.app);
+  }
+
+  /** Subtle 'got it' chip when the expert explains something unprompted. No voice. */
+  function dockAck() {
+    if (!learning || offRecord || !buddy?.dockAck || now() - ackAt < ACK_MIN_MS) return;
+    ackAt = now();
+    buddy.dockAck(ACK_TEXT);
+  }
 
   /** One 'What I learned' line in the dock: redacted, deduped, never off the record. */
   function learned(kind: "step" | "shortcut" | "guardrail", raw: string) {
@@ -255,11 +307,21 @@ export function createCaptureController(opts: CaptureControllerOptions) {
   function gateActivity() {
     const snap = activity.snapshot();
     const c = companionBlock();
+    if (!warnedInputs && (snap.speech_silence_ms === undefined || snap.typing_idle_ms === undefined || snap.screen_stable_ms === undefined)) {
+      // Rollback path, not silent: the gate falls back to silence_ms for the missing pause inputs.
+      warnedInputs = true;
+      onError?.("activity", new Error("active cadence inputs missing, gate uses silence_ms"));
+    }
+    const sinceEvent = lastEventAt === null ? Infinity : now() - lastEventAt;
     return {
       typing: snap.typing,
       // Push-to-talk held: the user is talking, so the gate holds questions and the agent listens.
       speaking: snap.speaking || talking,
       silence_ms: snap.silence_ms,
+      ...(snap.speech_silence_ms !== undefined ? { speech_silence_ms: snap.speech_silence_ms } : {}),
+      ...(snap.typing_idle_ms !== undefined ? { typing_idle_ms: snap.typing_idle_ms } : {}),
+      // Screen stable: no frame change and no new screen event for a while.
+      screen_stable_ms: Math.min(snap.screen_stable_ms ?? snap.silence_ms, sinceEvent),
       ...(c ? { companion: c } : {}),
     };
   }
@@ -300,6 +362,7 @@ export function createCaptureController(opts: CaptureControllerOptions) {
       timing: item.decisions.ask_timing,
       activity: gateActivity(),
       agentSpeaking: voice.isSpeaking(),
+      explained: explained.has(item.event.id),
     });
     if (d.action === "ask_now" && item.shortcut) {
       // One shortcut question per SHORTCUT_ASK_GAP_MS and per chord+app; the rest go to the debrief gap list.
@@ -320,7 +383,7 @@ export function createCaptureController(opts: CaptureControllerOptions) {
       debrief.push({ event: item.event, why: d.why });
       return true;
     }
-    if (d.why === "routine") return true;
+    if (SETTLED_WAITS.has(d.why)) return true;
     if (now() - item.since >= MAX_WAIT_MS) {
       debrief.push({ event: item.event, why: "waited_too_long" });
       return true;
@@ -346,6 +409,7 @@ export function createCaptureController(opts: CaptureControllerOptions) {
 
   function tick() {
     if (offRecord) return;
+    flushNow();
     if (learning) publishChord(linker.poll(now()));
     if (activity.snapshot().typing || companionTyping()) pingActivity();
     if (!pending.length) return;
@@ -383,6 +447,13 @@ export function createCaptureController(opts: CaptureControllerOptions) {
     if (offRecord) return;
     if (learning && event.source === "vision") publishChord(linker.onVision(event, now()));
     seen.push(event);
+    lastEventAt = now();
+    // An explanation said just before the event (within LINK_AFTER_S) covers it too.
+    if (event.type !== "shortcut_used" && explanations.some((x) => event.t - x.t >= 0 && event.t - x.t <= LINK_AFTER_S)) explained.add(event.id);
+    // The dock prefixes the app ("Excel · ..."), so the trailing " in <app>" is dropped.
+    const line = describeEvent(event);
+    const suffix = event.app ? ` in ${event.app}` : "";
+    dockNow(suffix && line.endsWith(suffix) ? line.slice(0, -suffix.length) : line, event.app);
     send("postEvents", () => api.postEvents([event]));
     voice.injectContext(describeEvent(event));
     if (event.type === "shortcut_used") {
@@ -444,8 +515,10 @@ export function createCaptureController(opts: CaptureControllerOptions) {
     send("postQA", () => api.postQA(qa));
   }
 
-  function postEntry(speaker: TranscriptEntry["speaker"], text: string) {
-    const entry: TranscriptEntry = { id: newId("tr"), t: getT(), speaker, text, phase: "capture", redacted: false };
+  /** Every final utterance is stored with its session time, redacted here before it leaves the page (the store redacts again). */
+  function postEntry(speaker: TranscriptEntry["speaker"], raw: string) {
+    const text = redactText(raw.slice(0, TRANSCRIPT_TEXT_MAX)).text;
+    const entry: TranscriptEntry = { id: newId("tr"), t: getT(), speaker, text, phase: "capture", redacted: true };
     send("postTranscript", () => api.postTranscript([entry]));
   }
 
@@ -458,6 +531,8 @@ export function createCaptureController(opts: CaptureControllerOptions) {
       // Nothing companion-derived survives into the off-record range, pending chords included.
       companion = null;
       linker.cancel();
+      nowHeld = null;
+      dockNow("");
       capture?.pause();
       offFrom = getT();
       send("setOffRecord", () => api.setOffRecord({ from: offFrom }));
@@ -492,14 +567,36 @@ export function createCaptureController(opts: CaptureControllerOptions) {
       setOffRecord(true);
       return;
     }
+    // Finals only reach here; the same final resent within DEDUPE_MS is stored once.
+    const key = text.toLowerCase().replace(/\s+/g, " ");
+    if (lastExpert && lastExpert.text === key && now() - lastExpert.at < DEDUPE_MS) return;
+    lastExpert = { text: key, at: now() };
     activity.noteSpeech(true);
     activity.noteSpeech(false);
     postEntry(speaker, text);
     if (open) {
       lastAnswer = text;
       closeOpen(text);
-    }
+    } else onNarration(text);
     changed();
+  }
+
+  /** Unprompted narration: an explanation links to the nearby events, so the gate and the debrief skip them. */
+  function onNarration(text: string) {
+    if (!isExplanation(text)) return;
+    const t = getT();
+    explanations.push({ t });
+    if (explanations.length > 20) explanations.shift();
+    let ids: string[] = [];
+    try {
+      ids = linkNarration(t, seen.filter((e) => e.type !== "shortcut_used"));
+    } catch (err) {
+      // Logged fallback: without links the gate behaves as before for these events.
+      fail("narration")(err);
+    }
+    for (const id of ids) explained.add(id);
+    learned("step", text);
+    dockAck();
   }
 
   /** Companion activity: holds questions while typing, idle_ms feeds the pause. Dropped off the record. */
@@ -579,6 +676,8 @@ export function createCaptureController(opts: CaptureControllerOptions) {
       closeOpen();
       running = false;
       talking = false;
+      nowHeld = null;
+      dockNow("");
       setDock(false);
       changed();
     },

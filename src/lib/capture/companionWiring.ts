@@ -45,5 +45,7 @@ export function captureCompanionSink(t: () => CompanionTransport | null): Captur
     dockShow: (side) => t()?.dockShow(side) ?? false,
     dockHide: () => t()?.dockHide() ?? false,
     dockLearned: (kind, text) => t()?.dockLearned(kind, text) ?? false,
+    dockNow: (text, app) => t()?.dockNow(text, app) ?? false,
+    dockAck: (text) => t()?.dockAck(text) ?? false,
   };
 }

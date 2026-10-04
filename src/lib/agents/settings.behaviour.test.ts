@@ -44,9 +44,12 @@ const item = (cls: string, id: string): PendingItem => ({
 const quiet = { typing: false, speaking: false, silence_ms: 5000 };
 
 describe("settings schema", () => {
-  it("defaults: redaction on, interval at the old minGapMs (20 s), phrase 'off the record'", () => {
-    expect(DEFAULT_SETTINGS).toMatchObject({ redact_names_emails: true, redact_iban_phone: true, question_interval_s: 20, off_record_phrase: "off the record" });
-    expect(minGapMs(DEFAULT_SETTINGS)).toBe(20000);
+  it("defaults: redaction on, interval 60 s (active cadence minimum gap), phrase 'off the record'", () => {
+    expect(DEFAULT_SETTINGS).toMatchObject({ redact_names_emails: true, redact_iban_phone: true, question_interval_s: 60, off_record_phrase: "off the record" });
+    expect(minGapMs(DEFAULT_SETTINGS)).toBe(60000);
+    // Stored rows with an explicit 20 keep it; rows without the key get the new default.
+    expect(minGapMs(resolveSettings({ question_interval_s: 20 }))).toBe(20000);
+    expect(minGapMs(resolveSettings({}))).toBe(60000);
     expect(resolveSettings({ retention_days: 7, voice_speed: 9, bogus: 1 })).toEqual({ ...DEFAULT_SETTINGS, retention_days: 7 });
   });
   it("rejects unknown keys, out of range values and an adversarial phrase", () => {
@@ -64,7 +67,7 @@ describe("settings schema", () => {
 describe("question interval and guardrails first (ask gate)", () => {
   it("the interval is the gate's minimum gap", () => {
     let t = 0;
-    const gate = createAskGate({ minGapMs: minGapMs({ ...DEFAULT_SETTINGS, question_interval_s: 120 }), now: () => t });
+    const gate = createAskGate({ cadence: "classic", minGapMs: minGapMs({ ...DEFAULT_SETTINGS, question_interval_s: 120 }), now: () => t });
     const ask = () => gate.consider({ ...item("judgment_call", "a"), activity: quiet, agentSpeaking: false });
     expect(ask().action).toBe("ask_now");
     gate.markAsked("reason");
@@ -78,7 +81,7 @@ describe("question interval and guardrails first (ask gate)", () => {
     expect(questionPriority("possible_guardrail", false)).toBe(1);
     expect(questionPriority("judgment_call", true)).toBe(1);
     for (const [first, expected] of [[true, "g"], [false, "j"]] as const) {
-      const gate = createAskGate({ guardrailsFirst: first, now: () => 0 });
+      const gate = createAskGate({ cadence: "classic", guardrailsFirst: first, now: () => 0 });
       gate.enqueue(item("judgment_call", "j"));
       gate.enqueue(item("possible_guardrail", "g"));
       expect(gate.nextReady(quiet)?.item.event.entity?.id).toBe(expected);
@@ -107,7 +110,7 @@ describe("capture controller: shortcuts and the off-record phrase", () => {
       voice: voice as unknown as CaptureVoice,
       bus,
       activity: createActivityTracker({ now }),
-      gate: createAskGate({ now }),
+      gate: createAskGate({ cadence: "classic", now }),
       now,
       sessionId: "s_test",
       getT: () => now() / 1000,

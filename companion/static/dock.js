@@ -51,6 +51,11 @@ api.onState((v) => {
   $("role").textContent = str(v.role);
   $("state-label").textContent = str(v.stateLabel);
   $("rec-label").textContent = str(v.recLabel);
+  // v4: live 'Now' line and the 'got it' chip; main sends null for both off the record or paused.
+  $("now-text").textContent = str(v.now);
+  show($("now"), str(v.now) !== "" && !off);
+  $("ack").textContent = str(v.ack);
+  show($("ack"), str(v.ack) !== "" && !off);
   $("say-text").textContent = str(v.say);
   show($("say"), str(v.say) !== "" && !off);
   show($("offrec"), off);

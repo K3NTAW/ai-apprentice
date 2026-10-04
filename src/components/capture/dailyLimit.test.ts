@@ -34,7 +34,7 @@ function setup(api: Partial<CaptureApi>) {
     voice,
     bus,
     activity: createActivityTracker({ now }),
-    gate: createAskGate({ now }),
+    gate: createAskGate({ cadence: "classic", now }),
     now,
     sessionId: "s_test",
     getT: () => now() / 1000,

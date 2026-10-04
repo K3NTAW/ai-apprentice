@@ -1,7 +1,7 @@
 // COMPANION PROTOCOL message shapes, validation and builders. Electron-free and ws-free.
 import { BUDDY_MODES, MAX_POINT_TEXT, MAX_SAY, POINT_STYLES, type BuddyAction, type BuddyMode, type PointStyle } from "./buddy.mjs";
 import { validateAvatarSet, type AvatarSet } from "./avatarUrl.mjs";
-import { DOCK_SIDES, LEARNED_KINDS, MAX_LEARNED_TEXT, type DockSide, type LearnedKind } from "./dock.mjs";
+import { DOCK_SIDES, LEARNED_KINDS, MAX_ACK_TEXT, MAX_LEARNED_TEXT, MAX_NOW_APP, MAX_NOW_TEXT, type DockSide, type LearnedKind } from "./dock.mjs";
 import { validateHalo, validateRect, HALO_TTL_MS, type Halo, type Rect } from "./overlay.mjs";
 import type { WireAction } from "./shortcuts.mjs";
 
@@ -9,8 +9,11 @@ export const DEFAULT_PORT = 47321;
 export const MAX_PAYLOAD_BYTES = 16 * 1024;
 /** session.state only (v3 avatars: up to 8 x 100 KiB data URLs, 800 KiB total, plus texts). Every other type keeps 16 KiB. */
 export const MAX_SESSION_PAYLOAD_BYTES = 1024 * 1024;
-/** Protocol capability sent in status so the page can feature-detect v2 (buddy.*, session.state, shortcut) and v3 (agent, dock.*, chord). */
-export const PROTOCOL_VERSION = 3;
+/**
+ * Protocol capability sent in status so the page can feature-detect v2 (buddy.*, session.state, shortcut), v3 (agent, dock.*, chord)
+ * and v4 (dock.now, dock.ack). Older apps log and ignore unknown types.
+ */
+export const PROTOCOL_VERSION = 4;
 /** session.state.agent limits (code points). A bad agent is dropped; the rest of session.state is kept. */
 export const AGENT_LIMITS = { id: 64, name: 60, role: 80 } as const;
 
@@ -94,6 +97,11 @@ export type AgentInfo = { id: string; name: string; role: string; avatar: Avatar
 export type DockShowMessage = { type: "dock.show"; side: DockSide };
 export type DockHideMessage = { type: "dock.hide" };
 export type DockLearnedMessage = { type: "dock.learned"; kind: LearnedKind; text: string };
+/** v4: the dock's live 'Now' line; empty text clears it. */
+export type DockNowMessage = { type: "dock.now"; text: string; app?: string };
+/** v4: a short acknowledgement chip ('got it'). */
+export type DockAckMessage = { type: "dock.ack"; text: string };
+export type DockMessage = DockShowMessage | DockHideMessage | DockLearnedMessage | DockNowMessage | DockAckMessage;
 export type ClientMessage =
   | HelloMessage
   | HaloMessage
@@ -106,7 +114,12 @@ export type ClientMessage =
   | SessionStateMessage
   | DockShowMessage
   | DockHideMessage
-  | DockLearnedMessage;
+  | DockLearnedMessage
+  | DockNowMessage
+  | DockAckMessage;
+
+const DOCK_TYPES: readonly string[] = ["dock.show", "dock.hide", "dock.learned", "dock.now", "dock.ack"];
+export const isDockMessage = (m: ClientMessage): m is DockMessage => DOCK_TYPES.includes(m.type);
 
 /** warning: something was dropped from an otherwise valid message (e.g. a bad session.state.agent). */
 export type ParseResult = { ok: true; msg: ClientMessage; warning?: string } | { ok: false; reason: string };
@@ -268,6 +281,19 @@ export function parseClientMessage(raw: unknown): ParseResult {
       const t = cleanText(data.text, MAX_LEARNED_TEXT);
       if (t === null || t.trim() === "") return bad("learned_text");
       return { ok: true, msg: { type: "dock.learned", kind: data.kind, text: t.trim() } };
+    }
+    case "dock.now": {
+      const t = cleanText(data.text, MAX_NOW_TEXT);
+      if (t === null) return bad("now_text");
+      const app = data.app === undefined ? "" : cleanText(data.app, MAX_NOW_APP);
+      if (app === null) return bad("now_app");
+      const text = t.trim();
+      return { ok: true, msg: { type: "dock.now", text, ...(text && app.trim() ? { app: app.trim() } : {}) } };
+    }
+    case "dock.ack": {
+      const t = cleanText(data.text, MAX_ACK_TEXT);
+      if (t === null || t.trim() === "") return bad("ack_text");
+      return { ok: true, msg: { type: "dock.ack", text: t.trim() } };
     }
     default:
       return { ok: false, reason: "unknown_type" };

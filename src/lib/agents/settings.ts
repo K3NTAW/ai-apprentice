@@ -3,7 +3,7 @@
 // Stored in agents.settings (jsonb, partial: a missing key means its default). Read once at session start.
 import { z } from "zod";
 
-/** Minimum gap between two questions, in seconds. 20 is the ask gate's historical minGapMs (20 000 ms). */
+/** Minimum gap between two questions, in seconds. Default 60 (active ask cadence, T-0240); 20 was the old gate's minGapMs. */
 export const QUESTION_INTERVALS_S = [20, 60, 120, 180, 300] as const;
 export const VOICE_PRESETS = ["calm", "neutral", "energetic"] as const;
 export const VOICE_SPEED_MIN = 0.8;
@@ -44,7 +44,7 @@ export type AgentSettings = Required<AgentSettingsPatch>;
 export const SETTINGS_KEYS = Object.keys(AgentSettingsPatch.shape) as (keyof AgentSettings)[];
 
 export const DEFAULT_SETTINGS: AgentSettings = {
-  question_interval_s: 20,
+  question_interval_s: 60,
   guardrails_first: true,
   learn_shortcuts: true,
   voice_preset: "calm",

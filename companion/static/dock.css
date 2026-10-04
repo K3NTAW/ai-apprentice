@@ -34,6 +34,10 @@ body { user-select: none; }
 .role { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .state { margin-top: 4px; display: inline-flex; align-items: center; gap: 6px; color: var(--gr); }
 .state .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.nowline { margin: 0 14px; padding: 8px 12px; border-radius: 12px; background: var(--s2); display: flex; gap: 8px; align-items: baseline; min-width: 0; }
+.nowtext { color: var(--tx); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.ack { margin-left: 4px; padding: 1px 8px; border-radius: 999px; background: var(--bls); color: var(--bl); font-weight: 600; animation: aa-fade 2.5s ease-out forwards; }
+@keyframes aa-fade { 0%, 70% { opacity: 1; } 100% { opacity: 0; } }
 .say { margin: 0 14px; padding: 14px 16px; border-radius: 20px 20px 20px 6px; display: flex; flex-direction: column; gap: 8px; max-height: 30%; overflow-y: auto; }
 .say p { font-size: 16px; line-height: 1.35; font-weight: 500; white-space: pre-wrap; word-wrap: break-word; }
 .learned { padding: 18px 18px 0; display: flex; justify-content: space-between; align-items: baseline; }
@@ -64,3 +68,4 @@ body { user-select: none; }
 .dock.off .feed { opacity: .45; }
 .dock.off .state { color: var(--mu); }
 .dock.off .rec, .dock.paused .rec { background: var(--fa); animation: none; }
+@media (prefers-reduced-motion: reduce) { .ack { animation: none; } }

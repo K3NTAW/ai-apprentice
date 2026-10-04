@@ -37,7 +37,8 @@ import { createAgentCaptureSession } from "./agentSession";
 import CaptureConsole from "./CaptureConsole";
 import { dailyLimitNotice, voiceStartNotice } from "./dailyLimit";
 import SidePanel, { type PresenceStatus } from "./SidePanel";
-import { captureShortcuts, holdableGate, sessionClock } from "./sessionControls";
+import { askCadence, captureShortcuts, holdableGate, loadAgentSettings, sessionClock } from "./sessionControls";
+import { minGapMs } from "@/lib/agents/settings";
 
 type Loop = {
   ctrl: CaptureController;
@@ -225,7 +226,12 @@ function CaptureInner({ agentParam, transport, intent }: { agentParam: string | 
     const getT = () => (Date.now() - t0) / 1000;
     const bus = createEventBus({ now: getT });
     const activity = createActivityTracker({ now: Date.now });
-    const gate = holdableGate(createAskGate({ now: Date.now }), () => holdRef.current);
+    // Agent setting 'At most one question every' is the gate's minimum gap (default 60 s); cap 8 per 10 min.
+    const settings = await loadAgentSettings(agentLoad.status === "ok" ? agentLoad.agent.id : agentId);
+    const gate = holdableGate(
+      createAskGate({ now: Date.now, cadence: askCadence(process.env.NEXT_PUBLIC_ASK_CADENCE), minGapMs: minGapMs(settings) }),
+      () => holdRef.current,
+    );
     const voice: CaptureVoice = {
       promptTurn: (text, meta) => {
         if (voiceModeRef.current) agentRef.current.promptTurn(text);

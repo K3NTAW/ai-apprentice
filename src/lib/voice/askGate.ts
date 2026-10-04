@@ -2,7 +2,11 @@ import type { DecisionResult, ScreenEvent } from "@/lib/types";
 import type { AskKind } from "./prompts";
 
 // Decides whether the interviewer asks about a screen event now, waits, or saves it for the debrief.
-// Pure apart from the injected clock. Spec D7: ask less, later.
+// Pure apart from the injected clock.
+// Cadence "active" (default, T-0240): ask at a real pause (speech silence >= 1.2 s, no typing for >= 2 s, screen
+// stable >= 1 s) right after a meaningful action, at most one question per minGapMs (agent setting, default 60 s)
+// and at most maxPer10Min (default 8) per 10 minutes; skip what the expert already explained in narration.
+// Cadence "classic" is the old D7 'ask less, later' gate (1.5 s silence, 20 s gap, 5 per 10 min), kept for rollback.
 
 /**
  * Desktop companion activity (counts only). `fresh` is false when the last message is older than
@@ -11,7 +15,17 @@ import type { AskKind } from "./prompts";
  */
 export type CompanionActivity = { typing: boolean; idle_ms: number; fresh: boolean };
 
-export type Activity = { typing: boolean; speaking: boolean; silence_ms: number; companion?: CompanionActivity };
+export type Activity = {
+  typing: boolean;
+  speaking: boolean;
+  /** Time since the last keystroke, speech end or frame change (classic pause signal). */
+  silence_ms: number;
+  /** Active cadence inputs; absent means silence_ms is used for each (logged by the caller, not silent). */
+  speech_silence_ms?: number;
+  typing_idle_ms?: number;
+  screen_stable_ms?: number;
+  companion?: CompanionActivity;
+};
 
 export type AskGateInput = {
   event: ScreenEvent;
@@ -20,6 +34,8 @@ export type AskGateInput = {
   timing: DecisionResult;
   activity: Activity;
   agentSpeaking: boolean;
+  /** The expert already explained this event in unprompted narration (src/lib/capture/narration.ts). */
+  explained?: boolean;
 };
 
 export type AskGateDecision = {
@@ -30,8 +46,14 @@ export type AskGateDecision = {
 
 export type PendingItem = Omit<AskGateInput, "activity" | "agentSpeaking">;
 
+export type AskCadence = "active" | "classic";
+
 export type AskGateOptions = {
+  /** Default "active"; "classic" is the rollback to the old cadence. */
+  cadence?: AskCadence;
+  /** Hard cap per 10 minutes. Default 8 (active) or 5 (classic). */
   maxPer10Min?: number;
+  /** Minimum gap between two questions (agent setting 'At most one question every'). Default 60 s (active) or 20 s (classic). */
   minGapMs?: number;
   /** Agent setting 'Ask about guardrails first': possible guardrails jump the pending queue. */
   guardrailsFirst?: boolean;
@@ -44,8 +66,16 @@ export function questionPriority(eventClass: string, guardrailsFirst: boolean): 
 }
 
 const WINDOW_MS = 10 * 60 * 1000;
+/** 'wait' decisions that settle an item: routine events and events the expert already explained. */
+export const SETTLED_WAITS: ReadonlySet<string> = new Set(["routine", "explained_by_narration"]);
 export const MIN_SILENCE_MS = 1500;
 export const COMPANION_STALE_MS = 1500;
+/** Active cadence pause: speech silence, no typing and a stable screen for at least these long. */
+export const PAUSE_SPEECH_MS = 1200;
+export const PAUSE_TYPING_MS = 2000;
+export const PAUSE_SCREEN_MS = 1000;
+export const ACTIVE_DEFAULTS = { minGapMs: 60_000, maxPer10Min: 8 } as const;
+export const CLASSIC_DEFAULTS = { minGapMs: 20_000, maxPer10Min: 5 } as const;
 const SCREEN_EXPLAINS_THRESHOLD = 0.7;
 const GUARDRAIL_EVERY = 3;
 
@@ -63,7 +93,23 @@ export function effectiveActivity(a: Activity): { typing: boolean; speaking: boo
   };
 }
 
-export function createAskGate({ maxPer10Min = 5, minGapMs = 20000, guardrailsFirst = false, now = Date.now }: AskGateOptions = {}) {
+/** Active cadence pause check; null when it is a real pause. Companion idle_ms counts as typing idle when fresh. */
+export function activePause(a: Activity): "no_pause" | "typing" | "screen_moving" | null {
+  const c = a.companion?.fresh ? a.companion : undefined;
+  const speech = a.speech_silence_ms ?? a.silence_ms;
+  const typingIdle = Math.min(a.typing_idle_ms ?? a.silence_ms, c ? c.idle_ms : Infinity);
+  const stable = a.screen_stable_ms ?? a.silence_ms;
+  if (typingIdle < PAUSE_TYPING_MS) return "typing";
+  if (speech < PAUSE_SPEECH_MS) return "no_pause";
+  if (stable < PAUSE_SCREEN_MS) return "screen_moving";
+  return null;
+}
+
+export function createAskGate({ cadence = "active", maxPer10Min, minGapMs, guardrailsFirst = false, now = Date.now }: AskGateOptions = {}) {
+  const defaults = cadence === "classic" ? CLASSIC_DEFAULTS : ACTIVE_DEFAULTS;
+  const cap = maxPer10Min ?? defaults.maxPer10Min;
+  const gap = minGapMs ?? defaults.minGapMs;
+  const active = cadence !== "classic";
   const asked: { t: number; kind: AskKind }[] = [];
   let sinceGuardrail = 0;
   let pending: PendingItem[] = [];
@@ -84,16 +130,23 @@ export function createAskGate({ maxPer10Min = 5, minGapMs = 20000, guardrailsFir
         : { action: "wait", why: "routine" };
     }
 
+    // Already explained in narration: never asked, and not debrief material either.
+    if (active && input.explained) return { action: "wait", why: "explained_by_narration" };
+
     const { typing, speaking, silence_ms } = effectiveActivity(input.activity);
     if (typing) return { action: "wait", why: "typing" };
     if (speaking) return { action: "wait", why: "speaking" };
     if (input.agentSpeaking) return { action: "wait", why: "agent_speaking" };
-    if (silence_ms < MIN_SILENCE_MS) return { action: "wait", why: "no_pause" };
+    if (active) {
+      const held = activePause(input.activity);
+      if (held) return { action: "wait", why: held };
+    } else if (silence_ms < MIN_SILENCE_MS) return { action: "wait", why: "no_pause" };
 
+    // Minimum gap first, then the 10-minute cap as the hard limit.
     const t = now();
-    if (recent(t).length >= maxPer10Min) return { action: "save_for_debrief", why: "budget" };
     const last = asked[asked.length - 1];
-    if (last && t - last.t < minGapMs) return { action: "save_for_debrief", why: "min_gap" };
+    if (last && t - last.t < gap) return { action: "save_for_debrief", why: "min_gap" };
+    if (recent(t).length >= cap) return { action: "save_for_debrief", why: "budget" };
     if (input.timing.answer === "save_for_debrief") return { action: "save_for_debrief", why: "timing" };
 
     if (cls === "possible_guardrail") return { action: "ask_now", ask: "guardrail", why: "possible_guardrail" };
@@ -124,7 +177,7 @@ export function createAskGate({ maxPer10Min = 5, minGapMs = 20000, guardrailsFir
       const decision = consider({ ...item, activity, agentSpeaking: activity.agentSpeaking ?? false });
       if (decision.action === "ask_now") found = { item, decision };
       else if (decision.action === "save_for_debrief") debrief.push(item);
-      else if (decision.why !== "routine") keep.push(item);
+      else if (!SETTLED_WAITS.has(decision.why)) keep.push(item);
     }
     pending = keep;
     return found;
@@ -141,6 +194,9 @@ export function createAskGate({ maxPer10Min = 5, minGapMs = 20000, guardrailsFir
       guardrailAsked: asked.filter((a) => a.kind === "guardrail").length,
       reasonAsked: asked.filter((a) => a.kind === "reason").length,
       sinceGuardrail,
+      cadence,
+      minGapMs: gap,
+      maxPer10Min: cap,
       pending: pending.length,
       debrief: debrief.length,
     };

@@ -6,9 +6,8 @@ import { isUrlAllowed } from "./permissionsGrant.mjs";
 import {
   parseClientMessage,
   toBuddyAction,
-  type DockHideMessage,
-  type DockLearnedMessage,
-  type DockShowMessage,
+  isDockMessage,
+  type DockMessage,
   type ServerMessage,
   type SessionStateMessage,
   type StatusMessage,
@@ -64,7 +63,7 @@ export function exposeBridge(s: BridgeSender, list: Allowlist, info: () => Bridg
 export type BridgeHandlers = {
   onBuddy(action: BuddyAction): void;
   onSession(state: SessionStateMessage): void;
-  onDock(msg: DockShowMessage | DockHideMessage | DockLearnedMessage): void;
+  onDock(msg: DockMessage): void;
   log(line: string): void;
 };
 
@@ -96,7 +95,7 @@ export function routeBridgeMessage(raw: unknown, h: BridgeHandlers): boolean {
     console.warn(`[companion] warning: session.state agent avatar dropped (${parsed.warning})`);
   }
   if (msg.type === "session.state") h.onSession(msg);
-  else if (msg.type === "dock.show" || msg.type === "dock.hide" || msg.type === "dock.learned") h.onDock(msg);
+  else if (isDockMessage(msg)) h.onDock(msg);
   else {
     const action = toBuddyAction(msg);
     if (!action) return false;

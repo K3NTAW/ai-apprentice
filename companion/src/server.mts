@@ -9,9 +9,8 @@ import {
   parseClientMessage,
   pongMessage,
   toBuddyAction,
-  type DockHideMessage,
-  type DockLearnedMessage,
-  type DockShowMessage,
+  isDockMessage,
+  type DockMessage,
   type ServerMessage,
   type SessionStateMessage,
   type StatusMessage,
@@ -23,7 +22,7 @@ export type ServerHooks = {
   onPairedChange(paired: boolean): void;
   onBuddy(action: BuddyAction): void;
   onSession(state: SessionStateMessage): void;
-  onDock(msg: DockShowMessage | DockHideMessage | DockLearnedMessage): void;
+  onDock(msg: DockMessage): void;
   log(line: string): void;
 };
 
@@ -90,7 +89,7 @@ export function startServer(port: number, allowlist: Allowlist, pairing: Pairing
           const msg = parsed.msg;
           if (msg.type === "ping") ws.send(JSON.stringify(pongMessage()));
           else if (msg.type === "session.state") hooks.onSession(msg);
-          else if (msg.type === "dock.show" || msg.type === "dock.hide" || msg.type === "dock.learned") hooks.onDock(msg);
+          else if (isDockMessage(msg)) hooks.onDock(msg);
           else if (msg.type === "hello") hooks.log("ignored message: hello after pairing");
           else {
             const action = toBuddyAction(msg);

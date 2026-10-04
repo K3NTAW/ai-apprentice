@@ -5,6 +5,10 @@ export type ActivitySnapshot = {
   reading: boolean;
   speaking: boolean;
   silence_ms: number;
+  /** Active ask cadence inputs (askGate activePause): time since speech ended, the last keystroke, the last frame change. */
+  speech_silence_ms: number;
+  typing_idle_ms: number;
+  screen_stable_ms: number;
 };
 
 export const TYPING_WINDOW_MS = 1500;
@@ -39,7 +43,16 @@ export function createActivityTracker({ now }: { now: () => number }) {
         !typing &&
         (t - lastFrameChange < READING_WINDOW_MS || t - lastPointer < READING_WINDOW_MS);
       const lastSound = Math.max(lastKeystroke, lastSpeechEnd, lastFrameChange, start);
-      return { typing, reading, speaking, silence_ms: speaking ? 0 : Math.max(0, t - lastSound) };
+      const since = (at: number) => Math.max(0, t - Math.max(at, start));
+      return {
+        typing,
+        reading,
+        speaking,
+        silence_ms: speaking ? 0 : Math.max(0, t - lastSound),
+        speech_silence_ms: speaking ? 0 : since(lastSpeechEnd),
+        typing_idle_ms: since(lastKeystroke),
+        screen_stable_ms: since(lastFrameChange),
+      };
     },
   };
 }

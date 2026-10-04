@@ -4,9 +4,12 @@ import { parseBody, requireCreatorOrOwner, withApi, type IdContext } from "../..
 
 export const runtime = "nodejs";
 
-// The store sets redacted itself, so clients may omit it.
+// The store sets redacted itself, so clients may omit it. Batches of at most MAX_ENTRIES, each text at most
+// MAX_TEXT chars (the capture page clips at 2000 and posts one final utterance at a time).
+const MAX_ENTRIES = 50;
+const MAX_TEXT = 4000;
 const Body = z.object({
-  entries: z.array(TranscriptEntrySchema.extend({ redacted: z.boolean().default(false) })),
+  entries: z.array(TranscriptEntrySchema.extend({ text: z.string().max(MAX_TEXT), redacted: z.boolean().default(false) })).max(MAX_ENTRIES),
 });
 
 export async function POST(req: Request, ctx: IdContext) {

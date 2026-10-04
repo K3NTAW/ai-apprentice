@@ -2,6 +2,7 @@
 // spoken teach-back with expert confirm. Framework free; all I/O is injected.
 // Pacing: one full build at start, a rescore only after each answer, one full rebuild before the teach-back.
 import { fallbackQuestion } from "@/lib/capture/controller";
+import { explainedEvents, narrationsOf } from "@/lib/capture/narration";
 import { buildAskTurn, buildTeachBackTurn, buildThinkingTurn } from "@/lib/voice/prompts";
 import type { Gap } from "@/lib/workmap";
 import { newId, type QAPair, type ScreenEvent, type Session, type TranscriptEntry, type WorkMap } from "@/lib/types";
@@ -98,6 +99,9 @@ export function createDebriefController(opts: DebriefControllerOptions) {
   const liveTexts = new Set(liveQA.map((q) => norm(q.question)));
   const liveEventIds = new Set(liveQA.map((q) => q.event_id).filter((x): x is string => Boolean(x)));
   const eventsById = new Map(session.events.map((e) => [e.id, e]));
+  // Events the expert explained unprompted (linked by time, so redacted quotes do not matter): never asked again.
+  const explainedIds = new Set(explainedEvents(narrationsOf(session)).keys());
+  const explainedTs = new Set([...explainedIds].map((id) => eventsById.get(id)?.t).filter((t): t is number => t !== undefined));
 
   // Debrief times continue after the last captured moment, in session seconds.
   const lastT = Math.max(
@@ -151,6 +155,12 @@ export function createDebriefController(opts: DebriefControllerOptions) {
     });
   }
 
+  /** The step's screen moment is an event the expert explained in narration. */
+  function explainedStep(step_n: number | undefined): boolean {
+    const step = state.workmap?.steps.find((s) => s.n === step_n);
+    return Boolean(step && explainedTs.has(step.screen_moment.t));
+  }
+
   function buildQueue(gaps: Gap[]): DebriefQuestion[] {
     const seen = new Set(state.asked.map((q) => norm(q.text)));
     const out: DebriefQuestion[] = [];
@@ -163,13 +173,14 @@ export function createDebriefController(opts: DebriefControllerOptions) {
     // gaps() already sorts lowest score first.
     for (const g of gaps) {
       if (askedLive(g.step_n, g.missing, g.suggested_question)) continue;
+      if (g.missing === "reason" && explainedStep(g.step_n)) continue;
       add({ text: g.suggested_question, about: g.missing, step_n: g.step_n, source: "gap" });
     }
     const need = () => minFollowUps - state.followUpsAsked - out.length;
     if (need() > 0) {
       for (const ev of opts.savedForDebrief ?? []) {
         if (need() <= 0) break;
-        if (liveEventIds.has(ev.id)) continue;
+        if (liveEventIds.has(ev.id) || explainedIds.has(ev.id)) continue;
         add({ text: fallbackQuestion(ev, "reason"), about: "reason", event_id: ev.id, source: "saved" });
       }
     }

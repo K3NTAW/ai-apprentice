@@ -1,7 +1,8 @@
 // Browser client for the desktop companion (COMPANION PROTOCOL, pivot wave): ws://127.0.0.1:47321,
 // hello with the 6-digit pairing code, status/activity/app/shortcut in, overlay.* and (protocol v2)
 // buddy.state/buddy.say/buddy.point/buddy.clear/session.state out; protocol v3: chord in, dock.* out and
-// session.state.agent.
+// session.state.agent; protocol v4: dock.now (live 'Now' line) and dock.ack (short chip) out. Older apps
+// log and ignore unknown types, so v4 messages need no feature check.
 // Works without the companion: status stays "not connected" and nothing throws.
 // The pairing code is never logged.
 
@@ -39,6 +40,9 @@ export type CompanionChordMsg = { type: "chord"; t: number; chord: string; app: 
 export type DockSide = "right" | "left";
 export type DockLearnedKind = "step" | "shortcut" | "guardrail";
 export const DOCK_TEXT_MAX = 140;
+export const DOCK_NOW_MAX = 120;
+export const DOCK_APP_MAX = 64;
+export const DOCK_ACK_MAX = 40;
 export type CompanionMessage =
   | CompanionStatusMsg
   | CompanionActivityMsg
@@ -145,6 +149,17 @@ export const outgoing = {
     const t = String(text ?? "").trim().slice(0, DOCK_TEXT_MAX);
     if (!t || !["step", "shortcut", "guardrail"].includes(kind)) return null;
     return { type: "dock.learned", kind, text: t };
+  },
+  /** Live 'Now' line, clipped to 120 chars (app to 64). Empty text clears the line. */
+  dockNow(text: string, app?: string): Record<string, unknown> {
+    const t = String(text ?? "").replace(/\s+/g, " ").trim().slice(0, DOCK_NOW_MAX);
+    const a = String(app ?? "").trim().slice(0, DOCK_APP_MAX);
+    return { type: "dock.now", text: t, ...(t && a ? { app: a } : {}) };
+  },
+  /** Short acknowledgement chip, clipped to 40 chars; null when empty. */
+  dockAck(text: string): Record<string, unknown> | null {
+    const t = String(text ?? "").replace(/\s+/g, " ").trim().slice(0, DOCK_ACK_MAX);
+    return t ? { type: "dock.ack", text: t } : null;
   },
 };
 
@@ -451,6 +466,15 @@ export function createCompanionClient({
     /** One line in the dock's 'What I learned' feed, clipped to 140 chars. Not resent. */
     dockLearned(kind: DockLearnedKind, text: string): boolean {
       const msg = outgoing.dockLearned(kind, text);
+      return msg ? send(msg) : false;
+    },
+    /** The dock's live 'Now' line (v4). Not resent. */
+    dockNow(text: string, app?: string): boolean {
+      return send(outgoing.dockNow(text, app));
+    },
+    /** A short 'got it' chip in the dock (v4). Not resent. */
+    dockAck(text: string): boolean {
+      const msg = outgoing.dockAck(text);
       return msg ? send(msg) : false;
     },
     dispose() {

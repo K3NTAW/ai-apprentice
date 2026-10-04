@@ -151,7 +151,7 @@ describe("capture console fix round (T-0152)", () => {
     expect(rowsOf(html)).toHaveLength(1);
 
     let held = true;
-    const base = createAskGate({ now: () => 100_000 });
+    const base = createAskGate({ cadence: "classic", now: () => 100_000 });
     const gate = holdableGate(base, () => held);
     const item = {
       event: ev,

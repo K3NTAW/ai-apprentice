@@ -74,6 +74,8 @@ function fakeTransport(kind: CompanionTransport["kind"] = "bridge") {
     dockShow: rec("dockShow"),
     dockHide: rec("dockHide"),
     dockLearned: rec("dockLearned"),
+    dockNow: rec("dockNow"),
+    dockAck: rec("dockAck"),
     window: rec("window"),
     dispose() {},
   };

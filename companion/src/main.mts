@@ -27,6 +27,8 @@ import { buddyView, cursorPollNeeded, expireBuddy, initialBuddy, reduceBuddy, ty
 import { chordsEnabled, createChordListener, type ChordGates } from "./chord.mjs";
 import {
   avatarState,
+  ACK_TTL_MS,
+  NOTICED_MS,
   dockBounds,
   dockEnabled,
   dockViewModel,
@@ -322,6 +324,16 @@ function dispatchDock(action: DockAction): void {
   pushView();
 }
 
+/** v4: the ack chip and 'noticed something' expire on their own; one re-render when they do. */
+const dockExpiry: Partial<Record<"now" | "ack", ReturnType<typeof setTimeout>>> = {};
+function expireDockLater(which: "now" | "ack", ms: number): void {
+  clearTimeout(dockExpiry[which]);
+  dockExpiry[which] = setTimeout(() => {
+    delete dockExpiry[which];
+    pushView();
+  }, ms + 50);
+}
+
 function currentSurfaces() {
   return surfaces({ dockEnabled: dockOn, paired, mode: session?.mode ?? null, page: dock.page });
 }
@@ -406,7 +418,7 @@ function pushDock(): void {
   const now = Date.now();
   const live = expireBuddy(buddy, now);
   const view = buddyView(buddy, now, { enabled: true, paused });
-  const model = dockViewModel({ state: dock, session, mode: view.mode, target: view.target?.style ?? null, say: live.say?.text ?? null, paused, startedAt: sessionStartedAt });
+  const model = dockViewModel({ state: dock, session, mode: view.mode, target: view.target?.style ?? null, say: live.say?.text ?? null, paused, startedAt: sessionStartedAt, nowMs: now });
   if (sent.changed("dock", model)) dockWin.webContents.send("dock-state", model);
 }
 
@@ -773,7 +785,17 @@ const bridgeHandlers: BridgeHandlers = {
   onDock(msg) {
     if (msg.type === "dock.show") dispatchDock({ type: "show", side: msg.side });
     else if (msg.type === "dock.hide") dispatchDock({ type: "hide" });
-    else dispatchDock({ type: "learned", kind: msg.kind, text: msg.text });
+    else if (msg.type === "dock.learned") dispatchDock({ type: "learned", kind: msg.kind, text: msg.text });
+    else if (msg.type === "dock.now") {
+      // Nothing new is shown while paused (the view also hides the line off the record).
+      if (paused && msg.text) return;
+      dispatchDock({ type: "now", text: msg.text, ...(msg.app ? { app: msg.app } : {}), at: Date.now() });
+      if (msg.text) expireDockLater("now", NOTICED_MS);
+    } else {
+      if (paused) return;
+      dispatchDock({ type: "ack", text: msg.text, at: Date.now() });
+      expireDockLater("ack", ACK_TTL_MS);
+    }
   },
 };
 

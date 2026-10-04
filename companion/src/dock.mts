@@ -11,6 +11,9 @@
 // - Feed: the last FEED_MAX 'What I learned' lines; a line equal (kind and text) to one already in
 //   the feed is dropped. Reset on a new session (agent id, mode or title change) and on unpair.
 // - Collapse state persists in dock.json in userData.
+// - v4: a live 'Now' line (dock.now, the latest screen event) and a short ack chip (dock.ack, 'got it', shown for
+//   ACK_TTL_MS). The state line reads 'noticed something' for NOTICED_MS after a new 'Now' line while listening.
+//   Both are hidden off the record or paused and cleared on a session change, session end and unpair.
 import { avatarFor, type AvatarSet, type AvatarState } from "./avatarUrl.mjs";
 import type { BuddyMode, PointStyle } from "./buddy.mjs";
 
@@ -20,6 +23,11 @@ export const LEARNED_KINDS = ["step", "shortcut", "guardrail"] as const;
 export type LearnedKind = (typeof LEARNED_KINDS)[number];
 export const MAX_LEARNED_TEXT = 140;
 export const FEED_MAX = 8;
+export const MAX_NOW_TEXT = 120;
+export const MAX_NOW_APP = 64;
+export const MAX_ACK_TEXT = 40;
+export const ACK_TTL_MS = 2500;
+export const NOTICED_MS = 3000;
 // Sizes from Dock.dc.html: 340 px wide, 12 px off the edge, 24 px radius drawn by CSS inside a transparent window
 // (the window bounds equal the glass rect, so no native corner shows). The collapsed tab is 56 x 196, flush with the edge.
 export const DOCK_WIDTH = 340;
@@ -37,12 +45,17 @@ export type DockState = {
   collapsed: boolean;
   feed: LearnedLine[];
   sessionKey: string | null;
+  /** v4 live line and ack chip, with their receive time (epoch ms). */
+  now: { text: string; app?: string; at: number } | null;
+  ack: { text: string; at: number } | null;
 };
 
 export type DockAction =
   | { type: "show"; side: DockSide }
   | { type: "hide" }
   | { type: "learned"; kind: LearnedKind; text: string }
+  | { type: "now"; text: string; app?: string; at: number }
+  | { type: "ack"; text: string; at: number }
   | { type: "collapse"; collapsed: boolean }
   | { type: "session"; key: string | null }
   | { type: "reset" };
@@ -57,7 +70,7 @@ export type DockSession = {
   agent?: DockAgent;
 };
 
-export const initialDock = (collapsed = false): DockState => ({ side: "right", page: "auto", collapsed, feed: [], sessionKey: null });
+export const initialDock = (collapsed = false): DockState => ({ side: "right", page: "auto", collapsed, feed: [], sessionKey: null, now: null, ack: null });
 
 /** Identity of a session for feed resets: null while there is no session. */
 export function sessionKey(s: DockSession | null): string | null {
@@ -75,14 +88,19 @@ export function reduceDock(s: DockState, a: DockAction): DockState {
       if (s.feed.some((l) => l.kind === a.kind && l.text === a.text)) return s;
       return { ...s, feed: [...s.feed, { kind: a.kind, text: a.text }].slice(-FEED_MAX) };
     }
+    case "now":
+      if (!a.text) return s.now ? { ...s, now: null } : s;
+      return { ...s, now: { text: a.text.slice(0, MAX_NOW_TEXT), ...(a.app ? { app: a.app.slice(0, MAX_NOW_APP) } : {}), at: a.at } };
+    case "ack":
+      return a.text ? { ...s, ack: { text: a.text.slice(0, MAX_ACK_TEXT), at: a.at } } : s;
     case "collapse":
       return s.collapsed === a.collapsed ? s : { ...s, collapsed: a.collapsed };
     case "session":
       if (a.key === s.sessionKey) return s;
-      if (a.key === null) return { ...s, sessionKey: null };
-      return { ...s, sessionKey: a.key, feed: [], page: "auto" };
+      if (a.key === null) return { ...s, sessionKey: null, now: null, ack: null };
+      return { ...s, sessionKey: a.key, feed: [], page: "auto", now: null, ack: null };
     case "reset":
-      return { ...s, feed: [], page: "auto", sessionKey: null };
+      return { ...s, feed: [], page: "auto", sessionKey: null, now: null, ack: null };
   }
 }
 
@@ -119,6 +137,9 @@ export type DockView = {
   avatarState: AvatarState;
   /** Session start (epoch ms) for the timer pill; null outside a session. */
   startedAt: number | null;
+  /** v4 live line ("Excel · changed cost center 4711 to 0400") and ack chip; null off the record or paused. */
+  now: string | null;
+  ack: string | null;
 };
 
 const MODE_HEADER = { capture: "training", teach: "teaching" } as const;
@@ -132,10 +153,11 @@ const STATE_LABELS: Record<BuddyMode, string> = {
 };
 
 /** Header, state line and recording pill copy for the dock (Dock.dc.html). */
-export function dockLabels(i: { mode: DockSession["mode"]; buddy: BuddyMode; offRecord: boolean; paused: boolean }): { header: string; stateLabel: string; recLabel: string } {
+export function dockLabels(i: { mode: DockSession["mode"]; buddy: BuddyMode; offRecord: boolean; paused: boolean; noticed?: boolean }): { header: string; stateLabel: string; recLabel: string } {
   const header = i.mode ? `ai apprentice · ${MODE_HEADER[i.mode]}` : "ai apprentice";
   if (i.offRecord) return { header, stateLabel: "paused · off the record", recLabel: "off" };
   if (i.paused) return { header, stateLabel: STATE_LABELS.paused, recLabel: "paused" };
+  if (i.noticed && (i.buddy === "idle" || i.buddy === "listening")) return { header, stateLabel: "noticed something", recLabel: i.mode ? "rec" : "on" };
   return { header, stateLabel: STATE_LABELS[i.buddy] ?? STATE_LABELS.idle, recLabel: i.mode ? "rec" : "on" };
 }
 
@@ -153,8 +175,15 @@ export function dockViewModel(i: {
   say: string | null;
   paused: boolean;
   startedAt?: number | null;
+  /** Clock for the ack chip and 'noticed something' (epoch ms); without it neither shows. */
+  nowMs?: number;
 }): DockView {
   const agent = i.session?.agent;
+  const hidden = i.paused || (i.session?.off_record ?? false) || !i.session?.mode;
+  const t = i.nowMs;
+  const live = hidden ? null : i.state.now;
+  const ack = hidden || t === undefined || !i.state.ack || t - i.state.ack.at >= ACK_TTL_MS ? null : i.state.ack.text;
+  const noticed = Boolean(live && t !== undefined && t - live.at < NOTICED_MS);
   const frame = dockAvatarState(i.paused ? "paused" : i.mode, i.target);
   return {
     side: i.state.side,
@@ -171,7 +200,9 @@ export function dockViewModel(i: {
     guardrails: i.session?.guardrails ?? 0,
     offRecord: i.session?.off_record ?? false,
     paused: i.paused,
-    ...dockLabels({ mode: i.session?.mode ?? null, buddy: i.mode, offRecord: i.session?.off_record ?? false, paused: i.paused }),
+    now: live ? (live.app ? `${live.app} · ${live.text}` : live.text) : null,
+    ack,
+    ...dockLabels({ mode: i.session?.mode ?? null, buddy: i.mode, offRecord: i.session?.off_record ?? false, paused: i.paused, noticed }),
   };
 }
 

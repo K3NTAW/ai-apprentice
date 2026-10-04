@@ -51,35 +51,35 @@ function clock(start = 0) {
 
 describe("askGate", () => {
   it("waits while the expert is typing", () => {
-    const g = createAskGate({ now: () => 0 });
+    const g = createAskGate({ cadence: "classic", now: () => 0 });
     expect(g.consider(input({ activity: { ...quiet, typing: true } })).action).toBe("wait");
   });
 
   it("waits while the expert is speaking", () => {
-    const g = createAskGate({ now: () => 0 });
+    const g = createAskGate({ cadence: "classic", now: () => 0 });
     expect(g.consider(input({ activity: { ...quiet, speaking: true } })).action).toBe("wait");
   });
 
   it("waits while the agent is speaking or the pause is under 1500 ms", () => {
-    const g = createAskGate({ now: () => 0 });
+    const g = createAskGate({ cadence: "classic", now: () => 0 });
     expect(g.consider(input({ agentSpeaking: true })).action).toBe("wait");
     expect(g.consider(input({ activity: { ...quiet, silence_ms: 1499 } })).action).toBe("wait");
     expect(g.consider(input({ cls: "possible_guardrail", activity: { ...quiet, silence_ms: 200 } })).action).toBe("wait");
   });
 
   it("asks a reason question after a 3000 ms pause on a judgment call", () => {
-    const g = createAskGate({ now: () => 0 });
+    const g = createAskGate({ cadence: "classic", now: () => 0 });
     expect(g.consider(input())).toMatchObject({ action: "ask_now", ask: "reason" });
   });
 
   it("asks a guardrail question on a possible guardrail", () => {
-    const g = createAskGate({ now: () => 0 });
+    const g = createAskGate({ cadence: "classic", now: () => 0 });
     expect(g.consider(input({ cls: "possible_guardrail" }))).toMatchObject({ action: "ask_now", ask: "guardrail" });
   });
 
   it("saves the sixth question within 10 minutes for the debrief", () => {
     const c = clock();
-    const g = createAskGate({ now: c.now });
+    const g = createAskGate({ cadence: "classic", now: c.now });
     for (let i = 0; i < 5; i++) {
       const d = g.consider(input({ cls: "possible_guardrail" }));
       expect(d.action).toBe("ask_now");
@@ -93,7 +93,7 @@ describe("askGate", () => {
 
   it("respects the minimum gap between questions", () => {
     const c = clock();
-    const g = createAskGate({ now: c.now });
+    const g = createAskGate({ cadence: "classic", now: c.now });
     g.markAsked("reason");
     c.advance(19_999);
     expect(g.consider(input())).toMatchObject({ action: "save_for_debrief", why: "min_gap" });
@@ -103,7 +103,7 @@ describe("askGate", () => {
 
   it("forces a guardrail question after 3 reason questions", () => {
     const c = clock();
-    const g = createAskGate({ now: c.now });
+    const g = createAskGate({ cadence: "classic", now: c.now });
     for (let i = 0; i < 3; i++) {
       const d = g.consider(input());
       expect(d).toMatchObject({ action: "ask_now", ask: "reason" });
@@ -117,13 +117,13 @@ describe("askGate", () => {
   });
 
   it("does not ask about routine events", () => {
-    const g = createAskGate({ now: () => 0 });
+    const g = createAskGate({ cadence: "classic", now: () => 0 });
     expect(g.consider(input({ cls: "routine" }))).toEqual({ action: "wait", why: "routine" });
     expect(g.consider(input({ explains: 0.8 }))).toMatchObject({ action: "save_for_debrief" });
   });
 
   it("retries pending events once the expert pauses", () => {
-    const g = createAskGate({ now: () => 0 });
+    const g = createAskGate({ cadence: "classic", now: () => 0 });
     const item = input({ activity: { ...quiet, typing: true } });
     expect(g.consider(item).action).toBe("wait");
     g.enqueue(item);
@@ -144,33 +144,33 @@ describe("askGate with the desktop companion", () => {
   });
 
   it("companion typing holds a question", () => {
-    const g = createAskGate({ now: () => 0 });
+    const g = createAskGate({ cadence: "classic", now: () => 0 });
     const d = g.consider(input({ activity: { ...quiet, companion: comp({ typing: true, idle_ms: 100 }) } }));
     expect(d).toMatchObject({ action: "wait", why: "typing" });
   });
 
   it("idle above the threshold releases it", () => {
-    const g = createAskGate({ now: () => 0 });
+    const g = createAskGate({ cadence: "classic", now: () => 0 });
     expect(g.consider(input({ activity: { ...quiet, companion: comp({ typing: true, idle_ms: 1500 }) } })).action).toBe("ask_now");
     expect(g.consider(input({ activity: { ...quiet, companion: comp({ typing: false, idle_ms: 2000 }) } })).action).toBe("ask_now");
   });
 
   it("effective silence is min(silence_ms, idle_ms) when fresh", () => {
-    const g = createAskGate({ now: () => 0 });
+    const g = createAskGate({ cadence: "classic", now: () => 0 });
     const d = g.consider(input({ activity: { ...quiet, silence_ms: 5000, companion: comp({ idle_ms: 400 }) } }));
     expect(d).toMatchObject({ action: "wait", why: "no_pause" });
   });
 
   it("stale or disconnected companion activity is ignored: speech pause and frame stillness decide", () => {
-    const g = createAskGate({ now: () => 0 });
+    const g = createAskGate({ cadence: "classic", now: () => 0 });
     const stale = comp({ typing: true, idle_ms: 0, fresh: false });
     expect(g.consider(input({ activity: { ...quiet, companion: stale } })).action).toBe("ask_now");
-    const g2 = createAskGate({ now: () => 0 });
+    const g2 = createAskGate({ cadence: "classic", now: () => 0 });
     expect(g2.consider(input({ activity: { ...quiet, silence_ms: 800, companion: stale } }))).toMatchObject({ why: "no_pause" });
   });
 
   it("without a companion the gate uses speech pause and frame stillness", () => {
-    const g = createAskGate({ now: () => 0 });
+    const g = createAskGate({ cadence: "classic", now: () => 0 });
     expect(g.consider(input({ activity: { ...quiet, silence_ms: 1000 } }))).toMatchObject({ why: "no_pause" });
     expect(g.consider(input({ activity: { ...quiet, silence_ms: 1600 } })).action).toBe("ask_now");
   });

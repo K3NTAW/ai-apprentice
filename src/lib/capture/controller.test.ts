@@ -39,7 +39,7 @@ function setup(opts: { decide?: CaptureApi["decide"]; agentSpeaking?: boolean; c
   const now = () => Date.now();
   const bus = createEventBus({ now: () => now() / 1000 });
   const activity = createActivityTracker({ now });
-  const gate = createAskGate({ now });
+  const gate = createAskGate({ cadence: "classic", now });
   const onError = vi.fn();
   const c = createCaptureController({
     api,
@@ -389,7 +389,7 @@ describe("capture controller", () => {
         voice: voice as unknown as CaptureVoice,
         bus,
         activity: createActivityTracker({ now }),
-        gate: createAskGate({ now, minGapMs: 0 }),
+        gate: createAskGate({ cadence: "classic", now, minGapMs: 0 }),
         now,
         sessionId: "s",
         getT: () => now() / 1000,

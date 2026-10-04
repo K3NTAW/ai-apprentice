@@ -66,6 +66,9 @@ export type CompanionTransport = {
   dockShow(side?: DockSide): boolean;
   dockHide(): boolean;
   dockLearned(kind: DockLearnedKind, text: string): boolean;
+  /** Protocol v4: live 'Now' line (empty text clears it) and a short acknowledgement chip. */
+  dockNow(text: string, app?: string): boolean;
+  dockAck(text: string): boolean;
   /** Desktop app window control; false outside the app. */
   window(action: WindowAction): boolean;
   /** Idempotent: calls every unsubscribe once, status becomes "not connected". */
@@ -131,6 +134,8 @@ export function createNoneTransport(): CompanionTransport {
     dockShow: no,
     dockHide: no,
     dockLearned: no,
+    dockNow: no,
+    dockAck: no,
     window: no,
     dispose() {},
   };
@@ -157,6 +162,8 @@ export function createWebSocketTransport(client: CompanionClient = createCompani
     dockShow: (side) => client.dockShow(side),
     dockHide: () => client.dockHide(),
     dockLearned: (k, t) => client.dockLearned(k, t),
+    dockNow: (t, app) => client.dockNow(t, app),
+    dockAck: (t) => client.dockAck(t),
     window: () => false,
     dispose() {
       if (disposed) return;
@@ -277,6 +284,8 @@ export function createBridgeTransport(
       return send({ type: "dock.hide" });
     },
     dockLearned: (k, t) => send(outgoing.dockLearned(k, t)),
+    dockNow: (t, app) => send(outgoing.dockNow(t, app)),
+    dockAck: (t) => send(outgoing.dockAck(t)),
     window(action) {
       // The window belongs to the app's preload, so it works before the first status event too.
       if (status === "not connected" || !["step-aside", "restore", "focus"].includes(action)) return false;
