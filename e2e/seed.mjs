@@ -1,4 +1,6 @@
-// Deterministic e2e seed: writes agents, sessions with confirmed Work Maps and learners into a temp DATA_DIR.
+// Deterministic e2e seed: writes agents, sessions with confirmed Work Maps, processes and learners into a temp DATA_DIR.
+// Invoice Ivy meets the 'ready to teach' rule (a confirmed process at >= 0.75 understanding, lib/agents/status);
+// Ledger Leo has one unconfirmed process, so it is 'training'.
 // Never touches ./data. Fails fast when Supabase env is set, because the app must run in local mode.
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
@@ -11,6 +13,8 @@ export const AGENT_B = "0e2e0000-0000-4000-8000-00000000000b";
 export const MAP_SESSION = "e2e-map-confirmed";
 export const DEBRIEF_SESSION = "e2e-debrief-open";
 export const TEACH_SESSION = "e2e-teach-learner";
+export const PROCESS_A = "0e2e0000-0000-4000-8000-0000000000a1";
+export const PROCESS_B = "0e2e0000-0000-4000-8000-0000000000b1";
 
 const T0 = "2026-10-01T08:00:00.000Z";
 
@@ -36,7 +40,8 @@ function step(n, title, judgment) {
     is_judgment_call: judgment,
     reason: judgment ? { quote: `Because the amount is over the limit at step ${n}`, t: n * 40 + 5, source: "debrief" } : null,
     guardrails: judgment ? [{ rule: "Stop and ask above EUR 10000", quote_ref: n * 40 + 6, kind: "stop_and_ask", quote: "Above ten thousand I always ask" }] : [],
-    scores: { reason_captured: judgment ? 0.9 : 0.4, guardrail_captured: judgment ? 0.9 : 0.4 },
+    // Mean understanding (0.6 + 0.9 + 0.9) / 3 = 0.8, above the 0.75 threshold.
+    scores: { reason_captured: judgment ? 0.9 : 0.6, guardrail_captured: judgment ? 0.9 : 0.6 },
   };
 }
 
@@ -55,6 +60,18 @@ function session(id, kind, extra) {
   return { id, kind, started_at: T0, events: [], transcript: [], qa: [], off_record_ranges: [], frames: [], ...extra };
 }
 
+function processRow(id, vid, agent_id, wm, source_session_id) {
+  const p = { id, workspace_id: "local", agent_id, title: wm.task, workmap: wm, version: 1, confirmed: wm.confirmed_by_expert, archived_at: null, created_by: null, created_at: T0, updated_at: T0 };
+  const v = { id: vid, process_id: id, version: 1, workmap: wm, source_session_id, change_kind: "trained", changed_by: null, created_at: T0 };
+  return { p, v };
+}
+
+/** data/processes.json: Ivy's confirmed map as a process (linked to MAP_SESSION), Leo's unconfirmed one without a session. */
+function processes() {
+  const rows = [processRow(PROCESS_A, `${PROCESS_A.slice(0, -2)}c1`, AGENT_A, workmap(true), MAP_SESSION), processRow(PROCESS_B, `${PROCESS_B.slice(0, -2)}c2`, AGENT_B, { ...workmap(false), task: "Close the month" }, null)];
+  return { processes: rows.map((r) => r.p), versions: rows.map((r) => r.v), tombstones: [] };
+}
+
 export function seed(dir = E2E_DATA_DIR) {
   assertLocal();
   assertSafeDir(dir);
@@ -70,12 +87,15 @@ export function seed(dir = E2E_DATA_DIR) {
       ended_at: "2026-10-01T08:20:00.000Z",
       expert: "Ana Expert",
       agent_id: AGENT_A,
+      process_id: PROCESS_A,
       workmap: workmap(true),
       transcript: [{ id: "tr1", t: 85, speaker: "expert", text: "Above ten thousand I always ask", phase: "capture", redacted: false }],
     }),
     session(DEBRIEF_SESSION, "capture", { ended_at: "2026-10-02T08:20:00.000Z", expert: "Ana Expert", agent_id: AGENT_A, workmap: workmap(false) }),
     session(TEACH_SESSION, "teach", {
       started_at: "2026-10-03T08:00:00.000Z",
+      // Ended, so the sidebar never shows it as a live session with a clock-dependent elapsed time.
+      ended_at: "2026-10-03T08:30:00.000Z",
       expert: "Lena Learner",
       agent_id: AGENT_A,
       teach: { workmap_session_id: MAP_SESSION, mastered: ["1"], practice: ["2"], interventions: 1 },
@@ -85,6 +105,7 @@ export function seed(dir = E2E_DATA_DIR) {
     mkdirSync(path.join(dir, "sessions", s.id, "frames"), { recursive: true });
     writeFileSync(path.join(dir, "sessions", s.id, "session.json"), JSON.stringify(s, null, 2));
   }
+  writeFileSync(path.join(dir, "processes.json"), JSON.stringify(processes(), null, 2));
   return dir;
 }
 

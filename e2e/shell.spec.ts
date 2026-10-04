@@ -15,7 +15,8 @@ test.describe("shell: sidebar and user menu", () => {
     ["Workspace", /\/workspace$/],
     ["Start capture", /\/capture$/],
     ["Get the desktop app", /\/capture#companion$/],
-    ["AI Apprentice home", /:\d+\/$/],
+    // Home redirects to /agents in local mode (app/page.tsx).
+    ["AI Apprentice home", /\/agents$/],
   ] as const) {
     test(`${name} navigates`, async ({ page }) => {
       await page.goto("/map");
@@ -26,24 +27,39 @@ test.describe("shell: sidebar and user menu", () => {
 
   test("recent sessions link to teach and the map", async ({ page }) => {
     await page.goto("/learn");
-    await page.getByRole("link", { name: /^Teach · Lena Learner/ }).click();
+    await page.locator(`[aria-label="Recent sessions"] a[href="/teach?session=${TEACH_SESSION}"]`).click();
     await expect(page).toHaveURL(new RegExp(`/teach\\?session=${TEACH_SESSION}$`));
     await page.goto("/learn");
-    await page.locator(`a[href="/map/${MAP_SESSION}"]`).first().click();
+    await page.locator(`[aria-label="Recent sessions"] a[href="/map/${MAP_SESSION}"]`).click();
     await expect(page).toHaveURL(new RegExp(`/map/${MAP_SESSION}$`));
   });
 
   test("user menu: theme toggles, account opens the workspace", async ({ page }) => {
     await page.goto("/map");
     const html = page.locator("html");
-    const before = await html.evaluate((el) => el.outerHTML.slice(0, 300));
-    const menu = page.locator("details:has([role=menu])").first();
-    await menu.locator("summary").click();
-    await expect(page.getByRole("menu", { name: "User menu" })).toBeVisible();
-    await page.getByRole("menuitem", { name: /theme$/ }).click();
-    await expect.poll(() => html.evaluate((el) => el.outerHTML.slice(0, 300))).not.toBe(before);
-    if (!(await page.getByRole("menuitem", { name: "Account and workspace" }).isVisible())) await menu.locator("summary").click();
-    await page.getByRole("menuitem", { name: "Account and workspace" }).click();
+    const toggle = page.getByRole("button", { name: "Open user menu" });
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    const menu = page.getByRole("menu", { name: "User menu" });
+    await expect(menu).toBeVisible();
+    const next = (await html.getAttribute("data-theme")) === "dark" ? "Light" : "Dark";
+    await menu.getByRole("menuitemradio", { name: next }).click();
+    await expect(menu.getByRole("menuitemradio", { name: next })).toHaveAttribute("aria-checked", "true");
+    await expect(html).toHaveAttribute("data-theme", next.toLowerCase());
+    if (!(await menu.isVisible())) await toggle.click();
+    await menu.getByRole("menuitem", { name: "Account and workspace" }).click();
     await expect(page).toHaveURL(/\/workspace$/);
+  });
+
+  test("collapse toggles the sidebar, search opens the palette", async ({ page }) => {
+    await page.goto("/map");
+    await page.getByRole("button", { name: "Collapse sidebar" }).click();
+    await expect(page.getByRole("button", { name: "Expand sidebar" })).toHaveAttribute("aria-pressed", "true");
+    await page.getByRole("button", { name: "Expand sidebar" }).click();
+    await expect(page.getByRole("button", { name: "Collapse sidebar" })).toHaveAttribute("aria-pressed", "false");
+    await page.getByRole("button", { name: "Search" }).click();
+    await expect(page.getByRole("dialog", { name: "Command palette" })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog", { name: "Command palette" })).toHaveCount(0);
   });
 });

@@ -33,6 +33,8 @@ test.describe("agents home", () => {
   test("speak is disabled with a reason when speech is unsupported, or enabled", async ({ page }) => {
     await page.goto("/agents");
     const mic = page.getByRole("button", { name: "Speak" });
+    // Speech support is detected after hydration; the server render is disabled.
+    await page.waitForLoadState("networkidle");
     if (await mic.isDisabled()) await expect(mic).toHaveAttribute("title", /not supported/);
     else await expect(mic).toHaveAttribute("title", "Speak");
   });
@@ -165,7 +167,9 @@ test.describe("agent page", () => {
 
   test("learners tab", async ({ page }) => {
     await page.goto(`${base}?tab=learners`);
-    await expect(page.getByText("Lena Learner").first()).toBeVisible();
+    // Local mode has no members, so the seeded teach session is listed as an unknown learner.
+    await expect(page.getByText("unknown learner").first()).toBeVisible();
+    await expect(page.locator("main").getByText("Approve supplier invoices").first()).toBeVisible();
   });
 
   test("settings: rename and delete", async ({ page }) => {
@@ -174,8 +178,11 @@ test.describe("agent page", () => {
     await name.fill("Ledger Lea");
     await page.getByRole("button", { name: /save/i }).click();
     await expect(page.getByText("Ledger Lea").first()).toBeVisible();
-    page.once("dialog", (d) => void d.accept());
     await page.getByRole("button", { name: "Delete agent" }).click();
+    const confirm = page.getByRole("dialog", { name: "Type Ledger Lea to delete it" });
+    await expect(confirm.getByRole("button", { name: "Delete Ledger Lea" })).toBeDisabled();
+    await confirm.getByLabel("Agent name").fill("Ledger Lea");
+    await confirm.getByRole("button", { name: "Delete Ledger Lea" }).click();
     await expect(page).toHaveURL(/\/agents$/);
     await expect(page.locator(`a[href="/agents/${AGENT_B}"]`)).toHaveCount(0);
   });

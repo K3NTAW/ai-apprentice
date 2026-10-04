@@ -6,7 +6,7 @@ test.describe("learn", () => {
   test("agent, then process, then start", async ({ page }) => {
     await page.goto("/learn");
     await expectCovered(page, { ...SHELL, "/^Invoice Ivy/": "url" });
-    await page.getByRole("link", { name: /^Invoice Ivy/ }).click();
+    await page.locator("main").getByRole("link", { name: /^Invoice Ivy/ }).click();
     await expect(page).toHaveURL(new RegExp(`/learn\\?agent=${AGENT_A}$`));
     await expect(page.locator("main:not([aria-busy])").getByText("Approve supplier invoices").first()).toBeVisible();
     const items = await expectCovered(page, { ...SHELL, "/^Invoice Ivy/": "url", "/./": "url" }, "main:not([aria-busy])");
