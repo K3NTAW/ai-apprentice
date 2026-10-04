@@ -60,6 +60,7 @@ export default function NewAgentFlow({
   initialExpert = { name: "" },
   initialRole = "",
   experts = [],
+  embedded,
 }: {
   initialAgentId?: string | null;
   initialName?: string;
@@ -67,6 +68,11 @@ export default function NewAgentFlow({
   initialExpert?: ExpertPick;
   initialRole?: string;
   experts?: ExpertOption[];
+  /**
+   * Onboarding (T-0211): hides the stepper, the Cancel link and step 3 (onboarding has its own stepper and walkthrough),
+   * and reports the new agent through onCreated. Pass initialAgentId on resume so no second agent is created.
+   */
+  embedded?: { onCreated: (agentId: string, firstTask: string) => void };
 } = {}) {
   const [name, setName] = useState(initialName);
   const [role, setRole] = useState(initialRole);
@@ -100,7 +106,9 @@ export default function NewAgentFlow({
         setNotice(res.status === 403 ? "Only owners and experts create agents." : `Could not create the agent (${res.status}).`);
         return;
       }
-      setAgentId(((await res.json()) as { id: string }).id);
+      const id = ((await res.json()) as { id: string }).id;
+      setAgentId(id);
+      embedded?.onCreated(id, firstTask.trim());
     } catch {
       setNotice("Could not create the agent. Check the connection.");
     } finally {
@@ -110,8 +118,8 @@ export default function NewAgentFlow({
 
   if (agentId)
     return (
-      <div className="flex flex-col gap-7" data-screen="new-agent-2-3">
-        <Stepper active={2} />
+      <div className="flex flex-col gap-7" data-screen={embedded ? "new-agent-2" : "new-agent-2-3"}>
+        {!embedded && <Stepper active={2} />}
         <section className="ui-card flex flex-col gap-4 p-7" data-step="2">
           <div className="flex flex-col gap-1">
             <h2 className="ui-t2">Give {name.trim() || "your agent"} a face</h2>
@@ -119,7 +127,7 @@ export default function NewAgentFlow({
           </div>
           <AgentAvatarStudio agentId={agentId} />
         </section>
-        <section className="ui-card flex flex-col gap-5 p-7" data-step="3">
+        {!embedded && <section className="ui-card flex flex-col gap-5 p-7" data-step="3">
           <div className="flex flex-col gap-1">
             <h2 className="ui-t2">Install and train</h2>
             <p style={muted}>The expert does one real task. The agent watches quietly and asks at natural pauses.</p>
@@ -133,13 +141,13 @@ export default function NewAgentFlow({
               Start training
             </Link>
           </div>
-        </section>
+        </section>}
       </div>
     );
 
   return (
     <div className="flex flex-col gap-7" data-screen="new-agent-1">
-      <Stepper active={1} />
+      {!embedded && <Stepper active={1} />}
       <div className="flex flex-wrap items-start gap-6">
         <form onSubmit={create} className="ui-card flex min-w-0 flex-[3_1_480px] flex-col gap-5 p-7">
           <div className="flex flex-col gap-1">
@@ -191,7 +199,7 @@ export default function NewAgentFlow({
             <textarea id="na-first" className="ui-inp" style={{ height: "auto", paddingTop: 10, paddingBottom: 10 }} rows={3} value={firstTask} maxLength={200} placeholder="Coding incoming supplier invoices" onChange={(e) => setFirstTask(e.target.value)} />
           </div>
           <div className="flex flex-wrap justify-between gap-3 pt-1">
-            <Link className={buttonClass("ghost")} href="/agents">Cancel</Link>
+            {embedded ? <span /> : <Link className={buttonClass("ghost")} href="/agents">Cancel</Link>}
             <button type="submit" disabled={busy || !name.trim() || !role.trim()} aria-busy={busy} className={buttonClass("primary")}>
               Continue
             </button>

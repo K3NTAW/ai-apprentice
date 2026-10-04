@@ -1,6 +1,6 @@
 // window(action) from the page, and the main window's saved bounds. Electron-free.
 
-export const WINDOW_ACTIONS = ["step-aside", "restore", "focus"] as const;
+export const WINDOW_ACTIONS = ["step-aside", "restore", "focus", "relaunch"] as const;
 export type WindowAction = (typeof WINDOW_ACTIONS)[number];
 
 export function isWindowAction(v: unknown): v is WindowAction {
@@ -8,7 +8,7 @@ export function isWindowAction(v: unknown): v is WindowAction {
 }
 
 export type WindowSnapshot = { visible: boolean; minimized: boolean; fullscreen: boolean };
-export type WindowOp = "leave-fullscreen" | "minimize" | "show" | "restore" | "focus";
+export type WindowOp = "leave-fullscreen" | "minimize" | "show" | "restore" | "focus" | "relaunch";
 export type WindowPlan = { ops: WindowOp[]; steppedAside: boolean };
 
 /**
@@ -27,6 +27,9 @@ export function planWindowAction(action: WindowAction, w: WindowSnapshot, steppe
       return { ops: bringBack(w), steppedAside: false };
     case "focus":
       return { ops: bringBack(w), steppedAside: false };
+    case "relaunch":
+      // Onboarding 'Restart app' (T-0211): macOS applies some permission grants only after a restart.
+      return { ops: ["relaunch"], steppedAside: false };
   }
 }
 

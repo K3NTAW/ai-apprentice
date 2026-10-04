@@ -5,11 +5,19 @@
 // Key: FORWARDED_USER_SECRET, else derived from SUPABASE_SERVICE_ROLE_KEY (set on Vercel anyway). With neither, one
 // warning on the first request and nothing is forwarded: the render calls getUser itself (two getUser per page request).
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { finishSetupVisible, stateFromUser, type OnboardingState } from "@/lib/onboarding/state";
 
 export const FORWARDED_USER_HEADER = "x-aa-verified-user";
 export const FORWARDED_USER_TTL_MS = 30_000;
 
-export type ForwardedUser = { id: string; email: string | null; email_confirmed_at: string | null; full_name?: string | null };
+export type ForwardedUser = {
+  id: string;
+  email: string | null;
+  email_confirmed_at: string | null;
+  full_name?: string | null;
+  /** Onboarding state (T-0211), only while 'Finish setup' is shown; absent means completed. */
+  onboarding?: OnboardingState;
+};
 
 function key(): Buffer | null {
   const secret = process.env.FORWARDED_USER_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -32,7 +40,13 @@ export function warnIfNoForwardedUserKey(): void {
 const sign = (k: Buffer, payload: string) => createHmac("sha256", k).update(payload).digest("base64url");
 
 export function signForwardedUser(
-  user: { id: string; email?: string | null; email_confirmed_at?: string | null; user_metadata?: { full_name?: unknown } | null },
+  user: {
+    id: string;
+    email?: string | null;
+    email_confirmed_at?: string | null;
+    created_at?: string | null;
+    user_metadata?: { full_name?: unknown; [key: string]: unknown } | null;
+  },
   now = Date.now(),
 ): string | null {
   const k = key();
@@ -41,11 +55,13 @@ export function signForwardedUser(
     return null;
   }
   const fullName = user.user_metadata?.full_name;
+  const onboarding = stateFromUser(user);
   const body: ForwardedUser & { exp: number } = {
     id: user.id,
     email: user.email ?? null,
     email_confirmed_at: user.email_confirmed_at ?? null,
     ...(typeof fullName === "string" && fullName.trim() ? { full_name: fullName.trim().slice(0, 60) } : {}),
+    ...(finishSetupVisible(onboarding) ? { onboarding } : {}),
     exp: now + FORWARDED_USER_TTL_MS,
   };
   const payload = Buffer.from(JSON.stringify(body)).toString("base64url");

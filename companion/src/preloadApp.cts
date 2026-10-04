@@ -8,7 +8,7 @@ type Handler = (msg: Message) => void;
 type Info = { version: string; platform: string; status: Message | null };
 
 const EVENT_TYPES = ["status", "activity", "app", "chord", "shortcut"];
-const WINDOW_ACTIONS = ["step-aside", "restore", "focus"];
+const WINDOW_ACTIONS = ["step-aside", "restore", "focus", "relaunch"];
 const PERMISSION_KINDS = ["microphone", "screen", "accessibility", "input-monitoring"];
 
 // First-run setup screen (local file only): save the pasted URL. Main re-checks the sender and https.
@@ -68,6 +68,8 @@ if (info && typeof info === "object") {
     send(message: unknown): void {
       ipcRenderer.send("apprentice-send", message);
     },
+    // The page feature-detects 'relaunch' (onboarding 'Restart app') from this list.
+    windowActions: [...WINDOW_ACTIONS],
     window(action: string): void {
       if (WINDOW_ACTIONS.includes(action)) ipcRenderer.send("apprentice-window", action);
     },

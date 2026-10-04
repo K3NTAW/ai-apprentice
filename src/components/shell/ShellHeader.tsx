@@ -76,6 +76,8 @@ export type ShellUser = {
   role: Role | null;
   workspaceId?: string | null;
   memberships?: Membership[];
+  /** 'Finish setup' in the user menu (T-0211): onboarding not completed or a step skipped. */
+  onboardingOpen?: boolean;
 };
 
 /** Owners and experts capture; learners only learn. */

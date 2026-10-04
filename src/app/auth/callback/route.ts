@@ -7,6 +7,7 @@ import { bootstrapAfterSignIn } from "@/lib/auth/signIn";
 import { WS_COOKIE, wsCookieOptions } from "@/lib/auth/cookies";
 import { safeNext, type LoginErrorCode } from "@/lib/auth/redirect";
 import { appMode, publicSupabaseEnv } from "@/lib/supabase/env";
+import { afterSignIn } from "@/lib/onboarding/state";
 
 type PendingCookie = { name: string; value: string; options: CookieOptions };
 
@@ -45,9 +46,14 @@ export async function GET(request: NextRequest): Promise<Response> {
   };
 
   let userId: string | null = null;
+  // The signed-in user's metadata decides the onboarding redirect (T-0211).
+  let user: Parameters<typeof afterSignIn>[0] = null;
   try {
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
-    if (!error) userId = data?.user?.id ?? data?.session?.user?.id ?? null;
+    if (!error) {
+      userId = data?.user?.id ?? data?.session?.user?.id ?? null;
+      user = data?.user ?? data?.session?.user ?? null;
+    }
   } catch {
     userId = null;
   }
@@ -59,7 +65,7 @@ export async function GET(request: NextRequest): Promise<Response> {
   const boot = await bootstrapAfterSignIn(supabase, userId);
   if (!boot.ok) return withCookies(fail("workspace_setup_failed"));
 
-  const res = withCookies(redirectTo(next));
+  const res = withCookies(redirectTo(afterSignIn(user, next)));
   if (boot.wsCookie) res.cookies.set(WS_COOKIE, boot.wsCookie, wsCookieOptions());
   return res;
 }

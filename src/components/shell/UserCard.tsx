@@ -16,6 +16,7 @@ export type UserCardUser = {
   fullName?: string | null;
   role: string | null;
   workspaceName: string | null;
+  onboardingOpen?: boolean;
 };
 
 const chevrons = (
@@ -147,6 +148,14 @@ export default function UserCard({ user }: { user: UserCardUser | null }) {
               <path d="M4 20c0-3.5 3.6-6 8-6s8 2.5 8 6" />
             </svg>
             Account and workspace
+          </Link>
+        )}
+        {user?.onboardingOpen && (
+          <Link href="/onboarding" role="menuitem" className="ui-mi" data-testid="menu-finish-setup">
+            <svg className="ui-ic" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M5 12l4 4L19 6" />
+            </svg>
+            Finish setup
           </Link>
         )}
         <div style={{ height: 1, background: "var(--ln)", margin: "6px 4px" }} />

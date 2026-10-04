@@ -829,6 +829,11 @@ function applyWindowAction(action: WindowAction): void {
         win.setFullScreen(false);
         return;
       }
+      if (op === "relaunch") {
+        app.relaunch();
+        app.exit(0);
+        return;
+      }
       if (op === "minimize") win.minimize();
       else if (op === "show") win.show();
       else if (op === "restore") win.restore();

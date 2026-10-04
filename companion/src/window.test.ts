@@ -32,8 +32,12 @@ describe("window actions", () => {
     expect(planWindowAction("focus", { visible: false, minimized: true, fullscreen: false }, true)).toEqual({ ops: ["show", "restore", "focus"], steppedAside: false });
   });
 
-  it("only the three bridge actions are accepted", () => {
-    expect(["step-aside", "restore", "focus"].every(isWindowAction)).toBe(true);
+  it("relaunch restarts the app and ends any step-aside", () => {
+    expect(planWindowAction("relaunch", open, true)).toEqual({ ops: ["relaunch"], steppedAside: false });
+  });
+
+  it("only the four bridge actions are accepted", () => {
+    expect(["step-aside", "restore", "focus", "relaunch"].every(isWindowAction)).toBe(true);
     for (const v of ["close", "minimize", "", null, 1, "FOCUS"]) expect(isWindowAction(v)).toBe(false);
   });
 });

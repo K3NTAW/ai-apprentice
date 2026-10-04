@@ -12,6 +12,7 @@ import { PASSWORD_LOGIN_DEFAULT_NEXT } from "@/lib/auth/passwordLogin";
 import { safeNext } from "@/lib/auth/redirect";
 import { bootstrapAfterSignIn } from "@/lib/auth/signIn";
 import { bootstrapThrottle, clientIp } from "@/lib/auth/throttle";
+import { onboardingEnabled, onboardingHref } from "@/lib/onboarding/state";
 
 export const runtime = "nodejs";
 
@@ -44,7 +45,9 @@ export async function POST(request: Request): Promise<Response> {
   if (!boot.ok) return fail("workspace_setup_failed", 500);
   // bootstrapAfterSignIn expired this user's cached memberships and the joined workspace's member list.
 
-  const res = NextResponse.json({ redirect: next });
+  // Onboarding (T-0211): /onboarding?next=... until completed; the fresh context carries the user_metadata state.
+  const pending = onboardingEnabled() && ctx.onboarding && !ctx.onboarding.completedAt;
+  const res = NextResponse.json({ redirect: pending ? onboardingHref(next) : next });
   if (boot.wsCookie) res.cookies.set(WS_COOKIE, boot.wsCookie, wsCookieOptions());
   return res;
 }

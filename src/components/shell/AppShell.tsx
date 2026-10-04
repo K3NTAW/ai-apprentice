@@ -3,10 +3,19 @@
 import { getRequestContext, type RequestContext } from "@/lib/auth/context";
 import { readMostly } from "@/lib/cache/readMostly";
 import { getStore } from "@/lib/store";
+import { readLocalOnboarding } from "@/lib/onboarding/file";
+import { finishSetupVisible, onboardingEnabled } from "@/lib/onboarding/state";
 import ShellHeader, { type ShellUser } from "./ShellHeader";
 import { type AgentNames, groupRecent, RECENT_LIMIT, type RecentSessions } from "./recent";
 
-const toShellUser = (ctx: RequestContext): ShellUser => ({
+/** 'Finish setup' visibility: local mode reads the file flag, Supabase the user_metadata state (absent = completed). */
+async function onboardingOpen(ctx: RequestContext): Promise<boolean> {
+  if (!onboardingEnabled()) return false;
+  if (ctx.mode === "local") return finishSetupVisible(await readLocalOnboarding());
+  return ctx.onboarding ? finishSetupVisible(ctx.onboarding) : false;
+}
+
+const toShellUser = (ctx: RequestContext, open = false): ShellUser => ({
   mode: ctx.mode,
   workspaceName: ctx.workspaceName,
   email: ctx.email,
@@ -14,11 +23,12 @@ const toShellUser = (ctx: RequestContext): ShellUser => ({
   role: ctx.role,
   workspaceId: ctx.workspaceId,
   memberships: ctx.memberships,
+  onboardingOpen: open,
 });
 
 export async function shellUser(): Promise<ShellUser | null> {
   const result = await getRequestContext();
-  return result.kind === "ok" ? toShellUser(result.ctx) : null;
+  return result.kind === "ok" ? toShellUser(result.ctx, await onboardingOpen(result.ctx)) : null;
 }
 
 const agentNames = async (store: ReturnType<typeof getStore>): Promise<AgentNames> =>
@@ -45,7 +55,7 @@ export async function recentSessions(ctx: RequestContext, now = new Date()): Pro
 
 export default async function AppShell({ children }: { children: React.ReactNode }) {
   const result = await getRequestContext();
-  const user = result.kind === "ok" ? toShellUser(result.ctx) : null;
+  const user = result.kind === "ok" ? toShellUser(result.ctx, await onboardingOpen(result.ctx)) : null;
   const recent: RecentSessions = result.kind === "ok" ? await recentSessions(result.ctx) : { kind: "ok", groups: [] };
   return (
     <div className="flex min-h-screen flex-col md:flex-row" style={{ background: "var(--bg)", color: "var(--tx)" }}>

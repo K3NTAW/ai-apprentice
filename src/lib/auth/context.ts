@@ -10,6 +10,7 @@ import { appMode } from "@/lib/supabase/env";
 import { readMostly, Uncacheable } from "@/lib/cache/readMostly";
 import { timed } from "@/lib/perf";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { stateFromUser, type OnboardingState } from "@/lib/onboarding/state";
 import { WS_COOKIE } from "./cookies";
 import { FORWARDED_USER_HEADER, verifyForwardedUser, type ForwardedUser } from "./forwardedUser";
 
@@ -25,6 +26,8 @@ export type RequestContext = {
   fullName?: string | null;
   /** When the user's address was confirmed (Supabase email_confirmed_at); null when never. Unset in local mode. */
   emailConfirmedAt?: string | null;
+  /** Supabase: onboarding state from user_metadata (T-0211); unset when not known (forwarded user, completed) and in local mode. */
+  onboarding?: OnboardingState;
   workspaceId: string;
   workspaceName: string;
   role: Role;
@@ -159,7 +162,9 @@ async function resolveRequestContext(opts: ResolveOpts): Promise<ContextResult> 
     email?: string | null;
     email_confirmed_at?: string | null;
     full_name?: string | null;
-    user_metadata?: { full_name?: unknown } | null;
+    created_at?: string | null;
+    user_metadata?: Record<string, unknown> | null;
+    onboarding?: OnboardingState;
   } | null = opts.fresh
     ? null
     : await forwardedUser();
@@ -191,6 +196,7 @@ async function resolveRequestContext(opts: ResolveOpts): Promise<ContextResult> 
   if (memberships.length === 0) return { kind: "no_workspace" };
 
   const active = pickActive(memberships, wsCookie);
+  const onboarding = user.onboarding ?? (user.user_metadata ? stateFromUser(user) : undefined);
   return {
     kind: "ok",
     ctx: {
@@ -199,6 +205,7 @@ async function resolveRequestContext(opts: ResolveOpts): Promise<ContextResult> 
       email: user.email ?? null,
       fullName: metadataFullName(user.user_metadata) ?? user.full_name ?? null,
       emailConfirmedAt: user.email_confirmed_at ?? null,
+      ...(onboarding ? { onboarding } : {}),
       workspaceId: active.workspaceId,
       workspaceName: active.name,
       role: active.role,
