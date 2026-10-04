@@ -1,11 +1,12 @@
-// Agent gallery: the post-login home (/dashboard redirects here).
+// Agents home: greeting, the input box and the gallery (Gallery.dc.html). The post-login home (/dashboard redirects here).
 import { redirect } from "next/navigation";
-import AgentGallery from "@/components/agents/AgentGallery";
+import AgentsHome from "@/components/agents/AgentsHome";
 import { galleryCards } from "@/components/agents/model";
 import PageMessage from "@/components/agents/PageMessage";
 import AppShell from "@/components/shell/AppShell";
 import { canCapture } from "@/components/shell/ShellHeader";
 import { getRequestContext } from "@/lib/auth/context";
+import { greeting, homeIndex } from "@/lib/agents/home";
 import { loadAgentsInput } from "@/lib/dashboard/agents";
 
 export const dynamic = "force-dynamic";
@@ -22,7 +23,14 @@ async function body() {
   const { ctx } = result;
   try {
     const input = await loadAgentsInput(ctx);
-    return <AgentGallery cards={galleryCards(input.agents, input.sessions)} canCreate={canCapture(ctx.role)} />;
+    return (
+      <AgentsHome
+        greeting={greeting(new Date(), ctx.email)}
+        cards={galleryCards(input.agents, input.sessions)}
+        canCreate={canCapture(ctx.role)}
+        index={homeIndex(input.agents, input.sessions)}
+      />
+    );
   } catch (err) {
     console.error("agents:", err instanceof Error ? err.message : String(err));
     return <PageMessage title="Agents" text="The agents could not be loaded. Try again." />;
