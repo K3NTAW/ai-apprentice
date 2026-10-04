@@ -11,7 +11,8 @@ export default function PrivacyPage() {
       <h1 className="ui-t1">Privacy</h1>
       <p className="text-[15px]" style={{ color: "var(--mu)" }}>
         This is a placeholder. The privacy policy follows before launch. In short: capture stops when you say &quot;off the
-        record&quot;, personal data is redacted before storage, and nobody learns from a step until the expert has confirmed it.
+        record&quot;, text (transcripts, answers, events) is redacted before storage, screen frames are not redacted yet
+        (frame redaction is next), and nobody learns from a step until the expert has confirmed it.
       </p>
     </SitePage>
   );

@@ -21,6 +21,20 @@ describe("landing (Main.dc.html, LandingLight, LandingPhone)", () => {
     expect(html).not.toMatch(/\bERP\b|sandbox/i);
   });
 
+  it("claims only what the product does: text redaction, frames not yet, questions at most one a minute", () => {
+    const html = render(null);
+    expect(html).toContain("Text (transcripts, answers, events) is redacted before storage; screen frames are not redacted yet, frame redaction is next.");
+    expect(html).toContain("At most one question a minute by default, adjustable per agent.");
+    expect(html).not.toMatch(/two minutes|Personal data is redacted|redacted before anything is stored/);
+  });
+
+  it("the privacy page says text is redacted and frames are not yet", async () => {
+    const { default: PrivacyPage } = await import("@/app/privacy/page");
+    const html = renderToStaticMarkup(<PrivacyPage />);
+    expect(html).toContain("text (transcripts, answers, events) is redacted before storage");
+    expect(html).toContain("screen frames are not redacted yet");
+  });
+
   it("'Sign in' and 'Open the app' point to NEXT_PUBLIC_APP_URL", () => {
     const html = render("https://app.example.com/");
     expect(html).toMatch(/href="https:\/\/app\.example\.com\/login"[^>]*>Sign in</);

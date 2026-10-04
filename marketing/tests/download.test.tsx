@@ -10,20 +10,20 @@ describe("download page logic", () => {
     expect(downloads({}).map((d) => d.id)).toEqual(["mac-arm64", "mac-x64", "win"]);
   });
 
-  it("each build is 'Coming soon' without a link when its env var is unset, empty or not a URL", () => {
+  it("each build is 'Private beta' without a link when its env var is unset, empty or not a URL", () => {
     for (const env of [{}, { macArm64: "", macX64: "  ", win: "javascript:alert(1)" }]) {
       expect(downloads(env).every((d) => d.href === null)).toBe(true);
       const html = renderToStaticMarkup(<DownloadList items={downloads(env)} />);
-      expect(html.match(/Coming soon/g)).toHaveLength(3);
+      expect(html.match(/Private beta/g)).toHaveLength(3);
       expect(html).not.toContain("<a ");
     }
   });
 
-  it("a set link shows its button; the others stay 'Coming soon'", () => {
+  it("a set link shows its button; the others stay 'Private beta'", () => {
     const items = downloads({ macArm64: "https://dl.example.com/AI-Apprentice-arm64.dmg" });
     const html = renderToStaticMarkup(<DownloadList items={items} />);
     expect(html).toMatch(/href="https:\/\/dl\.example\.com\/AI-Apprentice-arm64\.dmg"[^>]*>Download for macOS \(Apple silicon\)</);
-    expect(html.match(/Coming soon/g)).toHaveLength(2);
+    expect(html.match(/Private beta/g)).toHaveLength(2);
   });
 
   it("reads NEXT_PUBLIC_DOWNLOAD_MAC_ARM64 / _MAC_X64 / _WIN", () => {
@@ -38,6 +38,8 @@ describe("download page logic", () => {
     const html = renderToStaticMarkup(<DownloadPage />);
     expect(html).toContain('data-screen="download"');
     for (const id of ["mac-arm64", "mac-x64", "win"]) expect(html).toContain(`data-download="${id}"`);
+    expect(html).toContain("The desktop app is in private beta. The web app runs in the browser today");
+    expect(html).not.toContain("Coming soon");
   });
 
   it("CTA targets: sign in on the app's /login, open the app at its URL", () => {

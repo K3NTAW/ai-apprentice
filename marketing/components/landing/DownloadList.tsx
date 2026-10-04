@@ -1,7 +1,7 @@
 import { Badge, buttonClass } from "@/components/ui";
 import type { Download } from "@/lib/site";
 
-/** One card per build. A build without a link reads 'Coming soon' and has no button. */
+/** One card per build. A build without a link reads 'Private beta' and has no button. */
 export default function DownloadList({ items }: { items: Download[] }) {
   return (
     <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr))]">
@@ -18,7 +18,7 @@ export default function DownloadList({ items }: { items: Download[] }) {
                 Download for {d.os === "macOS" ? `macOS (${d.label})` : d.os}
               </a>
             ) : (
-              <Badge kind="pending">Coming soon</Badge>
+              <Badge kind="pending">Private beta</Badge>
             )}
           </div>
         </div>

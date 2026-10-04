@@ -36,7 +36,7 @@ export function downloadEnv(): DownloadEnv {
   };
 }
 
-/** The three builds in a fixed order. href null: 'Coming soon', no link. */
+/** The three builds in a fixed order. href null: 'Private beta', no link. */
 export function downloads(env: DownloadEnv): Download[] {
   return [
     { id: "mac-arm64", os: "macOS", label: "Apple silicon", detail: "M1 and later", href: cleanUrl(env.macArm64) },

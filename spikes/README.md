@@ -46,7 +46,7 @@ PASS: phase B reply mentions the invoice, the cost center or capex
 
 Mitigation (section 15): the synthetic user turn (phase B) IS the mechanism the app will use to make the agent speak after a screen event. `contextual_update` only adds background context.
 
-Deviations from the scout T-0003 facts: none observed yet (not run with real keys).
+Deviations from the scout T-0003 facts: none observed in the 2026-10-03 run.
 
 ## b: Jev decide() call
 
@@ -107,6 +107,6 @@ Fixture: `fixtures/invoice.html` (fake invoice 4471, Hydrotek Maschinen GmbH, EU
 
 | spike | date | result | notes |
 |---|---|---|---|
-| a | | not run yet | no .env.local in worktree on 2026-10-03; SKIP path verified only |
-| b | | not run yet | no .env.local at main checkout on 2026-10-03; SKIP path verified only |
-| c | | not run yet | no .env.local at main checkout on 2026-10-03; SKIP path verified only |
+| a | 2026-10-03 | PASS | run by the Planner against the real ElevenLabs API: voice agent session replied after the injected screen event |
+| b | 2026-10-03 | PASS | run by the Planner against the real API: decide call answered all three questions |
+| c | 2026-10-03 | PASS | run by the Planner against the real Anthropic API: vision on a real frame returned valid events |

@@ -12,7 +12,7 @@ import SiteFooter from "./SiteFooter";
 export const STEPS = [
   {
     title: "Train",
-    text: "The expert works as usual in any app. The agent stays quiet while they type and asks one short question when they pause.",
+    text: "The expert works as usual in any app. The agent stays quiet while they type and asks one short question at a real pause after a meaningful step.",
     foot: "3 asked · 1 about guardrails",
   },
   {
@@ -28,11 +28,11 @@ export const STEPS = [
 ] as const;
 
 const ANSWERS = [
-  { q: "When to ask", a: "At natural pauses: after a send, a save, a tab switch. Never while you type. At most one question every two minutes." },
+  { q: "When to ask", a: "Only at a real pause after a meaningful action, like a send or a save. Never while you type. At most one question a minute by default, adjustable per agent." },
   { q: "What to ask", a: "The why behind a decision you just made. Guardrails first: limits, exceptions, and when you stop and ask someone." },
   { q: "When it has understood", a: 'When it explains the process back in about 45 seconds and you say "yes, that is how it works". Every step needs a score of at least 75%.' },
   { q: "Whether the new hire learned", a: "Every step ends as Mastered or Practice next, based on what they actually did on their own screen." },
-  { q: "Trust", a: 'Say "off the record" or press the button and capture stops. Names, emails and bank details are redacted before anything is stored.' },
+  { q: "Trust", a: 'Say "off the record" or press the button and capture stops entirely. Names, emails and bank details in text (transcripts, answers, events) are redacted before storage. Screen frames are not redacted yet; that is next.' },
 ] as const;
 
 const ROWS = [
@@ -203,7 +203,7 @@ export default function Landing({ appUrl }: { appUrl: string | null }) {
           <div className="flex min-w-0 flex-[1_1_520px] flex-col gap-2">
             <h2 className="ui-t2">Off the record, whenever you say it.</h2>
             <p className="max-w-[46em] text-[15px]" style={muted}>
-              Capture stops the moment you say &quot;off the record&quot;. Personal data is redacted before storage. Nobody learns from a step until the expert has confirmed it.
+              Capture stops entirely the moment you say &quot;off the record&quot;. Text (transcripts, answers, events) is redacted before storage; screen frames are not redacted yet, frame redaction is next. Nobody learns from a step until the expert has confirmed it.
             </p>
           </div>
           <a className={buttonClass("primary", "lg")} href={cta.open.href}>{cta.open.label}</a>
