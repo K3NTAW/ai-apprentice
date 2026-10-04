@@ -15,8 +15,9 @@ export const SHELL: Record<string, Result> = {
   Workspace: "url",
   "Get the desktop app": "url",
   "Start capture": "url",
-  // Recent sessions (components/shell/recent.ts titles); teach sessions without a topic are titled by the agent.
-  "/^(Work Map|Debrief|Training|Invoice Ivy|Ledger Leo|Lena Learner)/": "url",
+  // Recent sessions (components/shell/recent.ts titles); teach sessions without a topic are titled by the agent, or
+  // "Teach" when it has none (the teach console spec creates one).
+  "/^(Teach|Work Map|Debrief|Training|Invoice Ivy|Ledger Leo|Lena Learner)/": "url",
   "Collapse sidebar": "state",
   "Expand sidebar": "state",
   Search: "dialog",
