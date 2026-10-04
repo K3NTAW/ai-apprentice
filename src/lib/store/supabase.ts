@@ -40,7 +40,6 @@ import {
   InvalidWorkMapError,
   isValidProcessId,
   processNewestFirst,
-  processPatchValues,
   ProcessesUnavailableError,
   ProcessExistsError,
   ProcessNotFoundError,
@@ -779,6 +778,7 @@ export function createSupabaseStore(
         p_source_session: input.source_session_id ?? null,
         p_backfill: input.backfill === true,
       });
+      if (isProcessAgentFkViolation(res.error)) throw new AgentNotFoundError(input.agent_id);
       if (res.error && errorCode(res.error) === "23505" && input.source_session_id) throw new ProcessExistsError(input.source_session_id);
       if (res.error && errorCode(res.error) === "22023" && errorMentions(res.error, "workmap")) throw new InvalidWorkMapError();
       if (isNoDataFound(res.error)) {

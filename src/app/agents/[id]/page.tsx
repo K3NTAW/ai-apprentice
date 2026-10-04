@@ -6,7 +6,7 @@ import PageMessage from "@/components/agents/PageMessage";
 import AppShell from "@/components/shell/AppShell";
 import { agentStats } from "@/lib/agents/stats";
 import { getRequestContext } from "@/lib/auth/context";
-import { loadAgentsInput } from "@/lib/dashboard/agents";
+import { loadAgentProcesses, loadAgentsInput } from "@/lib/dashboard/agents";
 
 export const dynamic = "force-dynamic";
 
@@ -26,15 +26,16 @@ async function body(id: string, tab: ReturnType<typeof parseTab>) {
   if (result.kind !== "ok") return <PageMessage title="Agent" text="Your workspace could not be loaded. Try signing in again." />;
   const { ctx } = result;
   let input;
+  let processes;
   try {
-    input = await loadAgentsInput(ctx);
+    [input, processes] = await Promise.all([loadAgentsInput(ctx), loadAgentProcesses(ctx)]);
   } catch (err) {
     console.error("agent:", err instanceof Error ? err.message : String(err));
     return <PageMessage title="Agent" text="The agent could not be loaded. Try again." />;
   }
   const agent = input.agents.find((a) => a.id === id);
   if (!agent) notFound();
-  const { sessions, processes } = input;
+  const { sessions } = input;
   return (
     <AgentDetail
       agent={agent}

@@ -120,10 +120,10 @@ describe("GET /api/workmaps", () => {
     for (const bad of ["0", "201", "1.5", "x"]) expect((await get(`?limit=${bad}`)).status).toBe(400);
   });
 
-  it("issues a bounded number of queries: one sessions query, plus the agent lookup", async () => {
+  it("issues a bounded number of queries: one sessions query, plus processes for Teach and the agent lookup", async () => {
     state.fake.calls = [];
     await get("?confirmed=1");
-    expect(state.fake.calls.map((c) => c.table)).toEqual(["sessions"]);
+    expect(state.fake.calls.map((c) => c.table).sort()).toEqual(["processes", "sessions"]);
     state.fake.calls = [];
     await get(`?agent_id=${agentA}&session_id=${ids.draft}`);
     expect(state.fake.calls.map((c) => c.table).sort()).toEqual(["agents", "sessions"]);

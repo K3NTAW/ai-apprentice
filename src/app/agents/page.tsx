@@ -7,7 +7,7 @@ import AppShell from "@/components/shell/AppShell";
 import { canCapture } from "@/components/shell/ShellHeader";
 import { getRequestContext } from "@/lib/auth/context";
 import { greeting, homeIndex } from "@/lib/agents/home";
-import { loadAgentsInput } from "@/lib/dashboard/agents";
+import { loadAgentProcesses, loadAgentsInput } from "@/lib/dashboard/agents";
 
 export const dynamic = "force-dynamic";
 
@@ -22,11 +22,11 @@ async function body() {
   if (result.kind === "no_workspace") return <PageMessage title="Agents" text="Your workspace could not be loaded. Try signing in again." />;
   const { ctx } = result;
   try {
-    const input = await loadAgentsInput(ctx);
+    const [input, processes] = await Promise.all([loadAgentsInput(ctx), loadAgentProcesses(ctx)]);
     return (
       <AgentsHome
         greeting={greeting(new Date(), ctx.email)}
-        cards={galleryCards(input.agents, input.sessions, input.processes)}
+        cards={galleryCards(input.agents, input.sessions, processes)}
         canCreate={canCapture(ctx.role)}
         index={homeIndex(input.agents, input.sessions)}
       />

@@ -18,7 +18,7 @@ const step = (rule: string, score: number) => ({
   decision: "approve",
   is_judgment_call: true,
   reason: null,
-  guardrails: [{ rule, kind: "limit" as const }],
+  guardrails: [{ rule, quote_ref: 0, kind: "limit" as const }],
   scores: { reason_captured: score, guardrail_captured: score },
 });
 const wm = (task: string, confirmed: boolean, rule: string, score: number): WorkMap => ({
@@ -60,7 +60,10 @@ vi.mock("next/navigation", () => ({ redirect: vi.fn(), notFound: vi.fn(() => { t
 vi.mock("@/lib/auth/context", () => ({
   getRequestContext: async () => ({ kind: "ok", ctx: { mode: "supabase", role: "owner", email: "lena@example.test", userId: "u", workspaceId: "w" } }),
 }));
-vi.mock("@/lib/dashboard/agents", () => ({ loadAgentsInput: async () => state.input }));
+vi.mock("@/lib/dashboard/agents", () => ({
+  loadAgentsInput: async () => state.input,
+  loadAgentProcesses: async () => (state.input as Input).processes,
+}));
 vi.mock("@/components/shell/AppShell", () => ({ default: ({ children }: { children: unknown }) => children }));
 vi.mock("@/components/agents/AgentsHome", () => state.capture("AgentsHome"));
 vi.mock("@/components/agents/AgentDetail", () => state.capture("AgentDetail"));
@@ -70,11 +73,13 @@ import AgentPage from "./[id]/page";
 import AgentsPage from "./page";
 import LearnPage from "../learn/page";
 
+type Input = AgentsInput & { processes: Process[] };
+
 /** Props of the view element under the (mocked) AppShell. */
 const viewProps = (el: ReactElement) => (el.props as { children: ReactElement }).children.props as Record<string, unknown>;
 
 beforeEach(() => {
-  const input: AgentsInput = { agents: [AGENT], sessions: [LINKED, LEGACY], processes: [PROCESS], members: [], createdBy: {} };
+  const input: Input = { agents: [AGENT], sessions: [LINKED, LEGACY], processes: [PROCESS], members: [], createdBy: {} };
   state.input = input;
 });
 
@@ -99,7 +104,7 @@ describe("agents callers pass processes merged with legacy sessions", () => {
   });
 
   it("without processes (migration missing) the session rule applies", async () => {
-    (state.input as AgentsInput).processes = [];
+    (state.input as Input).processes = [];
     const { cards } = viewProps(await AgentsPage()) as { cards: GalleryCard[] };
     expect(cards[0].stats).toMatchObject({ processes: 1, guardrails: 1 });
     expect(cards[0].status).toBe("training");
@@ -119,7 +124,7 @@ describe("Learn reads agentWorkMaps", () => {
   });
 
   it("a process without a linked session is counted but not startable in Learn", async () => {
-    (state.input as AgentsInput).sessions = [LEGACY];
+    (state.input as Input).sessions = [LEGACY];
     const props = viewProps(await LearnPage({ searchParams: Promise.resolve({ agent: A }) }));
     expect((props.processes as LearnProcess[]).map((p) => p.task)).toEqual(["Legacy task"]);
     expect((props.agents as GalleryCard[])[0].stats.processes).toBe(2);

@@ -8,7 +8,7 @@ import { learnAgents, learnProcesses, learnTraining, memberName, parseId } from 
 import PageMessage from "@/components/agents/PageMessage";
 import AppShell from "@/components/shell/AppShell";
 import { getRequestContext } from "@/lib/auth/context";
-import { loadAgentsInput } from "@/lib/dashboard/agents";
+import { loadAgentProcesses, loadAgentsInput } from "@/lib/dashboard/agents";
 
 export const dynamic = "force-dynamic";
 
@@ -22,17 +22,17 @@ async function body(agentId: string | null) {
   if (result.kind === "signed_out") redirect("/login?next=/learn");
   if (result.kind !== "ok") return <PageMessage title="Learn" text="Your workspace could not be loaded. Try signing in again." />;
   try {
-    const input = await loadAgentsInput(result.ctx);
-    const agents = learnAgents(input.agents, input.sessions, input.processes);
+    const [input, processes] = await Promise.all([loadAgentsInput(result.ctx), loadAgentProcesses(result.ctx)]);
+    const agents = learnAgents(input.agents, input.sessions, processes);
     const selected = agentId ? (agents.find((a) => a.id === agentId) ?? null) : null;
     return (
       <LearnView
         agents={agents}
         selected={selected}
-        processes={selected ? learnProcesses(selected.id, input.sessions, input.processes) : []}
-        processesByAgent={Object.fromEntries(agents.map((a) => [a.id, learnProcesses(a.id, input.sessions, input.processes)]))}
+        processes={selected ? learnProcesses(selected.id, input.sessions, processes) : []}
+        processesByAgent={Object.fromEntries(agents.map((a) => [a.id, learnProcesses(a.id, input.sessions, processes)]))}
         unknownAgent={agentId !== null && selected === null}
-        training={learnTraining(input.agents, input.sessions, input.processes)}
+        training={learnTraining(input.agents, input.sessions, processes)}
         firstName={result.ctx.email ? memberName(result.ctx.email).split(" ")[0] : null}
       />
     );
