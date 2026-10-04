@@ -282,7 +282,9 @@ test("09 Work Map list and a Work Map if any exists", async ({ app: { page, shot
 
 test("10 Learn page", async ({ app: { page, shot } }) => {
   await page.goto("/learn");
-  await expect(page.locator("main")).toBeVisible();
+  // The loading skeleton is a status region, the page brings the one <main> (T-0257).
+  await expect(page.getByRole("heading", { name: "Learn", level: 1 })).toBeVisible();
+  await expect(page.locator("main")).toHaveCount(1);
   await page.waitForLoadState("networkidle").catch(() => {});
   await shot("learn");
 });
