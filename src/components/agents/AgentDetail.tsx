@@ -7,7 +7,7 @@ import type { Role } from "@/lib/auth/context";
 import type { Agent } from "@/lib/types";
 import { guardrailKindLabel } from "@/lib/workmap/view";
 import AgentAvatar from "./AgentAvatar";
-import { Badge, Card, Chord, buttonClass, Tabs, type BadgeKind } from "@/components/ui";
+import { Badge, Card, Chord, ScoreBar, buttonClass, Tabs, type BadgeKind } from "@/components/ui";
 import AgentSettings from "./AgentSettings";
 import {
   AGENT_TABS,
@@ -71,13 +71,13 @@ function Processes({ rows, agentId, role }: { rows: ProcessRow[]; agentId: strin
     );
   return (
     <div className="flex flex-col" style={{ gap: 14 }}>
-      <Intro action={train}>Each process is one Work Map.</Intro>
+      <Intro action={train}>Each process is one Work Map. The bar shows how well the agent understood it, with the 75% bar to clear.</Intro>
       <Card style={{ padding: "0 20px" }}>
         {rows.map((p) => (
           <div
             key={p.sessionId}
             className="grid items-center"
-            style={{ gridTemplateColumns: "minmax(0, 2.2fr) minmax(0, 1fr) auto", gap: 24, padding: "18px 0", borderBottom: "1px solid var(--ln)" }}
+            style={{ gridTemplateColumns: "minmax(0, 2.2fr) minmax(0, 1.4fr) minmax(0, 1fr) auto", gap: 24, padding: "18px 0", borderBottom: "1px solid var(--ln)" }}
           >
             <div className="flex min-w-0 flex-col" style={{ gap: 3 }}>
               <span className="ui-t3">{p.task}</span>
@@ -85,6 +85,7 @@ function Processes({ rows, agentId, role }: { rows: ProcessRow[]; agentId: strin
                 {p.counts}
               </span>
             </div>
+            <ScoreBar label="Understood" value={p.understood} />
             <div className="flex flex-col items-start" style={{ gap: 4 }}>
               <Badge kind="confirmed" />
               <span className="ui-mono text-xs" style={{ color: "var(--fa)" }}>
@@ -283,10 +284,12 @@ export default function AgentDetail(props: AgentDetailProps) {
         <div className="flex flex-col justify-center" style={{ flex: "0 1 auto", padding: "28px 32px", gap: 10 }}>
           {canCapture(role) && (
             <Link className={buttonClass("primary", "lg")} href={captureHref(agent.id)}>
+              <svg className="ui-ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>
               Train
             </Link>
           )}
           <Link className={buttonClass("secondary", "lg")} href={learnHref(agent.id)}>
+            <svg className="ui-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5 12 4l9 3.5-9 3.5z" /><path d="M7 9.5V15c0 1.5 2.5 3 5 3s5-1.5 5-3V9.5" /></svg>
             Teach a new employee
           </Link>
         </div>

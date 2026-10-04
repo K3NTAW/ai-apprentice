@@ -37,7 +37,6 @@ const ROWS = [
   ["4502", "Novak Logistika s.r.o.", "3,960.00", "4711 opex"],
   ["4517", "Krämer Antriebstechnik", "7,200.00", "4711 → 0400"],
   ["4523", "Alpen Clean Services", "2,150.00", "·"],
-  ["4523", "Alpen Clean Services", "2,150.00", "·"],
 ] as const;
 
 export function ctaFor(mode: string): { label: string; href: string } {

@@ -116,7 +116,14 @@ const confirmedOf = (agentId: string, sessions: readonly Session[]) =>
     .filter((s) => s.agent_id === agentId && s.kind === "capture" && s.workmap?.confirmed_by_expert === true)
     .sort((a, b) => Date.parse(b.started_at) - Date.parse(a.started_at) || a.id.localeCompare(b.id));
 
-export type ProcessRow = { sessionId: string; task: string; counts: string; date: string; href: string };
+export type ProcessRow = { sessionId: string; task: string; counts: string; understood: number; date: string; href: string };
+
+/** Mean of the per-step reason and guardrail scores, 0-100 (the 'Understood' bar). */
+function understood(steps: readonly { scores?: { reason_captured?: number; guardrail_captured?: number } }[]): number {
+  if (steps.length === 0) return 0;
+  const sum = steps.reduce((n, st) => n + ((st.scores?.reason_captured ?? 0) + (st.scores?.guardrail_captured ?? 0)) / 2, 0);
+  return Math.round((sum / steps.length) * 100);
+}
 
 /** The agent's confirmed Work Maps, newest first. */
 export function agentProcesses(agentId: string, sessions: readonly Session[]): ProcessRow[] {
@@ -124,6 +131,7 @@ export function agentProcesses(agentId: string, sessions: readonly Session[]): P
     sessionId: s.id,
     task: s.workmap!.task || "Untitled capture",
     counts: countsLine(s.workmap!),
+    understood: understood(s.workmap!.steps ?? []),
     date: formatZurich(s.started_at),
     href: `/map/${encodeURIComponent(s.id)}`,
   }));
