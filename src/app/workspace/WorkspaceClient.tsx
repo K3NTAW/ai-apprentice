@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { Badge, buttonClass, Input } from "@/components/ui";
 import type { WorkspaceView } from "@/lib/auth/context";
+import { confirmThen, REMOVE_MEMBER_CONFIRM, REVOKE_INVITE_CONFIRM } from "@/lib/confirm";
 
 const ERRORS: Record<string, string> = {
   invalid_input: "Check the input and try again.",
@@ -135,7 +136,7 @@ export default function WorkspaceClient({ view }: { view: WorkspaceView }) {
                   <button
                     type="button"
                     disabled={busy}
-                    onClick={() => void run("/api/workspace/members", "DELETE", { userId: m.userId })}
+                    onClick={() => void confirmThen(REMOVE_MEMBER_CONFIRM, () => run("/api/workspace/members", "DELETE", { userId: m.userId }))}
                     className={buttonClass("ghost", "sm")}
                   >
                     Remove
@@ -216,7 +217,7 @@ export default function WorkspaceClient({ view }: { view: WorkspaceView }) {
                       <button
                         type="button"
                         disabled={busy}
-                        onClick={() => void run("/api/workspace/invites", "DELETE", { id: i.id })}
+                        onClick={() => void confirmThen(REVOKE_INVITE_CONFIRM, () => run("/api/workspace/invites", "DELETE", { id: i.id }))}
                         className={buttonClass("ghost", "sm", "self-start")}
                       >
                         Revoke

@@ -35,7 +35,8 @@ export function groupRecent(sessions: SessionSummary[], now: Date, limit = RECEN
       id: s.id,
       title,
       meta: live ? `live · ${when}` : when,
-      href: s.has_workmap ? `/map/${encodeURIComponent(s.id)}` : `/debrief/${encodeURIComponent(s.id)}`,
+      // Teach opens its summary; a capture its Work Map once there is one, else its debrief.
+      href: s.kind === "teach" ? `/teach?session=${encodeURIComponent(s.id)}` : s.has_workmap ? `/map/${encodeURIComponent(s.id)}` : `/debrief/${encodeURIComponent(s.id)}`,
       live,
     };
     const last = groups[groups.length - 1];

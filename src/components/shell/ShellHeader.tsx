@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import type { Membership, Role } from "@/lib/auth/context";
 import HideInApp, { ShowInApp } from "./HideInApp";
 import NavLink from "./NavLink";
+import ThemeToggle from "./ThemeToggle";
 import WorkspaceSwitcher from "./WorkspaceSwitcher";
 import type { RecentSessions } from "./recent";
 
@@ -168,9 +169,19 @@ function UserMenu({ user }: { user: ShellUser | null }) {
           {user?.mode === "local" && <span className="text-xs" style={{ color: "var(--mu)" }}>local mode</span>}
           {user?.role && <span className="text-xs" style={{ color: "var(--mu)" }}>{user.role}</span>}
         </div>
+        <div style={{ height: 1, background: "var(--ln)", margin: "0 4px 6px" }} />
+        {user && (
+          <Link href="/workspace" role="menuitem" className="ui-mi" data-testid="menu-account">
+            <svg className="ui-ic" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="8" r="4" />
+              <path d="M4 20c0-3.5 3.6-6 8-6s8 2.5 8 6" />
+            </svg>
+            Account and workspace
+          </Link>
+        )}
+        <ThemeToggle />
         {user?.mode === "supabase" && (
           <>
-            <div style={{ height: 1, background: "var(--ln)", margin: "0 4px 6px" }} />
             <form action="/auth/signout" method="post">
               <button type="submit" role="menuitem" className="ui-mi" style={{ color: "var(--mu)" }}>
                 <svg className="ui-ic" viewBox="0 0 24 24" aria-hidden="true">
