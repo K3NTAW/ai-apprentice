@@ -47,6 +47,8 @@ vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => undefined })
 // Delete with data runs with the service role after the owner check; the fake stands in for it.
 vi.mock("@/lib/supabase/admin", () => ({ createSupabaseAdminClient: () => state.fake.client }));
 
+import { agentLearners } from "@/components/agents/model";
+import { EMAIL_FLOW_WORKMAP } from "@/lib/teach/fixtures";
 import { POST } from "./route";
 
 const progress = (extra: Record<string, unknown> = {}) => ({ workmap_session_id: "s_map", mastered: ["a"], practice: ["b"], interventions: 1, ...extra });
@@ -126,5 +128,19 @@ describe("POST /api/session/[id]/teach", () => {
     const res = await post(id, { teach: progress() });
     expect(res.status).toBe(503);
     expect(await res.json()).toMatchObject({ error: "teach_unavailable" });
+  });
+
+  it("feeds the Learners tab: the saved progress shows up in the agent's learner rows", async () => {
+    const store = createSupabaseStore(state.fake.client as never, { workspaceId: WS_A, userId: USER });
+    const agent = await store.createAgent({ name: "Clerk", role: "AP", avatar: { shape: "blob", face: "smile", color: "#3366FF", accent: "#FFCC00" } });
+    const map = await store.createSession({ kind: "capture", agent_id: agent.id });
+    await store.saveWorkMap(map.id, { ...EMAIL_FLOW_WORKMAP, task: "Book invoice", confirmed_by_expert: true });
+    const steps = EMAIL_FLOW_WORKMAP.steps.length;
+    const t = await store.createSession({ kind: "teach", agent_id: agent.id });
+    expect((await post(t.id, { teach: progress({ workmap_session_id: map.id, finished_at: "2026-10-04T09:00:00.000Z" }) })).status).toBe(200);
+    const rows = agentLearners(agent.id, await store.listSessionDigests(), [{ userId: USER, label: "Lea" }] as never, { [t.id]: USER });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ label: "Lea", mastered: 1, steps });
+    expect(rows[0].processes[0]).toMatchObject({ workmapSessionId: map.id, task: "Book invoice", interventions: 1, finished: true });
   });
 });
