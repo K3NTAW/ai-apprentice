@@ -22,11 +22,11 @@ async function fetchJson(url: string, signal: AbortSignal): Promise<SearchRespon
 }
 
 /** useRouter needs the mounted app router, so it runs in a child rendered only after mount (server renders skip it). */
-function RouterRef({ target }: { target: RefObject<((href: string) => void) | null> }) {
+function RouterRef({ targetRef }: { targetRef: RefObject<((href: string) => void) | null> }) {
   const router = useRouter();
   useEffect(() => {
-    target.current = (href) => router.push(href);
-  }, [router, target]);
+    targetRef.current = (href) => router.push(href);
+  }, [router, targetRef]);
   return null;
 }
 
@@ -57,12 +57,10 @@ export function SearchField({ hint, onOpen }: { hint: string; onOpen?: () => voi
 }
 
 function Results({ state, onChoose, onHover }: { state: PaletteState; onChoose: (i: number) => void; onHover: (i: number) => void }) {
-  let prev: PaletteEntry["group"] | null = null;
   return (
     <div role="listbox" id="palette-list" aria-label="Results" className="flex flex-col" style={{ maxHeight: 380, overflowY: "auto", padding: 6 }}>
       {state.entries.map((e, i) => {
-        const head = e.group !== prev ? e.group : null;
-        prev = e.group;
+        const head = i === 0 || state.entries[i - 1]!.group !== e.group ? e.group : null;
         return (
           <div key={`${e.group}:${e.id}`} className="flex flex-col">
             {head && <div className="text-xs" style={{ color: "var(--fa)", padding: "8px 10px 4px" }}>{head}</div>}
@@ -113,7 +111,7 @@ export default function CommandPalette() {
   const open = state?.open ? state : null;
   return (
     <>
-      {mounted && <RouterRef target={navigate} />}
+      {mounted && <RouterRef targetRef={navigate} />}
       <SearchField hint={hint} onOpen={() => palette.current?.open()} />
       {open && (
         <div className="fixed inset-0 z-50 flex items-start justify-center" style={{ paddingTop: "12vh", background: "color-mix(in oklab, var(--bg) 60%, transparent)" }} onMouseDown={() => palette.current?.close()}>
