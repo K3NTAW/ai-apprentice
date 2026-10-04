@@ -3,14 +3,16 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({ calls: [] as string[], user: "u" as string | null }));
+const MEMBERS = vi.hoisted(() => [{ workspace_id: "11111111-1111-4111-8111-111111111111", role: "owner", created_at: "2026-10-04", workspaces: { name: "Personal" } }]);
 
 vi.mock("@/lib/supabase/env", () => ({
   appMode: () => "supabase",
   publicSupabaseEnv: () => ({ url: "http://localhost:54321", anonKey: "anon-placeholder" }),
 }));
 
-vi.mock("@supabase/ssr", () => ({
-  createServerClient: () => ({
+vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => undefined, getAll: () => [] }) }));
+vi.mock("@/lib/supabase/server", () => ({
+  createSupabaseServerClient: async () => ({
     auth: {
       getUser: async () => {
         state.calls.push("getUser");
@@ -18,7 +20,7 @@ vi.mock("@supabase/ssr", () => ({
       },
     },
     from: () => {
-      const q: unknown = new Proxy({}, { get: (_t, p) => (p === "then" ? (r: (v: unknown) => unknown) => r({ data: [], error: null }) : () => q) });
+      const q: unknown = new Proxy({}, { get: (_t, p) => (p === "then" ? (r: (v: unknown) => unknown) => r({ data: MEMBERS, error: null }) : () => q) });
       return q;
     },
     rpc: async (name: string) => {

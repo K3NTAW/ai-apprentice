@@ -1,4 +1,3 @@
-import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
@@ -7,7 +6,6 @@ const state = vi.hoisted(() => ({
   members: { data: [], error: null } as { data: unknown; error: unknown },
   rpc: { data: [], error: null } as { data: unknown; error: unknown },
   calls: [] as string[],
-  cookies: [] as string[],
 }));
 
 vi.mock("@/lib/supabase/env", () => ({
@@ -20,12 +18,12 @@ function fakeQuery(result: { data: unknown; error: unknown }) {
   return q;
 }
 
-vi.mock("@supabase/ssr", () => ({
-  createServerClient: vi.fn((_u: string, _k: string, opts: { cookies: { getAll(): { name: string }[] } }) => ({
+// Session cookie stand-in: the server client sees a user only when the request carried one.
+vi.mock("@/lib/supabase/server", () => ({
+  createSupabaseServerClient: async () => ({
     auth: {
       getUser: vi.fn(async () => {
         state.calls.push("getUser");
-        state.cookies = opts.cookies.getAll().map((c) => c.name);
         if (state.user === "throw") throw new Error("network");
         return state.user;
       }),
@@ -38,8 +36,9 @@ vi.mock("@supabase/ssr", () => ({
       state.calls.push(name);
       return state.rpc;
     }),
-  })),
+  }),
 }));
+vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => undefined, getAll: () => [] }) }));
 
 import { bootstrapThrottle, BOOTSTRAP_MAX_PER_IP } from "@/lib/auth/throttle";
 import { POST } from "./route";
@@ -49,7 +48,7 @@ const WS_INV = "33333333-3333-4333-8333-333333333333";
 
 const call = (body: unknown = {}, headers: Record<string, string> = {}) =>
   POST(
-    new NextRequest("http://app.test/api/auth/bootstrap", {
+    new Request("http://app.test/api/auth/bootstrap", {
       method: "POST",
       headers: { "content-type": "application/json", cookie: "sb-test-auth-token=session", ...headers },
       body: JSON.stringify(body),
@@ -62,7 +61,6 @@ beforeEach(() => {
   state.members = { data: [], error: null };
   state.rpc = { data: [{ workspace_id: WS_OWN, name: "Personal", role: "owner" }], error: null };
   state.calls = [];
-  state.cookies = [];
   bootstrapThrottle.reset();
 });
 
@@ -80,11 +78,11 @@ describe("POST /api/auth/bootstrap", () => {
     expect((await call()).status).toBe(401);
   });
 
-  it("with a session: reads the cookie, runs bootstrap_workspace and returns /agents", async () => {
+  it("with a session: runs bootstrap_workspace and returns /agents", async () => {
+    state.members = { data: [{ workspace_id: WS_OWN, role: "owner", created_at: "2026-01-01", workspaces: { name: "P" } }], error: null };
     const res = await call();
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ redirect: "/agents" });
-    expect(state.cookies).toContain("sb-test-auth-token");
     expect(state.calls).toEqual(["getUser", "bootstrap_workspace"]);
   });
 
@@ -107,6 +105,7 @@ describe("POST /api/auth/bootstrap", () => {
   });
 
   it("500 when the bootstrap fails", async () => {
+    state.members = { data: [{ workspace_id: WS_OWN, role: "owner", created_at: "2026-01-01", workspaces: { name: "P" } }], error: null };
     state.rpc = { data: null, error: { message: "boom" } };
     const res = await call();
     expect(res.status).toBe(500);
@@ -123,7 +122,7 @@ describe("POST /api/auth/bootstrap", () => {
 
   it("400 for a non-JSON body, 503 when Supabase is not configured", async () => {
     const form = await POST(
-      new NextRequest("http://app.test/api/auth/bootstrap", { method: "POST", headers: { "content-type": "text/plain" }, body: "x" }),
+      new Request("http://app.test/api/auth/bootstrap", { method: "POST", headers: { "content-type": "text/plain" }, body: "x" }),
     );
     expect(form.status).toBe(400);
     state.mode = "misconfigured";
