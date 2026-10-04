@@ -45,7 +45,7 @@ export function ctaFor(mode: string): { label: string; href: string } {
 
 const muted = { color: "var(--mu)" } as const;
 const faint = { color: "var(--fa)" } as const;
-const wrap = "mx-auto max-w-[1240px] px-4 sm:px-8";
+const wrap = "mx-auto max-w-[1240px] px-5 sm:px-8";
 const row = "grid grid-cols-[56px_minmax(0,1fr)_92px_128px] gap-3 px-[18px]";
 
 const PIP = { shape: "blob", face: "curious", color: "#ECEAE5", accent: "#3A4EFD" };
@@ -72,29 +72,55 @@ export default function Landing({ mode }: { mode: string }) {
           <BrandMark />
           AI Apprentice
         </a>
-        <nav className="flex flex-wrap items-center gap-1" aria-label="Main">
+        <nav className="hidden flex-wrap items-center gap-1 sm:flex" aria-label="Main">
           <a className={buttonClass("ghost")} style={{ color: "var(--tx)" }} href="#how">How it works</a>
           <a className={buttonClass("ghost")} style={{ color: "var(--tx)" }} href="#test">The Apprentice Test</a>
           <a className={buttonClass("ghost")} style={{ color: "var(--tx)" }} href="#trust">Trust</a>
           <Link className={buttonClass("secondary")} href={cta.href}>{cta.label}</Link>
         </nav>
+        {/* LandingPhone.dc.html: the links fold into a round menu button. */}
+        <details className="relative sm:hidden">
+          <summary className={buttonClass("secondary", "md", "size-11 list-none p-0 [&::-webkit-details-marker]:hidden")} aria-label="Menu">
+            <svg className="ui-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9h14M5 15h14" /></svg>
+          </summary>
+          <div className="ui-card absolute right-0 z-10 mt-2 flex w-56 flex-col p-2" style={{ boxShadow: "var(--sh)" }}>
+            <a className={buttonClass("ghost", "md", "justify-start")} href="#how">How it works</a>
+            <a className={buttonClass("ghost", "md", "justify-start")} href="#test">The Apprentice Test</a>
+            <a className={buttonClass("ghost", "md", "justify-start")} href="#trust">Trust</a>
+            <Link className={buttonClass("ghost", "md", "justify-start")} href={cta.href}>{cta.label}</Link>
+          </div>
+        </details>
       </header>
 
-      <section id="top" className={`${wrap} grid items-center gap-16 pt-14 pb-24 [grid-template-columns:repeat(auto-fit,minmax(min(100%,460px),1fr))]`}>
-        <div className="flex min-w-0 flex-col gap-7">
+      <section id="top" className={`${wrap} grid items-center gap-16 pt-14 pb-24 max-sm:gap-9 max-sm:pt-4 [grid-template-columns:repeat(auto-fit,minmax(min(100%,460px),1fr))]`}>
+        <div className="flex min-w-0 flex-col gap-7 max-sm:gap-5">
           <Badge kind="accent" className="self-start">For teams whose experts are about to retire</Badge>
-          <h1 className="ui-td">Keep the judgment when the expert retires.</h1>
-          <p className="max-w-[32em] text-[19px] leading-[1.55]" style={muted}>
+          <h1 className="ui-td max-sm:!text-[40px]">Keep the judgment when the expert retires.</h1>
+          <p className="max-w-[32em] text-[19px] leading-[1.55] max-sm:text-base" style={muted}>
             Train an agent while you do your real work. It watches quietly, asks short spoken questions at natural pauses, and later teaches the next person on their own screen.
           </p>
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap gap-3 max-sm:flex-col">
             <Link className={buttonClass("primary", "lg")} href={cta.href}>{cta.label}</Link>
             <a className={buttonClass("secondary", "lg")} href="#how">See how it works</a>
           </div>
-          <p className="text-[13px]" style={faint}>Runs next to Outlook, Excel, PowerPoint and any browser tab. Nothing to integrate.</p>
+          <p className="text-[13px] max-sm:hidden" style={faint}>Runs next to Outlook, Excel, PowerPoint and any browser tab. Nothing to integrate.</p>
         </div>
 
-        <div className="flex min-w-0 flex-col">
+        <div className="flex min-w-0 flex-col gap-2.5 sm:hidden">
+          <div className="ui-card flex flex-col gap-2 px-4 py-3.5">
+            <div className="ui-mono flex justify-between text-[13px]" style={muted}>
+              <span>Invoice 4517 · Krämer</span>
+              <span style={{ color: "var(--tx)" }}>€7,200.00</span>
+            </div>
+            <div className="flex items-center gap-2 text-xs" style={muted}>
+              Cost center <CostCenter value="4711 → 0400" />
+            </div>
+          </div>
+          <div className="ui-bub self-start ml-2.5 text-[15px]">You moved that one to capex. What made you do that?</div>
+          <div className="ui-bub ui-bub-expert self-end text-sm">Equipment over €5,000 is always capex.</div>
+        </div>
+
+        <div className="flex min-w-0 flex-col max-sm:hidden">
           <div className="ui-card overflow-hidden" style={{ boxShadow: "var(--sh)" }}>
             <div className="flex items-center gap-2 border-b border-[var(--ln)] px-4 py-3">
               {[0, 1, 2].map((i) => (
