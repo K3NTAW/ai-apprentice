@@ -2,6 +2,7 @@
 // LLM proposes the map, code verifies every quote and screen moment against the session.
 // Without ANTHROPIC_API_KEY or on any error: deterministic fallback from DOM events and Q&A pairs.
 import { SCREEN_EVENT_TYPES, type Guardrail, type QAPair, type ScreenEvent, type Session, type WorkMap, type WorkMapShortcut, type WorkMapStep } from "@/lib/types";
+import { resolveModel } from "@/lib/models";
 import { describeEvent, shortcutQuestion } from "@/lib/voice/prompts";
 import { isStateChangingEffect, shortcutKey } from "@/lib/decide/shortcut";
 import { explainedEvents, narrationsOf, type Narration } from "@/lib/capture/narration";
@@ -441,7 +442,7 @@ function sessionPayload(session: Session) {
 
 export function workmapRequestBody(session: Session) {
   return {
-    model: process.env.WORKMAP_MODEL ?? "claude-opus-5-5",
+    model: resolveModel("workmap"),
     max_tokens: 8000,
     system: SYSTEM_PROMPT,
     messages: [

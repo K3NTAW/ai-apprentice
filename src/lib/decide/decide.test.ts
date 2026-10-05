@@ -6,6 +6,7 @@ import { DecisionResultSchema } from "../types";
 import { decide, decideMany } from "./index";
 import { JEV_URL } from "./jev";
 import { LLM_URL } from "./llm";
+import { DECIDE_MODEL_DEFAULT, FALLBACK_MODEL } from "../models";
 
 type Call = { url: string; init: RequestInit };
 
@@ -211,6 +212,47 @@ describe("fallthrough chain", () => {
     const res = await decide("screen_explains_it", {}, { fetchImpl });
     expect(calls).toHaveLength(0);
     expect(res.provider).toBe("heuristic");
+  });
+});
+
+describe("llm model", () => {
+  const notFound = () => json({ type: "error", error: { type: "not_found_error", message: "model: x" } }, 404);
+  const modelsSent = (calls: Call[]) => calls.map((c) => JSON.parse(c.init.body as string).model);
+  const answer = llmReply({ event_class: { answer: "routine", confidence: 0.9 } });
+
+  beforeEach(() => vi.stubEnv("ANTHROPIC_API_KEY", "ant-test"));
+
+  it.each([
+    [undefined, "claude-haiku-4-5-20251001"],
+    ["claude-haiku-4-5-20251001", "claude-haiku-4-5-20251001"],
+    ["claude-sonnet-5-5", "claude-sonnet-5-5"],
+  ])("sends the model from DECIDE_MODEL=%s as %s", async (env, expected) => {
+    if (env) vi.stubEnv("DECIDE_MODEL", env);
+    const { fetchImpl, calls } = mockFetch(answer);
+    const res = await decide("event_class", {}, { fetchImpl });
+    expect(res).toMatchObject({ provider: "llm", answer: "routine" });
+    expect(modelsSent(calls)).toEqual([expected]);
+  });
+
+  it("retries once with FALLBACK_MODEL on a model not_found_error", async () => {
+    const { fetchImpl, calls } = mockFetch(notFound(), answer);
+    const res = await decide("event_class", {}, { fetchImpl });
+    expect(res).toMatchObject({ provider: "llm", answer: "routine" });
+    expect(modelsSent(calls)).toEqual([DECIDE_MODEL_DEFAULT, FALLBACK_MODEL]);
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining(FALLBACK_MODEL));
+  });
+
+  it("returns a second not_found_error as a failure, not retried again", async () => {
+    const { fetchImpl, calls } = mockFetch(notFound(), notFound(), notFound());
+    const res = await decide("event_class", {}, { fetchImpl });
+    expect(res.provider).toBe("heuristic");
+    expect(modelsSent(calls)).toEqual([DECIDE_MODEL_DEFAULT, FALLBACK_MODEL]);
+  });
+
+  it("does not retry a 404 without not_found_error", async () => {
+    const { fetchImpl, calls } = mockFetch(json({ error: { type: "other" } }, 404));
+    await decide("event_class", {}, { fetchImpl });
+    expect(calls).toHaveLength(1);
   });
 });
 

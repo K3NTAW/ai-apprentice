@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ScreenEvent } from "@/lib/types";
 import { encodeWithinLimit, FRAME_QUALITY, FRAME_RETRY_QUALITY, MAX_FRAME_BASE64_CHARS, MAX_FRAME_BODY_BYTES, scaledSize } from "./frame";
 import { redactScreenEvent } from "./redactEvent";
+import { FALLBACK_MODEL, VISION_MODEL_DEFAULT } from "@/lib/models";
 import { describeFrame, droppedVisionEvents, VISION_CONTEXT_EVENTS, VISION_SYSTEM_PROMPT } from "./vision";
 
 function reply(body: unknown, status = 200) {
@@ -125,6 +126,34 @@ describe("describeFrame", () => {
       throw new Error("aborted");
     });
     expect((await describeFrame({ jpegBase64: "A", fetchImpl: thrower })).error).toMatch(/^upstream_/);
+  });
+});
+
+describe("vision model", () => {
+  const notFound = () => new Response(JSON.stringify({ type: "error", error: { type: "not_found_error", message: "model: x" } }), { status: 404 });
+  const modelsSent = (f: ReturnType<typeof vi.fn>) => f.mock.calls.map((c) => JSON.parse((c[1] as RequestInit).body as string).model);
+
+  it.each([
+    [undefined, "claude-haiku-4-5-20251001"],
+    ["claude-haiku-4-5-20251001", "claude-haiku-4-5-20251001"],
+    ["claude-sonnet-5-5", "claude-sonnet-5-5"],
+  ])("sends the model from VISION_MODEL=%s as %s", async (env, expected) => {
+    if (env) vi.stubEnv("VISION_MODEL", env);
+    const fetchImpl = reply(textReply([]));
+    expect(await describeFrame({ jpegBase64: "AAAA", fetchImpl })).toEqual({ events: [] });
+    expect(sentBody(fetchImpl).model).toBe(expected);
+  });
+
+  it("retries once with FALLBACK_MODEL on a model not_found_error and returns a second failure", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const ok = vi.fn().mockResolvedValueOnce(notFound()).mockResolvedValueOnce(new Response(JSON.stringify(textReply([])), { status: 200 }));
+    expect(await describeFrame({ jpegBase64: "A", fetchImpl: ok })).toEqual({ events: [] });
+    expect(modelsSent(ok)).toEqual([VISION_MODEL_DEFAULT, FALLBACK_MODEL]);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining(FALLBACK_MODEL));
+    const bad = vi.fn().mockImplementation(async () => notFound());
+    expect(await describeFrame({ jpegBase64: "A", fetchImpl: bad })).toEqual({ events: [], error: "upstream_404" });
+    expect(modelsSent(bad)).toEqual([VISION_MODEL_DEFAULT, FALLBACK_MODEL]);
+    warn.mockRestore();
   });
 });
 

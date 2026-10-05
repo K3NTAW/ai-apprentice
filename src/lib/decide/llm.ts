@@ -1,5 +1,6 @@
 // Anthropic Messages API fallback with structured JSON output.
 import { DECISION_QUESTIONS, type DecisionQuestionName } from "../types";
+import { resolveModel, sendWithModelFallback } from "../models";
 import { OPTION_DESCRIPTIONS, SYSTEM_PROMPT, clamp01, serializeState, type RawAnswer } from "./prompts";
 
 export const LLM_URL = "https://api.anthropic.com/v1/messages";
@@ -34,9 +35,9 @@ function userPrompt(questions: DecisionQuestionName[], state: unknown): string {
   return `Questions:\n${lines.join("\n")}\n\nState:\n${serializeState(state)}`;
 }
 
-export function llmBody(questions: DecisionQuestionName[], state: unknown) {
+export function llmBody(questions: DecisionQuestionName[], state: unknown, model = resolveModel("decide")) {
   return {
-    model: process.env.DECIDE_MODEL ?? "claude-haiku-4-5-20251001",
+    model,
     max_tokens: 400,
     system: SYSTEM_PROMPT,
     messages: [{ role: "user", content: userPrompt(questions, state) }],
@@ -70,16 +71,18 @@ export async function llmDecide(
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   let json: { stop_reason?: string; content?: { type: string; text?: string }[] };
   try {
-    const res = await fetchImpl(LLM_URL, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify(llmBody(questions, state)),
-      signal: ctrl.signal,
-    });
+    const res = await sendWithModelFallback("decide", (model) =>
+      fetchImpl(LLM_URL, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify(llmBody(questions, state, model)),
+        signal: ctrl.signal,
+      }),
+    );
     if (!res.ok) throw new Error(`llm: HTTP ${res.status}`);
     json = await res.json();
   } finally {
