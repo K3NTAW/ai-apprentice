@@ -41,7 +41,7 @@ describe("nightly-live workflow", () => {
   it("fails fast when a secret is missing, naming it only", () => {
     expect(yml).toContain("for name in BASE_URL E2E_EMAIL E2E_PASSWORD");
     expect(yml).toMatch(/::error::Repository secret \$name is not set/);
-    expect(yml.indexOf("Check secrets")).toBeLessThan(yml.indexOf("npm run e2e:live"));
+    expect(yml.indexOf("Check secrets")).toBeLessThan(yml.indexOf("run: npm run e2e:live"));
   });
 
   it("installs Chrome and runs e2e:live", () => {
