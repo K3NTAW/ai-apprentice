@@ -38,9 +38,9 @@
     ],
     "roadmap": "P0-4"
   },
-  "status": "queued",
-  "assigned_to": null,
-  "worktree": null,
+  "status": "running",
+  "assigned_to": "claude:B",
+  "worktree": "/Users/k3ntaw/code/ai-apprentice/wt/T-0292",
   "codex_thread": null,
   "result": null,
   "events": [
@@ -97,19 +97,553 @@
         "dispatched_at_lease": 1791244805.890561,
         "dispatched_at_done": 1791243906.907983
       }
+    },
+    {
+      "ts": 1791243967.101563,
+      "pipeline": {
+        "first_ready_at": 1791243724.727943,
+        "dispatched_at": 1791243905.890561,
+        "dispatched_at_lease": 1791244805.890561,
+        "dispatched_at_done": 1791243906.907983,
+        "handoff": {
+          "baseline": "claude:opus",
+          "selected": "claude:opus",
+          "switched": false,
+          "gain": 0.0,
+          "reason": "allocation_active",
+          "ts": 1791243967.1004732
+        }
+      }
+    },
+    {
+      "ts": 1791243967.380002,
+      "tier": "opus",
+      "fallback": "claude",
+      "review_rule": "same-family-review: other account, different model"
+    },
+    {
+      "ts": 1791243967.4055429,
+      "pipeline": {
+        "first_ready_at": 1791243724.727943,
+        "dispatched_at": 1791243905.890561,
+        "dispatched_at_lease": 1791244805.890561,
+        "dispatched_at_done": 1791243906.907983,
+        "handoff": {
+          "baseline": "claude:opus",
+          "selected": "claude:opus",
+          "switched": false,
+          "gain": 0.0,
+          "reason": "allocation_active",
+          "ts": 1791243967.1004732
+        },
+        "jev_route": {
+          "baseline": "opus",
+          "hypothetical": "claude:opus",
+          "key": "e929f8c30988f0d8af5c0c772120d0743ebaeae3",
+          "adjustment": {
+            "claude:opus": 1.0
+          },
+          "mode": "active"
+        }
+      }
+    },
+    {
+      "ts": 1791243971.489002,
+      "executor": "claude:opus"
+    },
+    {
+      "ts": 1791243972.72959,
+      "packet_meta": {
+        "prefix_sha": "47d8a2fdfe08",
+        "prefix_chars": 764,
+        "suffix_chars": 5163,
+        "dynamic_sections": [
+          "skills",
+          "Trigger",
+          "Objective",
+          "Procedure",
+          "Tools",
+          "Evidence requirements",
+          "Output contract",
+          "Stop conditions",
+          "Failure/recovery",
+          "objective",
+          "acceptance",
+          "base",
+          "write_scope",
+          "read_scope",
+          "constraints",
+          "relevant_tests",
+          "symbols",
+          "gotchas",
+          "decisions",
+          "verify",
+          "evidence",
+          "conditional instructions"
+        ]
+      }
+    },
+    {
+      "ts": 1791243972.754005,
+      "packet_meta": {
+        "chars": 4993,
+        "est_tokens": 1248,
+        "presented_tokens": 1248,
+        "sections": {
+          "_preamble": {
+            "chars": 202,
+            "est_tokens": 50,
+            "sha256": "afa24053216119d553654d2cbbb80b6df1c9062c33a3c2e52964ad65d942e20e"
+          },
+          "skills": {
+            "chars": 54,
+            "est_tokens": 13,
+            "sha256": "838bd3c68843c4ae23465b45fe524bc6494df170043de05781a01051e5bc300f"
+          },
+          "Trigger": {
+            "chars": 52,
+            "est_tokens": 13,
+            "sha256": "0ea37148175078772f282ed7c36d48cca318e17c54fee750766ece36c13a6673"
+          },
+          "Objective": {
+            "chars": 80,
+            "est_tokens": 20,
+            "sha256": "440f7e6f18bb93673075eb83a6eee00e7a349b2883ed943b025f3be203e60bf9"
+          },
+          "Procedure": {
+            "chars": 176,
+            "est_tokens": 44,
+            "sha256": "9fd7041c54a1bdb037dfc82d152704e1a4d2337ae2c90c0ef10ef70244869768"
+          },
+          "Tools": {
+            "chars": 56,
+            "est_tokens": 14,
+            "sha256": "8d72764fd7832c5a454ee8b85fca70c3757aea1305987d93da924318181d4e58"
+          },
+          "Evidence requirements": {
+            "chars": 68,
+            "est_tokens": 17,
+            "sha256": "66b75fdc1469a08f54ab4a93060d919fcf85bcae13d1ed2b513472d4fe6d247a"
+          },
+          "Output contract": {
+            "chars": 109,
+            "est_tokens": 27,
+            "sha256": "d8724ee2f0aa4e5907629d54f99ba39965003a54550674886e4113d7691eb907"
+          },
+          "Stop conditions": {
+            "chars": 64,
+            "est_tokens": 16,
+            "sha256": "854ee38ff4593ded68986348d72c8eaa25af70dbbace29f321bb02b5d923e2d8"
+          },
+          "Failure/recovery": {
+            "chars": 141,
+            "est_tokens": 35,
+            "sha256": "1e3a058ad4a0189419a3ff63128e9c3de972ef4f83580c3f19dc7e6064a3f714"
+          },
+          "objective": {
+            "chars": 2208,
+            "est_tokens": 552,
+            "sha256": "276505b3afb5ab31136ab7fa3fa0cd306fdd5ace01874904a06dfae2ece87cf8"
+          },
+          "acceptance": {
+            "chars": 628,
+            "est_tokens": 157,
+            "sha256": "d0453c324aa8b340bc511a56ab96817f19d3fc145b0d9b829ace4a2fda521ea2"
+          },
+          "base": {
+            "chars": 105,
+            "est_tokens": 26,
+            "sha256": "80f81d2b87ea3f5c7c7d30eb29d5a2bd563777eba2b7798eb4eae0a6bf5eae16"
+          },
+          "write_scope": {
+            "chars": 213,
+            "est_tokens": 53,
+            "sha256": "b7c311d9c948c0fe5e9d6659247cb7e303558b11d3cbe5c5276856df1a6f0f74"
+          },
+          "read_scope": {
+            "chars": 82,
+            "est_tokens": 20,
+            "sha256": "63518b1317bc5ed1cea202c872b6fb34f6f10b9ab60d1224f2d3caa8966cf373"
+          },
+          "constraints": {
+            "chars": 221,
+            "est_tokens": 55,
+            "sha256": "138d1a5f13ae65fa8f435f749da0997a762f025a34b46166835acd7e51dc9466"
+          },
+          "relevant_tests": {
+            "chars": 33,
+            "est_tokens": 8,
+            "sha256": "6748020a3148b37650bdf63e6912368d1207475cacc71095b5d045a8366b1776"
+          },
+          "symbols": {
+            "chars": 20,
+            "est_tokens": 5,
+            "sha256": "3d44487559d25204da9256ebe9490acbe905d30e6f267b2eba18e34aacd19263"
+          },
+          "gotchas": {
+            "chars": 20,
+            "est_tokens": 5,
+            "sha256": "93ed828d934a610b03a762025e581ecdebd706b67c9f92c3502061276c762c75"
+          },
+          "decisions": {
+            "chars": 161,
+            "est_tokens": 40,
+            "sha256": "de7ab6a73084e2e771e31610c7a8e59ba08d8d833dda3147d99becb424b58528"
+          },
+          "verify": {
+            "chars": 102,
+            "est_tokens": 25,
+            "sha256": "67b8c5735d9f1bb7d89849f69178de377441bca5491fea17c21a0ab934e75c8a"
+          },
+          "evidence": {
+            "chars": 198,
+            "est_tokens": 49,
+            "sha256": "cd19651ce9332fd37095da68dc656f47ea75af92bc18cb8a19a1f7b90d6a6ed3"
+          }
+        },
+        "hash": "c5049ccef8c6",
+        "version": "c5049ccef8c6",
+        "candidate_known": true,
+        "base": "ec2d4f4f21ef",
+        "sources": "pool.toml@4b59f10be1e5 gotchas@e3b0c44298fc memory@notes,bus specialist: execute+implement-spec over cap by 193 chars: acceptance kept whole routed=shadow",
+        "policy_version": "4b59f10be1e5",
+        "gotchas": "e3b0c44298fc",
+        "candidate_tokens": 2292,
+        "skill_tokens_presented_l2": 186,
+        "routed_mode": "shadow",
+        "routed_tokens": 1774,
+        "routed_reduction_ratio": 0.5897606382978723,
+        "routed_hidden": 2,
+        "routed_ambiguous": 22,
+        "routed_rules_version": "v1",
+        "evidence_ids": [
+          "4882088c73ca",
+          "9e9f9b734081",
+          "8debba7b8441",
+          "82a78e9f13bc",
+          "ed48cd3504c7",
+          "bbb5dd7e5a71",
+          "6cfe8c026bbf",
+          "3f6fb0aa74fc",
+          "36a0b4d94708",
+          "197d38bfff91",
+          "7064b8d11fbd",
+          "9ea39468a2ec",
+          "0e73daecbfce",
+          "108cc7ebe0c3",
+          "113054fcfb43",
+          "186bc5f65d5a",
+          "18f7cb21cd69",
+          "2892ba017696",
+          "3649ea41b0e1",
+          "39d3acc72c05",
+          "3dc0defa1fc0",
+          "448234bad0f5",
+          "47a9f4f3a98c",
+          "4c25f25d4ef2",
+          "4cdc5323eded",
+          "52494c303d12",
+          "5ea3e86c63f6",
+          "769d4eca87e0",
+          "7c28bf3582f0",
+          "876dfb9498c8",
+          "888bb5d40c79",
+          "a0c3ad4f4a37",
+          "b0395d701403",
+          "b441821b17ca",
+          "c1db2ed02707",
+          "c672979a9c2c",
+          "c6d67e9e80a8",
+          "c9f9c6e0d196",
+          "cd1b8c56aaa8",
+          "e41197a64e7e",
+          "e511fc623aeb",
+          "f2f37526592a"
+        ],
+        "prefix_sha": "47d8a2fdfe08",
+        "prefix_chars": 764,
+        "suffix_chars": 5163,
+        "dynamic_sections": [
+          "skills",
+          "Trigger",
+          "Objective",
+          "Procedure",
+          "Tools",
+          "Evidence requirements",
+          "Output contract",
+          "Stop conditions",
+          "Failure/recovery",
+          "objective",
+          "acceptance",
+          "base",
+          "write_scope",
+          "read_scope",
+          "constraints",
+          "relevant_tests",
+          "symbols",
+          "gotchas",
+          "decisions",
+          "verify",
+          "evidence",
+          "conditional instructions"
+        ],
+        "instruction_tokens": 294,
+        "instruction_tokens_modular": 233,
+        "role": "execute",
+        "tool_tokens_disclosed": 5995,
+        "tool_tokens_minimal": 5995,
+        "tool_allowlist_source": "specialist",
+        "skills_exposed": [
+          "executor/implement-spec",
+          "planner/memory",
+          "planner/orchestrate",
+          "planner/resume",
+          "planner/write-spec",
+          "review/adversarial-review",
+          "review/challenge",
+          "scout/repo-map",
+          "scout/test-gap",
+          "scout/trace-callers",
+          "triage/classify",
+          "triage/compact-memory"
+        ],
+        "skill_tokens_l0": 219,
+        "skills_selected": [
+          "executor/implement-spec"
+        ],
+        "skill_tokens_selected_l0": 25,
+        "skill_tokens_selected_l2": 62,
+        "skill_routing_mode": "active"
+      }
+    },
+    {
+      "ts": 1791243974.953652,
+      "status": "running",
+      "assigned_to": "claude:B",
+      "worktree": "/Users/k3ntaw/code/ai-apprentice/wt/T-0292",
+      "claimed_at": 1791243974.95311
+    },
+    {
+      "ts": 1791243974.9563231,
+      "account": "B"
+    },
+    {
+      "ts": 1791243979.326126,
+      "pid": 28067,
+      "account": "B"
     }
   ],
   "pipeline": {
     "first_ready_at": 1791243724.727943,
     "dispatched_at": 1791243905.890561,
     "dispatched_at_lease": 1791244805.890561,
-    "dispatched_at_done": 1791243906.907983
+    "dispatched_at_done": 1791243906.907983,
+    "handoff": {
+      "baseline": "claude:opus",
+      "selected": "claude:opus",
+      "switched": false,
+      "gain": 0.0,
+      "reason": "allocation_active",
+      "ts": 1791243967.1004732
+    },
+    "jev_route": {
+      "baseline": "opus",
+      "hypothetical": "claude:opus",
+      "key": "e929f8c30988f0d8af5c0c772120d0743ebaeae3",
+      "adjustment": {
+        "claude:opus": 1.0
+      },
+      "mode": "active"
+    }
   },
   "packet_meta": {
+    "chars": 4993,
+    "est_tokens": 1248,
+    "presented_tokens": 1248,
+    "sections": {
+      "_preamble": {
+        "chars": 202,
+        "est_tokens": 50,
+        "sha256": "afa24053216119d553654d2cbbb80b6df1c9062c33a3c2e52964ad65d942e20e"
+      },
+      "skills": {
+        "chars": 54,
+        "est_tokens": 13,
+        "sha256": "838bd3c68843c4ae23465b45fe524bc6494df170043de05781a01051e5bc300f"
+      },
+      "Trigger": {
+        "chars": 52,
+        "est_tokens": 13,
+        "sha256": "0ea37148175078772f282ed7c36d48cca318e17c54fee750766ece36c13a6673"
+      },
+      "Objective": {
+        "chars": 80,
+        "est_tokens": 20,
+        "sha256": "440f7e6f18bb93673075eb83a6eee00e7a349b2883ed943b025f3be203e60bf9"
+      },
+      "Procedure": {
+        "chars": 176,
+        "est_tokens": 44,
+        "sha256": "9fd7041c54a1bdb037dfc82d152704e1a4d2337ae2c90c0ef10ef70244869768"
+      },
+      "Tools": {
+        "chars": 56,
+        "est_tokens": 14,
+        "sha256": "8d72764fd7832c5a454ee8b85fca70c3757aea1305987d93da924318181d4e58"
+      },
+      "Evidence requirements": {
+        "chars": 68,
+        "est_tokens": 17,
+        "sha256": "66b75fdc1469a08f54ab4a93060d919fcf85bcae13d1ed2b513472d4fe6d247a"
+      },
+      "Output contract": {
+        "chars": 109,
+        "est_tokens": 27,
+        "sha256": "d8724ee2f0aa4e5907629d54f99ba39965003a54550674886e4113d7691eb907"
+      },
+      "Stop conditions": {
+        "chars": 64,
+        "est_tokens": 16,
+        "sha256": "854ee38ff4593ded68986348d72c8eaa25af70dbbace29f321bb02b5d923e2d8"
+      },
+      "Failure/recovery": {
+        "chars": 141,
+        "est_tokens": 35,
+        "sha256": "1e3a058ad4a0189419a3ff63128e9c3de972ef4f83580c3f19dc7e6064a3f714"
+      },
+      "objective": {
+        "chars": 2208,
+        "est_tokens": 552,
+        "sha256": "276505b3afb5ab31136ab7fa3fa0cd306fdd5ace01874904a06dfae2ece87cf8"
+      },
+      "acceptance": {
+        "chars": 628,
+        "est_tokens": 157,
+        "sha256": "d0453c324aa8b340bc511a56ab96817f19d3fc145b0d9b829ace4a2fda521ea2"
+      },
+      "base": {
+        "chars": 105,
+        "est_tokens": 26,
+        "sha256": "80f81d2b87ea3f5c7c7d30eb29d5a2bd563777eba2b7798eb4eae0a6bf5eae16"
+      },
+      "write_scope": {
+        "chars": 213,
+        "est_tokens": 53,
+        "sha256": "b7c311d9c948c0fe5e9d6659247cb7e303558b11d3cbe5c5276856df1a6f0f74"
+      },
+      "read_scope": {
+        "chars": 82,
+        "est_tokens": 20,
+        "sha256": "63518b1317bc5ed1cea202c872b6fb34f6f10b9ab60d1224f2d3caa8966cf373"
+      },
+      "constraints": {
+        "chars": 221,
+        "est_tokens": 55,
+        "sha256": "138d1a5f13ae65fa8f435f749da0997a762f025a34b46166835acd7e51dc9466"
+      },
+      "relevant_tests": {
+        "chars": 33,
+        "est_tokens": 8,
+        "sha256": "6748020a3148b37650bdf63e6912368d1207475cacc71095b5d045a8366b1776"
+      },
+      "symbols": {
+        "chars": 20,
+        "est_tokens": 5,
+        "sha256": "3d44487559d25204da9256ebe9490acbe905d30e6f267b2eba18e34aacd19263"
+      },
+      "gotchas": {
+        "chars": 20,
+        "est_tokens": 5,
+        "sha256": "93ed828d934a610b03a762025e581ecdebd706b67c9f92c3502061276c762c75"
+      },
+      "decisions": {
+        "chars": 161,
+        "est_tokens": 40,
+        "sha256": "de7ab6a73084e2e771e31610c7a8e59ba08d8d833dda3147d99becb424b58528"
+      },
+      "verify": {
+        "chars": 102,
+        "est_tokens": 25,
+        "sha256": "67b8c5735d9f1bb7d89849f69178de377441bca5491fea17c21a0ab934e75c8a"
+      },
+      "evidence": {
+        "chars": 198,
+        "est_tokens": 49,
+        "sha256": "cd19651ce9332fd37095da68dc656f47ea75af92bc18cb8a19a1f7b90d6a6ed3"
+      }
+    },
+    "hash": "c5049ccef8c6",
+    "version": "c5049ccef8c6",
+    "candidate_known": true,
+    "base": "ec2d4f4f21ef",
+    "sources": "pool.toml@4b59f10be1e5 gotchas@e3b0c44298fc memory@notes,bus specialist: execute+implement-spec over cap by 193 chars: acceptance kept whole routed=shadow",
+    "policy_version": "4b59f10be1e5",
+    "gotchas": "e3b0c44298fc",
+    "candidate_tokens": 2292,
+    "skill_tokens_presented_l2": 186,
+    "routed_mode": "shadow",
+    "routed_tokens": 1774,
+    "routed_reduction_ratio": 0.5897606382978723,
+    "routed_hidden": 2,
+    "routed_ambiguous": 22,
+    "routed_rules_version": "v1",
+    "evidence_ids": [
+      "4882088c73ca",
+      "9e9f9b734081",
+      "8debba7b8441",
+      "82a78e9f13bc",
+      "ed48cd3504c7",
+      "bbb5dd7e5a71",
+      "6cfe8c026bbf",
+      "3f6fb0aa74fc",
+      "36a0b4d94708",
+      "197d38bfff91",
+      "7064b8d11fbd",
+      "9ea39468a2ec",
+      "0e73daecbfce",
+      "108cc7ebe0c3",
+      "113054fcfb43",
+      "186bc5f65d5a",
+      "18f7cb21cd69",
+      "2892ba017696",
+      "3649ea41b0e1",
+      "39d3acc72c05",
+      "3dc0defa1fc0",
+      "448234bad0f5",
+      "47a9f4f3a98c",
+      "4c25f25d4ef2",
+      "4cdc5323eded",
+      "52494c303d12",
+      "5ea3e86c63f6",
+      "769d4eca87e0",
+      "7c28bf3582f0",
+      "876dfb9498c8",
+      "888bb5d40c79",
+      "a0c3ad4f4a37",
+      "b0395d701403",
+      "b441821b17ca",
+      "c1db2ed02707",
+      "c672979a9c2c",
+      "c6d67e9e80a8",
+      "c9f9c6e0d196",
+      "cd1b8c56aaa8",
+      "e41197a64e7e",
+      "e511fc623aeb",
+      "f2f37526592a"
+    ],
     "prefix_sha": "47d8a2fdfe08",
     "prefix_chars": 764,
-    "suffix_chars": 4105,
+    "suffix_chars": 5163,
     "dynamic_sections": [
+      "skills",
+      "Trigger",
+      "Objective",
+      "Procedure",
+      "Tools",
+      "Evidence requirements",
+      "Output contract",
+      "Stop conditions",
+      "Failure/recovery",
       "objective",
       "acceptance",
       "base",
@@ -123,6 +657,39 @@
       "verify",
       "evidence",
       "conditional instructions"
-    ]
-  }
+    ],
+    "instruction_tokens": 294,
+    "instruction_tokens_modular": 233,
+    "role": "execute",
+    "tool_tokens_disclosed": 5995,
+    "tool_tokens_minimal": 5995,
+    "tool_allowlist_source": "specialist",
+    "skills_exposed": [
+      "executor/implement-spec",
+      "planner/memory",
+      "planner/orchestrate",
+      "planner/resume",
+      "planner/write-spec",
+      "review/adversarial-review",
+      "review/challenge",
+      "scout/repo-map",
+      "scout/test-gap",
+      "scout/trace-callers",
+      "triage/classify",
+      "triage/compact-memory"
+    ],
+    "skill_tokens_l0": 219,
+    "skills_selected": [
+      "executor/implement-spec"
+    ],
+    "skill_tokens_selected_l0": 25,
+    "skill_tokens_selected_l2": 62,
+    "skill_routing_mode": "active"
+  },
+  "fallback": "claude",
+  "review_rule": "same-family-review: other account, different model",
+  "executor": "claude:opus",
+  "claimed_at": 1791243974.95311,
+  "account": "B",
+  "pid": 28067
 }

@@ -1,0 +1,55 @@
+{
+  "id": "T-0304",
+  "created_at": 1791244167.449806,
+  "parent": "T-0280",
+  "role": "spec_review",
+  "tier": "sonnet",
+  "complexity": 7,
+  "title": "spec review: Capture scope and frame minimisation (respec of T-0284 after spec review T-0286)",
+  "spec": "Respec of T-0284 (held at spec review T-0286); same why (roadmap P0-7; human: store only key moments). Corrections folded in.\n1. Define \"key moment\" explicitly: add `importance: \"routine\" | \"key\"` to VisionEventSchema and ScreenEventBase in src/lib/types.ts (optional on read, default \"routine\" for old rows) and ask the vision prompt to set it (\"key\" = a decision, a value change with a reason, a guardrail-relevant action; app/window switches and scrolling are routine). vision.test.ts covers parsing both values and the default.\n2. Off-record stays BEFORE any model call: split the store's saveFrame into `frameAllowed(session, t)` (off-record check, returns {ok} or {reason:'off_record'}) and `writeFrame(...)`; the route calls frameAllowed first (skipped:'off_record' response unchanged), then describeFrame, then writeFrame only when at least one event has importance \"key\". Tests: off-record frames never reach describeFrame; key frames stored; routine-only stored nothing. frame_ref contract: `frame_ref: null` when nothing stored (explicit null, typed in the controller and bus.publishVision); list the readers (capture controller, event store, Work Map screen-moment lookup) and make each handle null.\n3. Rollback switch: env `STORE_ALL_FRAMES=1` restores store-everything (route-level, tested).\n4. Browser capture: `displaySurface: \"window\"`, `selfBrowserSurface: \"exclude\"`, `surfaceSwitching: \"include\"`; CapturedFrame gets `surface`. TeachApp.tsx monitorRef/MONITOR_WARNING (line ~428) and src/lib/companion/stepAside.ts assume a monitor: for a window surface the halo rect mapping falls back to the existing warning path (no new mapping); add both files to scope and test the fallback.\n5. Companion: `useSystemPicker: true` in DISPLAY_MEDIA_OPTIONS so macOS shows its own window/screen picker; keep pickPrimarySource as the fallback when the system picker is unavailable; exclude the companion's own windows. Extract the source ordering into a pure function in permissionsGrant.mts tested in the existing companion/src/permissions-grant.test.ts (correct file name).\n6. Retention default 90 -> 30: existing agents with unset retention_days are migrated to an explicit 90 (new migration supabase/migrations/20261006010000_retention_default.sql + rollback, updating agent settings JSON where the key is absent) so nothing is shortened silently; new agents get 30. Doc note: the cron deletion is irreversible. Update docs/checks/agent-settings.md.\n7. docs/checks/capture-scope.md manual check as before. README.md, docs/DEPLOY.md, .env.example, CaptureApp.tsx untouched. No new dependencies. Captured screen content is untrusted.",
+  "inputs": [
+    "T-0300"
+  ],
+  "acceptance": [
+    "VisionEventSchema/ScreenEventBase carry importance routine|key with default routine; the vision prompt asks for it; vision.test.ts covers both and the default",
+    "Route order: frameAllowed (off-record) -> describeFrame -> writeFrame only when a key event exists; tests: off-record never reaches the model (skipped:'off_record' unchanged), key stored, routine-only answers frame_ref null and stores nothing; STORE_ALL_FRAMES=1 restores store-everything (test)",
+    "Every frame_ref reader handles null (tests named in the result); TeachApp and stepAside fall back to the monitor warning for window surfaces (tests)",
+    "Companion uses the system picker with pickPrimarySource fallback and excludes its own windows; ordering is a pure tested function in permissions-grant.test.ts",
+    "Retention migration sets 90 explicitly where absent, default becomes 30 for new agents (settings tests + migration lint); docs/checks/capture-scope.md and agent-settings.md updated",
+    ".claude/hooks/tests-green.sh wt/THIS-TASK exits 0 and `npm run test:companion` exits 0 (state both)"
+  ],
+  "scope": [
+    "src/lib/types.ts",
+    "src/lib/perception/**",
+    "src/app/api/vision/**",
+    "src/lib/capture/**",
+    "src/lib/store/**",
+    "src/lib/agents/settings.ts",
+    "src/lib/agents/settings.test.ts",
+    "src/lib/companion/stepAside.ts",
+    "src/lib/companion/stepAside.test.ts",
+    "src/components/teach/TeachApp.tsx",
+    "src/components/teach/TeachApp.test.tsx",
+    "src/lib/workmap/**",
+    "companion/src/main.mts",
+    "companion/src/permissionsGrant.mts",
+    "companion/src/permissions-grant.test.ts",
+    "supabase/migrations/20261006010000_retention_default.sql",
+    "supabase/rollbacks/20261006010000_retention_default.down.sql",
+    "supabase/*.test.ts",
+    "docs/checks/capture-scope.md",
+    "docs/checks/agent-settings.md"
+  ],
+  "depends_on": [],
+  "constraints": {
+    "read_only": true,
+    "budget_turns": 20,
+    "timeout_s": 900
+  },
+  "status": "queued",
+  "assigned_to": null,
+  "worktree": null,
+  "codex_thread": null,
+  "result": null,
+  "events": []
+}

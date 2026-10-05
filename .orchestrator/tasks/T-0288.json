@@ -913,6 +913,382 @@
         "skills_used": [],
         "gate_attempts": 1
       }
+    },
+    {
+      "ts": 1791243966.533997,
+      "pipeline": {
+        "first_ready_at": 1791243662.2192671,
+        "dispatched_at": 1791243662.222347,
+        "dispatched_at_lease": 1791244562.222347,
+        "dispatched_at_done": 1791243664.6274402,
+        "handoff": {
+          "baseline": "claude:opus",
+          "selected": "claude:opus",
+          "switched": false,
+          "gain": 0.0,
+          "reason": "allocation_active",
+          "ts": 1791243701.917999
+        },
+        "jev_route": {
+          "baseline": "opus",
+          "hypothetical": "claude:opus",
+          "key": "a6b4fb429920f42099035393b44496ccd0aa5821",
+          "adjustment": {
+            "claude:opus": 1.0
+          },
+          "mode": "active"
+        },
+        "skills_used": [],
+        "gate_attempts": 1,
+        "gated_at": 1791243966.533758,
+        "gated_at_lease": 1791244866.533758,
+        "first_green_at": 1791243966.530803,
+        "gate_reds": 0,
+        "reviews_expected": 0,
+        "review_reason": "none"
+      }
+    },
+    {
+      "ts": 1791243967.43331,
+      "pipeline": {
+        "first_ready_at": 1791243662.2192671,
+        "dispatched_at": 1791243662.222347,
+        "dispatched_at_lease": 1791244562.222347,
+        "dispatched_at_done": 1791243664.6274402,
+        "handoff": {
+          "baseline": "claude:opus",
+          "selected": "claude:opus",
+          "switched": false,
+          "gain": 0.0,
+          "reason": "allocation_active",
+          "ts": 1791243701.917999
+        },
+        "jev_route": {
+          "baseline": "opus",
+          "hypothetical": "claude:opus",
+          "key": "a6b4fb429920f42099035393b44496ccd0aa5821",
+          "adjustment": {
+            "claude:opus": 1.0
+          },
+          "mode": "active"
+        },
+        "skills_used": [],
+        "gate_attempts": 1,
+        "gated_at": 1791243966.533758,
+        "gated_at_lease": 1791244866.533758,
+        "first_green_at": 1791243966.530803,
+        "gate_reds": 0,
+        "reviews_expected": 0,
+        "review_reason": "none",
+        "stale_check": {
+          "base": "task/T-0288",
+          "goal_head": "1a877fda7eddc9412f3bfbff1dd25c6bb408ac60",
+          "moved_count": 22,
+          "stale_paths": [
+            ".orchestrator/memory/decisions.md",
+            ".orchestrator/plan-log.md",
+            ".orchestrator/plan.md",
+            ".orchestrator/roadmap.md",
+            ".orchestrator/tasks/T-0280.json",
+            ".orchestrator/tasks/T-0281.json",
+            ".orchestrator/tasks/T-0282.json",
+            ".orchestrator/tasks/T-0283.json",
+            ".orchestrator/tasks/T-0284.json",
+            ".orchestrator/tasks/T-0285.json",
+            ".orchestrator/tasks/T-0286.json",
+            ".orchestrator/tasks/T-0287.json",
+            ".orchestrator/tasks/T-0288.json",
+            ".orchestrator/tasks/T-0289.json",
+            ".orchestrator/tasks/T-0290.json",
+            ".orchestrator/tasks/T-0291.json",
+            ".orchestrator/tasks/T-0292.json",
+            ".orchestrator/tasks/T-0293.json",
+            ".orchestrator/tasks/T-0294.json",
+            ".orchestrator/tasks/T-0295.json",
+            ".orchestrator/tasks/T-0296.json",
+            ".orchestrator/tasks/T-0297.json"
+          ],
+          "signals": {
+            "scoped_files_changed": [],
+            "changed_files_moved": [],
+            "tests_changed": [],
+            "interface_changed": [],
+            "graph_relationships": [],
+            "dependency_changed": [],
+            "overlapping_merge": []
+          },
+          "risk": "none",
+          "risk_reasons": [],
+          "graph": "stale",
+          "severity": "low",
+          "severity_reasons": [
+            "outside_scopes"
+          ],
+          "checked_at": 1791243967.427593,
+          "head": "a1833823b2965987beb51287ae77754e4d6dc682"
+        }
+      }
+    },
+    {
+      "ts": 1791244005.1752052,
+      "status": "done",
+      "merged_into": "goal/T-0280",
+      "sha": "162ecf0772d1d574643a2525ee94b48e195da812",
+      "merged_at": 1791244005.1728482,
+      "changed_files": [
+        "docs/legal/README.md",
+        "docs/legal/beta-agreement-template.md",
+        "docs/legal/dpa-template.md",
+        "docs/legal/imprint.md",
+        "docs/legal/privacy-policy.md",
+        "docs/legal/subprocessors.md"
+      ],
+      "pipeline": {
+        "first_ready_at": 1791243662.2192671,
+        "dispatched_at": 1791243662.222347,
+        "dispatched_at_lease": 1791244562.222347,
+        "dispatched_at_done": 1791243664.6274402,
+        "handoff": {
+          "baseline": "claude:opus",
+          "selected": "claude:opus",
+          "switched": false,
+          "gain": 0.0,
+          "reason": "allocation_active",
+          "ts": 1791243701.917999
+        },
+        "jev_route": {
+          "baseline": "opus",
+          "hypothetical": "claude:opus",
+          "key": "a6b4fb429920f42099035393b44496ccd0aa5821",
+          "adjustment": {
+            "claude:opus": 1.0
+          },
+          "mode": "active"
+        },
+        "skills_used": [],
+        "gate_attempts": 1,
+        "gated_at": 1791243966.533758,
+        "gated_at_lease": 1791244866.533758,
+        "first_green_at": 1791243966.530803,
+        "gate_reds": 0,
+        "reviews_expected": 0,
+        "review_reason": "none",
+        "stale_check": {
+          "base": "task/T-0288",
+          "goal_head": "1a877fda7eddc9412f3bfbff1dd25c6bb408ac60",
+          "moved_count": 22,
+          "stale_paths": [
+            ".orchestrator/memory/decisions.md",
+            ".orchestrator/plan-log.md",
+            ".orchestrator/plan.md",
+            ".orchestrator/roadmap.md",
+            ".orchestrator/tasks/T-0280.json",
+            ".orchestrator/tasks/T-0281.json",
+            ".orchestrator/tasks/T-0282.json",
+            ".orchestrator/tasks/T-0283.json",
+            ".orchestrator/tasks/T-0284.json",
+            ".orchestrator/tasks/T-0285.json",
+            ".orchestrator/tasks/T-0286.json",
+            ".orchestrator/tasks/T-0287.json",
+            ".orchestrator/tasks/T-0288.json",
+            ".orchestrator/tasks/T-0289.json",
+            ".orchestrator/tasks/T-0290.json",
+            ".orchestrator/tasks/T-0291.json",
+            ".orchestrator/tasks/T-0292.json",
+            ".orchestrator/tasks/T-0293.json",
+            ".orchestrator/tasks/T-0294.json",
+            ".orchestrator/tasks/T-0295.json",
+            ".orchestrator/tasks/T-0296.json",
+            ".orchestrator/tasks/T-0297.json"
+          ],
+          "signals": {
+            "scoped_files_changed": [],
+            "changed_files_moved": [],
+            "tests_changed": [],
+            "interface_changed": [],
+            "graph_relationships": [],
+            "dependency_changed": [],
+            "overlapping_merge": []
+          },
+          "risk": "none",
+          "risk_reasons": [],
+          "graph": "stale",
+          "severity": "low",
+          "severity_reasons": [
+            "outside_scopes"
+          ],
+          "checked_at": 1791243967.427593,
+          "head": "a1833823b2965987beb51287ae77754e4d6dc682"
+        },
+        "merged_at": 1791244005.1728482
+      }
+    },
+    {
+      "ts": 1791244005.767456,
+      "pipeline": {
+        "first_ready_at": 1791243662.2192671,
+        "dispatched_at": 1791243662.222347,
+        "dispatched_at_lease": 1791244562.222347,
+        "dispatched_at_done": 1791243664.6274402,
+        "handoff": {
+          "baseline": "claude:opus",
+          "selected": "claude:opus",
+          "switched": false,
+          "gain": 0.0,
+          "reason": "allocation_active",
+          "ts": 1791243701.917999
+        },
+        "jev_route": {
+          "baseline": "opus",
+          "hypothetical": "claude:opus",
+          "key": "a6b4fb429920f42099035393b44496ccd0aa5821",
+          "adjustment": {
+            "claude:opus": 1.0
+          },
+          "mode": "active"
+        },
+        "skills_used": [],
+        "gate_attempts": 1,
+        "gated_at": 1791243966.533758,
+        "gated_at_lease": 1791244866.533758,
+        "first_green_at": 1791243966.530803,
+        "gate_reds": 0,
+        "reviews_expected": 0,
+        "review_reason": "none",
+        "stale_check": {
+          "base": "task/T-0288",
+          "goal_head": "1a877fda7eddc9412f3bfbff1dd25c6bb408ac60",
+          "moved_count": 22,
+          "stale_paths": [
+            ".orchestrator/memory/decisions.md",
+            ".orchestrator/plan-log.md",
+            ".orchestrator/plan.md",
+            ".orchestrator/roadmap.md",
+            ".orchestrator/tasks/T-0280.json",
+            ".orchestrator/tasks/T-0281.json",
+            ".orchestrator/tasks/T-0282.json",
+            ".orchestrator/tasks/T-0283.json",
+            ".orchestrator/tasks/T-0284.json",
+            ".orchestrator/tasks/T-0285.json",
+            ".orchestrator/tasks/T-0286.json",
+            ".orchestrator/tasks/T-0287.json",
+            ".orchestrator/tasks/T-0288.json",
+            ".orchestrator/tasks/T-0289.json",
+            ".orchestrator/tasks/T-0290.json",
+            ".orchestrator/tasks/T-0291.json",
+            ".orchestrator/tasks/T-0292.json",
+            ".orchestrator/tasks/T-0293.json",
+            ".orchestrator/tasks/T-0294.json",
+            ".orchestrator/tasks/T-0295.json",
+            ".orchestrator/tasks/T-0296.json",
+            ".orchestrator/tasks/T-0297.json"
+          ],
+          "signals": {
+            "scoped_files_changed": [],
+            "changed_files_moved": [],
+            "tests_changed": [],
+            "interface_changed": [],
+            "graph_relationships": [],
+            "dependency_changed": [],
+            "overlapping_merge": []
+          },
+          "risk": "none",
+          "risk_reasons": [],
+          "graph": "stale",
+          "severity": "low",
+          "severity_reasons": [
+            "outside_scopes"
+          ],
+          "checked_at": 1791243967.427593,
+          "head": "a1833823b2965987beb51287ae77754e4d6dc682"
+        },
+        "merged_at": 1791244005.1728482,
+        "accepted_at": 1791244005.766814
+      }
+    },
+    {
+      "ts": 1791244018.492903,
+      "pipeline": {
+        "first_ready_at": 1791243662.2192671,
+        "dispatched_at": 1791243662.222347,
+        "dispatched_at_lease": 1791244562.222347,
+        "dispatched_at_done": 1791243664.6274402,
+        "handoff": {
+          "baseline": "claude:opus",
+          "selected": "claude:opus",
+          "switched": false,
+          "gain": 0.0,
+          "reason": "allocation_active",
+          "ts": 1791243701.917999
+        },
+        "jev_route": {
+          "baseline": "opus",
+          "hypothetical": "claude:opus",
+          "key": "a6b4fb429920f42099035393b44496ccd0aa5821",
+          "adjustment": {
+            "claude:opus": 1.0
+          },
+          "mode": "active"
+        },
+        "skills_used": [],
+        "gate_attempts": 1,
+        "gated_at": 1791243966.533758,
+        "gated_at_lease": 1791244866.533758,
+        "first_green_at": 1791243966.530803,
+        "gate_reds": 0,
+        "reviews_expected": 0,
+        "review_reason": "none",
+        "stale_check": {
+          "base": "task/T-0288",
+          "goal_head": "1a877fda7eddc9412f3bfbff1dd25c6bb408ac60",
+          "moved_count": 22,
+          "stale_paths": [
+            ".orchestrator/memory/decisions.md",
+            ".orchestrator/plan-log.md",
+            ".orchestrator/plan.md",
+            ".orchestrator/roadmap.md",
+            ".orchestrator/tasks/T-0280.json",
+            ".orchestrator/tasks/T-0281.json",
+            ".orchestrator/tasks/T-0282.json",
+            ".orchestrator/tasks/T-0283.json",
+            ".orchestrator/tasks/T-0284.json",
+            ".orchestrator/tasks/T-0285.json",
+            ".orchestrator/tasks/T-0286.json",
+            ".orchestrator/tasks/T-0287.json",
+            ".orchestrator/tasks/T-0288.json",
+            ".orchestrator/tasks/T-0289.json",
+            ".orchestrator/tasks/T-0290.json",
+            ".orchestrator/tasks/T-0291.json",
+            ".orchestrator/tasks/T-0292.json",
+            ".orchestrator/tasks/T-0293.json",
+            ".orchestrator/tasks/T-0294.json",
+            ".orchestrator/tasks/T-0295.json",
+            ".orchestrator/tasks/T-0296.json",
+            ".orchestrator/tasks/T-0297.json"
+          ],
+          "signals": {
+            "scoped_files_changed": [],
+            "changed_files_moved": [],
+            "tests_changed": [],
+            "interface_changed": [],
+            "graph_relationships": [],
+            "dependency_changed": [],
+            "overlapping_merge": []
+          },
+          "risk": "none",
+          "risk_reasons": [],
+          "graph": "stale",
+          "severity": "low",
+          "severity_reasons": [
+            "outside_scopes"
+          ],
+          "checked_at": 1791243967.427593,
+          "head": "a1833823b2965987beb51287ae77754e4d6dc682"
+        },
+        "merged_at": 1791244005.1728482,
+        "accepted_at": 1791244005.766814,
+        "gated_at_done": 1791244018.4925902
+      }
     }
   ],
   "pipeline": {
@@ -938,7 +1314,63 @@
       "mode": "active"
     },
     "skills_used": [],
-    "gate_attempts": 1
+    "gate_attempts": 1,
+    "gated_at": 1791243966.533758,
+    "gated_at_lease": 1791244866.533758,
+    "first_green_at": 1791243966.530803,
+    "gate_reds": 0,
+    "reviews_expected": 0,
+    "review_reason": "none",
+    "stale_check": {
+      "base": "task/T-0288",
+      "goal_head": "1a877fda7eddc9412f3bfbff1dd25c6bb408ac60",
+      "moved_count": 22,
+      "stale_paths": [
+        ".orchestrator/memory/decisions.md",
+        ".orchestrator/plan-log.md",
+        ".orchestrator/plan.md",
+        ".orchestrator/roadmap.md",
+        ".orchestrator/tasks/T-0280.json",
+        ".orchestrator/tasks/T-0281.json",
+        ".orchestrator/tasks/T-0282.json",
+        ".orchestrator/tasks/T-0283.json",
+        ".orchestrator/tasks/T-0284.json",
+        ".orchestrator/tasks/T-0285.json",
+        ".orchestrator/tasks/T-0286.json",
+        ".orchestrator/tasks/T-0287.json",
+        ".orchestrator/tasks/T-0288.json",
+        ".orchestrator/tasks/T-0289.json",
+        ".orchestrator/tasks/T-0290.json",
+        ".orchestrator/tasks/T-0291.json",
+        ".orchestrator/tasks/T-0292.json",
+        ".orchestrator/tasks/T-0293.json",
+        ".orchestrator/tasks/T-0294.json",
+        ".orchestrator/tasks/T-0295.json",
+        ".orchestrator/tasks/T-0296.json",
+        ".orchestrator/tasks/T-0297.json"
+      ],
+      "signals": {
+        "scoped_files_changed": [],
+        "changed_files_moved": [],
+        "tests_changed": [],
+        "interface_changed": [],
+        "graph_relationships": [],
+        "dependency_changed": [],
+        "overlapping_merge": []
+      },
+      "risk": "none",
+      "risk_reasons": [],
+      "graph": "stale",
+      "severity": "low",
+      "severity_reasons": [
+        "outside_scopes"
+      ],
+      "checked_at": 1791243967.427593,
+      "head": "a1833823b2965987beb51287ae77754e4d6dc682"
+    },
+    "merged_at": 1791244005.1728482,
+    "accepted_at": 1791244005.766814,
+    "gated_at_done": 1791244018.4925902
   },
   "packet_meta": {
     "chars": 5046,
@@ -1158,5 +1590,16 @@
   "executor": "claude:opus",
   "claimed_at": 1791243704.681546,
   "account": "B",
-  "pid": 13999
+  "pid": 13999,
+  "merged_into": "goal/T-0280",
+  "sha": "162ecf0772d1d574643a2525ee94b48e195da812",
+  "merged_at": 1791244005.1728482,
+  "changed_files": [
+    "docs/legal/README.md",
+    "docs/legal/beta-agreement-template.md",
+    "docs/legal/dpa-template.md",
+    "docs/legal/imprint.md",
+    "docs/legal/privacy-policy.md",
+    "docs/legal/subprocessors.md"
+  ]
 }
