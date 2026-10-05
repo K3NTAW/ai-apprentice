@@ -1,0 +1,733 @@
+{
+  "id": "T-0290",
+  "created_at": 1791243667.051426,
+  "parent": "T-0280",
+  "role": "spec_review",
+  "tier": "sonnet",
+  "complexity": 6,
+  "title": "spec review: Observability: Sentry error tracking for web and API behind SENTRY_DSN, structured JSON server logs",
+  "spec": "Why: no error tracking, log drain or alerting; only console.error (roadmap 3.6). P0-5 part 1 (web/API). Electron crash reporting lands with the desktop release task; the cost meter is a separate task.\nWhat:\n1. Add `@sentry/nextjs` (named new dependency). Wire `instrumentation.ts` (server + edge via `register` and `onRequestError`), `instrumentation-client.ts`, and `withSentryConfig` in next.config.ts. Everything is a no-op when `SENTRY_DSN` / `NEXT_PUBLIC_SENTRY_DSN` is unset: no init, no source-map upload, no network. Region comes from the DSN host (the human creates an EU org). `sendDefaultPii: false`; a `beforeSend` that strips cookies, request bodies, the forwarded-user header and anything matching the redact recognizers from `src/lib/redact` (import, do not copy). Set `environment` from VERCEL_ENV and `release` from VERCEL_GIT_COMMIT_SHA.\n2. `src/lib/log/index.ts`: `log.info|warn|error(event: string, fields?: Record<string, unknown>)` printing one JSON line {ts, level, event, ...fields, requestId?} on the server; `withApi` in src/app/api/session/_http.ts attaches a request id (header x-request-id or random) and logs one line per request with route, status, ms, workspace id hash, never emails or tokens. Convert the console.warn/console.error calls inside src/app/api/** to log.* (mechanical). Captured exceptions in withApi go to Sentry when enabled.\n3. `src/app/api/health/route.ts`: GET answers {ok: true, sentry: boolean, mode} for uptime probes, no auth, no secrets.\n4. Tests: log line shape and redaction; beforeSend strips cookies/body/PII; instrumentation does nothing without a DSN; health route. docs/OBSERVABILITY.md: env names, how to force a test error on web and API (a `?__sentry_test=1` is NOT acceptable in production; document throwing from a dev-only route or using the Sentry CLI), what the human sets up.\nDo not touch README.md, docs/DEPLOY.md, .env.example (docs-sync task). No other new dependencies.",
+  "inputs": [
+    "T-0287"
+  ],
+  "acceptance": [
+    "With SENTRY_DSN unset, instrumentation registers nothing and tests prove no init call and no network (mock @sentry/nextjs)",
+    "beforeSend drops cookies, request body, authorization and forwarded-user headers and runs redact on message strings (tests)",
+    "src/lib/log emits one JSON line per call with ts, level, event, fields; withApi logs route, status, ms and a request id for every API response (tests); no console.error/console.warn remain under src/app/api/** (grep in a guard test)",
+    "GET /api/health answers 200 {ok:true, sentry:<bool>, mode} without auth (test)",
+    "docs/OBSERVABILITY.md written; README.md, docs/DEPLOY.md, .env.example untouched",
+    ".claude/hooks/tests-green.sh wt/THIS-TASK exits 0"
+  ],
+  "scope": [
+    "instrumentation.ts",
+    "instrumentation-client.ts",
+    "sentry.*.config.ts",
+    "next.config.ts",
+    "package.json",
+    "package-lock.json",
+    "src/lib/log/**",
+    "src/lib/observability/**",
+    "src/app/api/**",
+    "docs/OBSERVABILITY.md",
+    "src/proxy.ts"
+  ],
+  "depends_on": [],
+  "constraints": {
+    "read_only": true,
+    "budget_turns": 20,
+    "timeout_s": 900
+  },
+  "status": "done",
+  "assigned_to": "claude:A",
+  "worktree": "/Users/k3ntaw/code/ai-apprentice/wt/T-0290",
+  "codex_thread": null,
+  "result": {
+    "summary": "",
+    "verdict": "request_changes",
+    "risks": [
+      {
+        "path": "src/app/api/session/_http.ts",
+        "line": 88,
+        "issue": "Acceptance says withApi logs a line for every API response, but withApi covers only part of the routes. cron/retention, redact, vision, auth/onboarding and the new health route do not appear to call it (the grep showed withApi in processes, agents, workmaps and similar). Two more gaps: the requireContext early return (401/403/503) is a separate branch, so it needs its own log call. handle() also turns store errors into 500/503 responses without throwing, so those never reach any 'captured exception' path.",
+        "severity": "med"
+      },
+      {
+        "path": "src/app/api/session/_http.ts",
+        "line": 93,
+        "issue": "Double reporting. handle() rethrows unknown errors, and Next's onRequestError hook already reports thrown route errors. Calling Sentry.captureException in withApi as well gives two events per failure. The handled 500s (store_context_required) are never thrown, so they would be captured only if you add an explicit call. The spec does not say which path owns capture.",
+        "severity": "med"
+      },
+      {
+        "path": "src/app/api/health/route.ts",
+        "line": 0,
+        "issue": "src/app/api/runtime.test.ts requires every route.ts to export `runtime = \"nodejs\"` on its own line. routes.auth.test.ts and routes.scope.test.ts probably enumerate routes and expect 401 or scoping, so an unauthenticated route may fail them. The spec does not mention these suites, and they sit outside the new-tests list.",
+        "severity": "med"
+      },
+      {
+        "path": "next.config.ts",
+        "line": 3,
+        "issue": "Wrapping with withSentryConfig is not a no-op by default. It injects webpack/turbopack plugins, can add a tunnel route (which would run through src/proxy.ts auth) and tries source-map upload. 'No upload when DSN unset' is the wrong gate, because upload depends on SENTRY_AUTH_TOKEN, org and project. The spec should say to apply the wrapper only when the DSN is set, to set `telemetry:false`, to leave `tunnelRoute` off, and to upload only when the auth token exists. It also needs a build-time test, since next.config.ts has no existing test.",
+        "severity": "med"
+      },
+      {
+        "path": "instrumentation.ts",
+        "line": 0,
+        "issue": "The spec asks for an edge init, but every route is nodejs, proxy.ts runs on Node in Next 16, and the Vercel guidance deprecates edge. A sentry.edge.config.ts is dead code that adds bundle risk. Specify nodejs only, with an `if (process.env.NEXT_RUNTIME === 'nodejs')` guard.",
+        "severity": "low"
+      },
+      {
+        "path": "src/lib/observability/beforeSend",
+        "line": 0,
+        "issue": "The redaction scope is under-specified. Message strings only is not enough: exception values, breadcrumbs (fetch URLs, console), request.url and query strings, `extra`/`contexts`, and the user object also carry PII. Redact has sync (redactText) and async variants, and beforeSend must stay sync or handle the promise. The client bundle would also import the full redact lib, so the client size cost should be checked. A throw inside beforeSend must drop the event (fail closed), not send it raw. The spec does not say this.",
+        "severity": "high"
+      }
+    ],
+    "suggested_spec_changes": [
+      "List the routes outside withApi (cron/retention, redact, vision, auth/onboarding, health) and say how each gets a request log line: wrap them in a shared helper, or narrow the acceptance to withApi routes. Log the requireContext early-return branch as well.",
+      "State a single capture owner. Either rely on onRequestError for thrown errors and add an explicit captureException only for handled 5xx responses from handle(), or capture only in withApi and de-dupe against onRequestError. Add a test that one failure yields one event.",
+      "Make the health route spec say it exports `runtime = \"nodejs\"` and name the existing suites to update (runtime.test.ts, routes.auth.test.ts, routes.scope.test.ts) so a public route is allowed. Clarify that /api/health is not behind src/proxy.ts auth (the proxy skips /api), and say whether the response carries Cache-Control: no-store.",
+      "Gate withSentryConfig on the DSN. Set telemetry:false and no tunnelRoute, and upload source maps only when SENTRY_AUTH_TOKEN, org and project are all set. Add a test that next.config exports the unwrapped config when the DSN is unset.",
+      "Drop the edge runtime from scope (nodejs only) and delete the edge config from the plan.",
+      "Define beforeSend fully. It should strip request.cookies, request.data and headers (authorization, cookie, forwarded-user header via FORWARDED_USER_HEADER, set-cookie), request.url query string, user, breadcrumbs data, and extra/contexts. It should run redactText over message, exception values, and breadcrumb messages, and it should return null on any internal error. Add a test for each stripped field and one for the throw case.",
+      "Specify that log.* passes string field values through redact (or document that callers must not pass PII), is safe against circular and Error values, and cannot be overridden by field keys. Cap and sanitise x-request-id (for example /^[A-Za-z0-9_-]{1,64}$/ else random). Define the workspace hash as a salted or truncated sha256, with a fixed token for local mode.",
+      "Add a rollback section: the DSN-unset kill switch, the redeploy needed for NEXT_PUBLIC_ changes, and a revert of package.json and package-lock.json. Confirm vercel.json has no CSP, or add the Sentry ingest host to the docs as a human step.",
+      "Replace the `wt/THIS-TASK` placeholder with the concrete task id. Add a test that importing instrumentation.ts and instrumentation-client.ts with no DSN causes no @sentry/nextjs init, no fetch, and no module side effects."
+    ],
+    "truncated": {
+      "reason": "over MAX_RESULT_CHARS",
+      "original_chars": 7608,
+      "trimmed": {
+        "risks": 4
+      }
+    },
+    "confidence": 0.0,
+    "provenance": [
+      "repo"
+    ]
+  },
+  "events": [
+    {
+      "ts": 1791243672.973124,
+      "packet_meta": {
+        "prefix_sha": "37a97024d931",
+        "prefix_chars": 686,
+        "suffix_chars": 3666,
+        "dynamic_sections": [
+          "spec",
+          "acceptance",
+          "scope",
+          "depends_on",
+          "existing tests",
+          "complexity",
+          "tier"
+        ]
+      }
+    },
+    {
+      "ts": 1791243673.0133839,
+      "packet_meta": {
+        "chars": 3665,
+        "est_tokens": 916,
+        "presented_tokens": 916,
+        "sections": {
+          "_preamble": {
+            "chars": 69,
+            "est_tokens": 17,
+            "sha256": "42d42e95147c75fb29bd8e9dbbd18335873f12dbfc4457ffc7eed48829a6ee91"
+          },
+          "spec": {
+            "chars": 1955,
+            "est_tokens": 488,
+            "sha256": "7304c465776e3e649bc45ed8f6bc44e0416aaeb139eec2233817334e4af9a0be"
+          },
+          "acceptance": {
+            "chars": 716,
+            "est_tokens": 179,
+            "sha256": "fff26a452b91efb8c43785b7ecf74f314e83b619bd416eac4429b3a10192b6f1"
+          },
+          "scope": {
+            "chars": 231,
+            "est_tokens": 57,
+            "sha256": "5ead4eeea239174c23a3e0c45ed1f7eb925f8ecb456157ee85251f3b2f32a7d9"
+          },
+          "depends_on": {
+            "chars": 23,
+            "est_tokens": 5,
+            "sha256": "a1f80c68ea5dfed4c164f0a1b57674c850b8e75df45a22fc0e938ae8cbfc28ab"
+          },
+          "existing tests": {
+            "chars": 643,
+            "est_tokens": 160,
+            "sha256": "4f2d38fd83ec4b1edf7836ad59228bd95f779bab3ae574fbc01e036505d9e8ce"
+          },
+          "complexity": {
+            "chars": 16,
+            "est_tokens": 4,
+            "sha256": "980ef79c46d84e83eafaa1b95de4fe0093cfbac7cc9d22d9e5456df74383523c"
+          },
+          "tier": {
+            "chars": 12,
+            "est_tokens": 3,
+            "sha256": "f3170b9573b83cb0aed2288100dd1360a1fff6c7bb13cd6b6615eefa9fe0d302"
+          }
+        },
+        "hash": "ea16c828787e",
+        "version": "ea16c828787e",
+        "candidate_known": false,
+        "base": "bc60ad3d015b",
+        "sources": "task@T-0287 tree@HEAD",
+        "prefix_sha": "37a97024d931",
+        "prefix_chars": 686,
+        "suffix_chars": 3666,
+        "dynamic_sections": [
+          "spec",
+          "acceptance",
+          "scope",
+          "depends_on",
+          "existing tests",
+          "complexity",
+          "tier"
+        ],
+        "instruction_tokens": 172,
+        "instruction_tokens_modular": 172,
+        "role": "spec_review",
+        "tool_tokens_disclosed": 1722,
+        "tool_tokens_minimal": 1722,
+        "tool_allowlist_source": "minimal",
+        "skills_exposed": [
+          "executor/implement-spec",
+          "planner/memory",
+          "planner/orchestrate",
+          "planner/resume",
+          "planner/write-spec",
+          "review/adversarial-review",
+          "review/challenge",
+          "scout/repo-map",
+          "scout/test-gap",
+          "scout/trace-callers",
+          "triage/classify",
+          "triage/compact-memory"
+        ],
+        "skill_tokens_l0": 219,
+        "skills_selected": [
+          "review/adversarial-review"
+        ],
+        "skill_tokens_selected_l0": 16,
+        "skill_tokens_selected_l2": 67,
+        "skill_tokens_presented_l2": 0,
+        "skill_routing_mode": "shadow"
+      }
+    },
+    {
+      "ts": 1791243674.1587,
+      "status": "running",
+      "assigned_to": "claude:A",
+      "worktree": "/Users/k3ntaw/code/ai-apprentice/wt/T-0290",
+      "claimed_at": 1791243674.157797
+    },
+    {
+      "ts": 1791243674.1688561,
+      "account": "A"
+    },
+    {
+      "ts": 1791243680.3687522,
+      "pid": 13557,
+      "account": "A"
+    },
+    {
+      "ts": 1791243723.5972521,
+      "packet_meta": {
+        "chars": 3665,
+        "est_tokens": 916,
+        "presented_tokens": 916,
+        "sections": {
+          "_preamble": {
+            "chars": 69,
+            "est_tokens": 17,
+            "sha256": "42d42e95147c75fb29bd8e9dbbd18335873f12dbfc4457ffc7eed48829a6ee91"
+          },
+          "spec": {
+            "chars": 1955,
+            "est_tokens": 488,
+            "sha256": "7304c465776e3e649bc45ed8f6bc44e0416aaeb139eec2233817334e4af9a0be"
+          },
+          "acceptance": {
+            "chars": 716,
+            "est_tokens": 179,
+            "sha256": "fff26a452b91efb8c43785b7ecf74f314e83b619bd416eac4429b3a10192b6f1"
+          },
+          "scope": {
+            "chars": 231,
+            "est_tokens": 57,
+            "sha256": "5ead4eeea239174c23a3e0c45ed1f7eb925f8ecb456157ee85251f3b2f32a7d9"
+          },
+          "depends_on": {
+            "chars": 23,
+            "est_tokens": 5,
+            "sha256": "a1f80c68ea5dfed4c164f0a1b57674c850b8e75df45a22fc0e938ae8cbfc28ab"
+          },
+          "existing tests": {
+            "chars": 643,
+            "est_tokens": 160,
+            "sha256": "4f2d38fd83ec4b1edf7836ad59228bd95f779bab3ae574fbc01e036505d9e8ce"
+          },
+          "complexity": {
+            "chars": 16,
+            "est_tokens": 4,
+            "sha256": "980ef79c46d84e83eafaa1b95de4fe0093cfbac7cc9d22d9e5456df74383523c"
+          },
+          "tier": {
+            "chars": 12,
+            "est_tokens": 3,
+            "sha256": "f3170b9573b83cb0aed2288100dd1360a1fff6c7bb13cd6b6615eefa9fe0d302"
+          }
+        },
+        "hash": "ea16c828787e",
+        "version": "ea16c828787e",
+        "candidate_known": false,
+        "base": "bc60ad3d015b",
+        "sources": "task@T-0287 tree@HEAD",
+        "prefix_sha": "37a97024d931",
+        "prefix_chars": 686,
+        "suffix_chars": 3666,
+        "dynamic_sections": [
+          "spec",
+          "acceptance",
+          "scope",
+          "depends_on",
+          "existing tests",
+          "complexity",
+          "tier"
+        ],
+        "instruction_tokens": 172,
+        "instruction_tokens_modular": 172,
+        "role": "spec_review",
+        "tool_tokens_disclosed": 1722,
+        "tool_tokens_minimal": 1722,
+        "tool_allowlist_source": "minimal",
+        "skills_exposed": [
+          "executor/implement-spec",
+          "planner/memory",
+          "planner/orchestrate",
+          "planner/resume",
+          "planner/write-spec",
+          "review/adversarial-review",
+          "review/challenge",
+          "scout/repo-map",
+          "scout/test-gap",
+          "scout/trace-callers",
+          "triage/classify",
+          "triage/compact-memory"
+        ],
+        "skill_tokens_l0": 219,
+        "skills_selected": [
+          "review/adversarial-review"
+        ],
+        "skill_tokens_selected_l0": 16,
+        "skill_tokens_selected_l2": 67,
+        "skill_tokens_presented_l2": 0,
+        "skill_routing_mode": "shadow",
+        "session_id": "6478595f-b19b-4974-a8bb-7571e46c2a38"
+      }
+    },
+    {
+      "ts": 1791243723.618932,
+      "packet_meta": {
+        "chars": 3665,
+        "est_tokens": 916,
+        "presented_tokens": 916,
+        "sections": {
+          "_preamble": {
+            "chars": 69,
+            "est_tokens": 17,
+            "sha256": "42d42e95147c75fb29bd8e9dbbd18335873f12dbfc4457ffc7eed48829a6ee91"
+          },
+          "spec": {
+            "chars": 1955,
+            "est_tokens": 488,
+            "sha256": "7304c465776e3e649bc45ed8f6bc44e0416aaeb139eec2233817334e4af9a0be"
+          },
+          "acceptance": {
+            "chars": 716,
+            "est_tokens": 179,
+            "sha256": "fff26a452b91efb8c43785b7ecf74f314e83b619bd416eac4429b3a10192b6f1"
+          },
+          "scope": {
+            "chars": 231,
+            "est_tokens": 57,
+            "sha256": "5ead4eeea239174c23a3e0c45ed1f7eb925f8ecb456157ee85251f3b2f32a7d9"
+          },
+          "depends_on": {
+            "chars": 23,
+            "est_tokens": 5,
+            "sha256": "a1f80c68ea5dfed4c164f0a1b57674c850b8e75df45a22fc0e938ae8cbfc28ab"
+          },
+          "existing tests": {
+            "chars": 643,
+            "est_tokens": 160,
+            "sha256": "4f2d38fd83ec4b1edf7836ad59228bd95f779bab3ae574fbc01e036505d9e8ce"
+          },
+          "complexity": {
+            "chars": 16,
+            "est_tokens": 4,
+            "sha256": "980ef79c46d84e83eafaa1b95de4fe0093cfbac7cc9d22d9e5456df74383523c"
+          },
+          "tier": {
+            "chars": 12,
+            "est_tokens": 3,
+            "sha256": "f3170b9573b83cb0aed2288100dd1360a1fff6c7bb13cd6b6615eefa9fe0d302"
+          }
+        },
+        "hash": "ea16c828787e",
+        "version": "ea16c828787e",
+        "candidate_known": false,
+        "base": "bc60ad3d015b",
+        "sources": "task@T-0287 tree@HEAD",
+        "prefix_sha": "37a97024d931",
+        "prefix_chars": 686,
+        "suffix_chars": 3666,
+        "dynamic_sections": [
+          "spec",
+          "acceptance",
+          "scope",
+          "depends_on",
+          "existing tests",
+          "complexity",
+          "tier"
+        ],
+        "instruction_tokens": 172,
+        "instruction_tokens_modular": 172,
+        "role": "spec_review",
+        "tool_tokens_disclosed": 1722,
+        "tool_tokens_minimal": 1722,
+        "tool_allowlist_source": "minimal",
+        "skills_exposed": [
+          "executor/implement-spec",
+          "planner/memory",
+          "planner/orchestrate",
+          "planner/resume",
+          "planner/write-spec",
+          "review/adversarial-review",
+          "review/challenge",
+          "scout/repo-map",
+          "scout/test-gap",
+          "scout/trace-callers",
+          "triage/classify",
+          "triage/compact-memory"
+        ],
+        "skill_tokens_l0": 219,
+        "skills_selected": [
+          "review/adversarial-review"
+        ],
+        "skill_tokens_selected_l0": 16,
+        "skill_tokens_selected_l2": 67,
+        "skill_tokens_presented_l2": 0,
+        "skill_routing_mode": "shadow",
+        "session_id": "6478595f-b19b-4974-a8bb-7571e46c2a38",
+        "skills_used": [],
+        "skill_tokens_l2": 0
+      },
+      "pipeline": {
+        "skills_used": []
+      }
+    },
+    {
+      "ts": 1791243723.9085991,
+      "status": "done",
+      "result": {
+        "summary": "",
+        "verdict": "request_changes",
+        "risks": [
+          {
+            "path": "src/app/api/session/_http.ts",
+            "line": 88,
+            "issue": "Acceptance says withApi logs a line for every API response, but withApi covers only part of the routes. cron/retention, redact, vision, auth/onboarding and the new health route do not appear to call it (the grep showed withApi in processes, agents, workmaps and similar). Two more gaps: the requireContext early return (401/403/503) is a separate branch, so it needs its own log call. handle() also turns store errors into 500/503 responses without throwing, so those never reach any 'captured exception' path.",
+            "severity": "med"
+          },
+          {
+            "path": "src/app/api/session/_http.ts",
+            "line": 93,
+            "issue": "Double reporting. handle() rethrows unknown errors, and Next's onRequestError hook already reports thrown route errors. Calling Sentry.captureException in withApi as well gives two events per failure. The handled 500s (store_context_required) are never thrown, so they would be captured only if you add an explicit call. The spec does not say which path owns capture.",
+            "severity": "med"
+          },
+          {
+            "path": "src/app/api/health/route.ts",
+            "line": 0,
+            "issue": "src/app/api/runtime.test.ts requires every route.ts to export `runtime = \"nodejs\"` on its own line. routes.auth.test.ts and routes.scope.test.ts probably enumerate routes and expect 401 or scoping, so an unauthenticated route may fail them. The spec does not mention these suites, and they sit outside the new-tests list.",
+            "severity": "med"
+          },
+          {
+            "path": "next.config.ts",
+            "line": 3,
+            "issue": "Wrapping with withSentryConfig is not a no-op by default. It injects webpack/turbopack plugins, can add a tunnel route (which would run through src/proxy.ts auth) and tries source-map upload. 'No upload when DSN unset' is the wrong gate, because upload depends on SENTRY_AUTH_TOKEN, org and project. The spec should say to apply the wrapper only when the DSN is set, to set `telemetry:false`, to leave `tunnelRoute` off, and to upload only when the auth token exists. It also needs a build-time test, since next.config.ts has no existing test.",
+            "severity": "med"
+          },
+          {
+            "path": "instrumentation.ts",
+            "line": 0,
+            "issue": "The spec asks for an edge init, but every route is nodejs, proxy.ts runs on Node in Next 16, and the Vercel guidance deprecates edge. A sentry.edge.config.ts is dead code that adds bundle risk. Specify nodejs only, with an `if (process.env.NEXT_RUNTIME === 'nodejs')` guard.",
+            "severity": "low"
+          },
+          {
+            "path": "src/lib/observability/beforeSend",
+            "line": 0,
+            "issue": "The redaction scope is under-specified. Message strings only is not enough: exception values, breadcrumbs (fetch URLs, console), request.url and query strings, `extra`/`contexts`, and the user object also carry PII. Redact has sync (redactText) and async variants, and beforeSend must stay sync or handle the promise. The client bundle would also import the full redact lib, so the client size cost should be checked. A throw inside beforeSend must drop the event (fail closed), not send it raw. The spec does not say this.",
+            "severity": "high"
+          }
+        ],
+        "suggested_spec_changes": [
+          "List the routes outside withApi (cron/retention, redact, vision, auth/onboarding, health) and say how each gets a request log line: wrap them in a shared helper, or narrow the acceptance to withApi routes. Log the requireContext early-return branch as well.",
+          "State a single capture owner. Either rely on onRequestError for thrown errors and add an explicit captureException only for handled 5xx responses from handle(), or capture only in withApi and de-dupe against onRequestError. Add a test that one failure yields one event.",
+          "Make the health route spec say it exports `runtime = \"nodejs\"` and name the existing suites to update (runtime.test.ts, routes.auth.test.ts, routes.scope.test.ts) so a public route is allowed. Clarify that /api/health is not behind src/proxy.ts auth (the proxy skips /api), and say whether the response carries Cache-Control: no-store.",
+          "Gate withSentryConfig on the DSN. Set telemetry:false and no tunnelRoute, and upload source maps only when SENTRY_AUTH_TOKEN, org and project are all set. Add a test that next.config exports the unwrapped config when the DSN is unset.",
+          "Drop the edge runtime from scope (nodejs only) and delete the edge config from the plan.",
+          "Define beforeSend fully. It should strip request.cookies, request.data and headers (authorization, cookie, forwarded-user header via FORWARDED_USER_HEADER, set-cookie), request.url query string, user, breadcrumbs data, and extra/contexts. It should run redactText over message, exception values, and breadcrumb messages, and it should return null on any internal error. Add a test for each stripped field and one for the throw case.",
+          "Specify that log.* passes string field values through redact (or document that callers must not pass PII), is safe against circular and Error values, and cannot be overridden by field keys. Cap and sanitise x-request-id (for example /^[A-Za-z0-9_-]{1,64}$/ else random). Define the workspace hash as a salted or truncated sha256, with a fixed token for local mode.",
+          "Add a rollback section: the DSN-unset kill switch, the redeploy needed for NEXT_PUBLIC_ changes, and a revert of package.json and package-lock.json. Confirm vercel.json has no CSP, or add the Sentry ingest host to the docs as a human step.",
+          "Replace the `wt/THIS-TASK` placeholder with the concrete task id. Add a test that importing instrumentation.ts and instrumentation-client.ts with no DSN causes no @sentry/nextjs init, no fetch, and no module side effects."
+        ],
+        "truncated": {
+          "reason": "over MAX_RESULT_CHARS",
+          "original_chars": 7608,
+          "trimmed": {
+            "risks": 4
+          }
+        },
+        "confidence": 0.0,
+        "provenance": [
+          "repo"
+        ]
+      }
+    },
+    {
+      "ts": 1791243723.909971,
+      "spec_review_verdict": "request_changes",
+      "spec_review_risks": [
+        {
+          "path": "src/app/api/session/_http.ts",
+          "line": 88,
+          "issue": "Acceptance says withApi logs a line for every API response, but withApi covers only part of the routes. cron/retention, redact, vision, auth/onboarding and the new health route do not appear to call it (the grep showed withApi in processes, agents, workmaps and similar). Two more gaps: the requireContext early return (401/403/503) is a separate branch, so it needs its own log call. handle() also turns store errors into 500/503 responses without throwing, so those never reach any 'captured exception' path.",
+          "severity": "med"
+        },
+        {
+          "path": "src/app/api/session/_http.ts",
+          "line": 93,
+          "issue": "Double reporting. handle() rethrows unknown errors, and Next's onRequestError hook already reports thrown route errors. Calling Sentry.captureException in withApi as well gives two events per failure. The handled 500s (store_context_required) are never thrown, so they would be captured only if you add an explicit call. The spec does not say which path owns capture.",
+          "severity": "med"
+        },
+        {
+          "path": "src/app/api/health/route.ts",
+          "line": 0,
+          "issue": "src/app/api/runtime.test.ts requires every route.ts to export `runtime = \"nodejs\"` on its own line. routes.auth.test.ts and routes.scope.test.ts probably enumerate routes and expect 401 or scoping, so an unauthenticated route may fail them. The spec does not mention these suites, and they sit outside the new-tests list.",
+          "severity": "med"
+        },
+        {
+          "path": "next.config.ts",
+          "line": 3,
+          "issue": "Wrapping with withSentryConfig is not a no-op by default. It injects webpack/turbopack plugins, can add a tunnel route (which would run through src/proxy.ts auth) and tries source-map upload. 'No upload when DSN unset' is the wrong gate, because upload depends on SENTRY_AUTH_TOKEN, org and project. The spec should say to apply the wrapper only when the DSN is set, to set `telemetry:false`, to leave `tunnelRoute` off, and to upload only when the auth token exists. It also needs a build-time test, since next.config.ts has no existing test.",
+          "severity": "med"
+        },
+        {
+          "path": "instrumentation.ts",
+          "line": 0,
+          "issue": "The spec asks for an edge init, but every route is nodejs, proxy.ts runs on Node in Next 16, and the Vercel guidance deprecates edge. A sentry.edge.config.ts is dead code that adds bundle risk. Specify nodejs only, with an `if (process.env.NEXT_RUNTIME === 'nodejs')` guard.",
+          "severity": "low"
+        },
+        {
+          "path": "src/lib/observability/beforeSend",
+          "line": 0,
+          "issue": "The redaction scope is under-specified. Message strings only is not enough: exception values, breadcrumbs (fetch URLs, console), request.url and query strings, `extra`/`contexts`, and the user object also carry PII. Redact has sync (redactText) and async variants, and beforeSend must stay sync or handle the promise. The client bundle would also import the full redact lib, so the client size cost should be checked. A throw inside beforeSend must drop the event (fail closed), not send it raw. The spec does not say this.",
+          "severity": "high"
+        },
+        {
+          "path": "src/lib/log/index.ts",
+          "line": 0,
+          "issue": "The test list mentions 'log line shape and redaction', but item 2 never says whether log fields are passed through redact. Fields are `Record<string, unknown>` and callers pass err.message values (onboarding, retention, vision upstream error) that can hold emails or tokens. Decide and state it. The spec also needs rules for non-serializable values (Error, circular) so a log call cannot throw, and for field keys that collide with ts/level/event/requestId.",
+          "severity": "med"
+        },
+        {
+          "path": "src/app/api/session/_http.ts",
+          "line": 0,
+          "issue": "The x-request-id header is client-controlled. It needs a length and charset cap or it becomes a log-injection and log-volume vector. The spec should also say whether the id is echoed in the response header. Workspace id hash: specify the algorithm and truncation (a salted or truncated sha256), because an unsalted hash of a UUID is only pseudonymous. Local mode uses LOCAL_WORKSPACE_ID and needs a defined output.",
+          "severity": "low"
+        },
+        {
+          "path": "src/app/api/**",
+          "line": 0,
+          "issue": "Hidden coupling: the instrumentation hook, Sentry client and CSP or connect-src. vercel.json is out of scope, so if it sets a CSP the browser will block ingest and client capture will silently fail. Check this. 'EU region from the DSN host' is not code-verifiable, so say it is the human's job and state that the code hardcodes no region.",
+          "severity": "low"
+        },
+        {
+          "path": "docs/OBSERVABILITY.md",
+          "line": 0,
+          "issue": "There is no rollback or kill-switch section. Unsetting the DSN disables Sentry, which should be documented as the rollback, along with the fact that NEXT_PUBLIC_ is inlined at build time, so a client-side disable needs a redeploy. Also, `.claude/hooks/tests-green.sh wt/THIS-TASK` is a placeholder and cannot be checked as written. The 'no network' test with a mocked @sentry/nextjs proves no init call but not that nothing is imported with side effects, so assert on import-time behaviour too.",
+          "severity": "low"
+        }
+      ]
+    }
+  ],
+  "packet_meta": {
+    "chars": 3665,
+    "est_tokens": 916,
+    "presented_tokens": 916,
+    "sections": {
+      "_preamble": {
+        "chars": 69,
+        "est_tokens": 17,
+        "sha256": "42d42e95147c75fb29bd8e9dbbd18335873f12dbfc4457ffc7eed48829a6ee91"
+      },
+      "spec": {
+        "chars": 1955,
+        "est_tokens": 488,
+        "sha256": "7304c465776e3e649bc45ed8f6bc44e0416aaeb139eec2233817334e4af9a0be"
+      },
+      "acceptance": {
+        "chars": 716,
+        "est_tokens": 179,
+        "sha256": "fff26a452b91efb8c43785b7ecf74f314e83b619bd416eac4429b3a10192b6f1"
+      },
+      "scope": {
+        "chars": 231,
+        "est_tokens": 57,
+        "sha256": "5ead4eeea239174c23a3e0c45ed1f7eb925f8ecb456157ee85251f3b2f32a7d9"
+      },
+      "depends_on": {
+        "chars": 23,
+        "est_tokens": 5,
+        "sha256": "a1f80c68ea5dfed4c164f0a1b57674c850b8e75df45a22fc0e938ae8cbfc28ab"
+      },
+      "existing tests": {
+        "chars": 643,
+        "est_tokens": 160,
+        "sha256": "4f2d38fd83ec4b1edf7836ad59228bd95f779bab3ae574fbc01e036505d9e8ce"
+      },
+      "complexity": {
+        "chars": 16,
+        "est_tokens": 4,
+        "sha256": "980ef79c46d84e83eafaa1b95de4fe0093cfbac7cc9d22d9e5456df74383523c"
+      },
+      "tier": {
+        "chars": 12,
+        "est_tokens": 3,
+        "sha256": "f3170b9573b83cb0aed2288100dd1360a1fff6c7bb13cd6b6615eefa9fe0d302"
+      }
+    },
+    "hash": "ea16c828787e",
+    "version": "ea16c828787e",
+    "candidate_known": false,
+    "base": "bc60ad3d015b",
+    "sources": "task@T-0287 tree@HEAD",
+    "prefix_sha": "37a97024d931",
+    "prefix_chars": 686,
+    "suffix_chars": 3666,
+    "dynamic_sections": [
+      "spec",
+      "acceptance",
+      "scope",
+      "depends_on",
+      "existing tests",
+      "complexity",
+      "tier"
+    ],
+    "instruction_tokens": 172,
+    "instruction_tokens_modular": 172,
+    "role": "spec_review",
+    "tool_tokens_disclosed": 1722,
+    "tool_tokens_minimal": 1722,
+    "tool_allowlist_source": "minimal",
+    "skills_exposed": [
+      "executor/implement-spec",
+      "planner/memory",
+      "planner/orchestrate",
+      "planner/resume",
+      "planner/write-spec",
+      "review/adversarial-review",
+      "review/challenge",
+      "scout/repo-map",
+      "scout/test-gap",
+      "scout/trace-callers",
+      "triage/classify",
+      "triage/compact-memory"
+    ],
+    "skill_tokens_l0": 219,
+    "skills_selected": [
+      "review/adversarial-review"
+    ],
+    "skill_tokens_selected_l0": 16,
+    "skill_tokens_selected_l2": 67,
+    "skill_tokens_presented_l2": 0,
+    "skill_routing_mode": "shadow",
+    "session_id": "6478595f-b19b-4974-a8bb-7571e46c2a38",
+    "skills_used": [],
+    "skill_tokens_l2": 0
+  },
+  "claimed_at": 1791243674.157797,
+  "account": "A",
+  "pid": 13557,
+  "pipeline": {
+    "skills_used": []
+  },
+  "spec_review_verdict": "request_changes",
+  "spec_review_risks": [
+    {
+      "path": "src/app/api/session/_http.ts",
+      "line": 88,
+      "issue": "Acceptance says withApi logs a line for every API response, but withApi covers only part of the routes. cron/retention, redact, vision, auth/onboarding and the new health route do not appear to call it (the grep showed withApi in processes, agents, workmaps and similar). Two more gaps: the requireContext early return (401/403/503) is a separate branch, so it needs its own log call. handle() also turns store errors into 500/503 responses without throwing, so those never reach any 'captured exception' path.",
+      "severity": "med"
+    },
+    {
+      "path": "src/app/api/session/_http.ts",
+      "line": 93,
+      "issue": "Double reporting. handle() rethrows unknown errors, and Next's onRequestError hook already reports thrown route errors. Calling Sentry.captureException in withApi as well gives two events per failure. The handled 500s (store_context_required) are never thrown, so they would be captured only if you add an explicit call. The spec does not say which path owns capture.",
+      "severity": "med"
+    },
+    {
+      "path": "src/app/api/health/route.ts",
+      "line": 0,
+      "issue": "src/app/api/runtime.test.ts requires every route.ts to export `runtime = \"nodejs\"` on its own line. routes.auth.test.ts and routes.scope.test.ts probably enumerate routes and expect 401 or scoping, so an unauthenticated route may fail them. The spec does not mention these suites, and they sit outside the new-tests list.",
+      "severity": "med"
+    },
+    {
+      "path": "next.config.ts",
+      "line": 3,
+      "issue": "Wrapping with withSentryConfig is not a no-op by default. It injects webpack/turbopack plugins, can add a tunnel route (which would run through src/proxy.ts auth) and tries source-map upload. 'No upload when DSN unset' is the wrong gate, because upload depends on SENTRY_AUTH_TOKEN, org and project. The spec should say to apply the wrapper only when the DSN is set, to set `telemetry:false`, to leave `tunnelRoute` off, and to upload only when the auth token exists. It also needs a build-time test, since next.config.ts has no existing test.",
+      "severity": "med"
+    },
+    {
+      "path": "instrumentation.ts",
+      "line": 0,
+      "issue": "The spec asks for an edge init, but every route is nodejs, proxy.ts runs on Node in Next 16, and the Vercel guidance deprecates edge. A sentry.edge.config.ts is dead code that adds bundle risk. Specify nodejs only, with an `if (process.env.NEXT_RUNTIME === 'nodejs')` guard.",
+      "severity": "low"
+    },
+    {
+      "path": "src/lib/observability/beforeSend",
+      "line": 0,
+      "issue": "The redaction scope is under-specified. Message strings only is not enough: exception values, breadcrumbs (fetch URLs, console), request.url and query strings, `extra`/`contexts`, and the user object also carry PII. Redact has sync (redactText) and async variants, and beforeSend must stay sync or handle the promise. The client bundle would also import the full redact lib, so the client size cost should be checked. A throw inside beforeSend must drop the event (fail closed), not send it raw. The spec does not say this.",
+      "severity": "high"
+    },
+    {
+      "path": "src/lib/log/index.ts",
+      "line": 0,
+      "issue": "The test list mentions 'log line shape and redaction', but item 2 never says whether log fields are passed through redact. Fields are `Record<string, unknown>` and callers pass err.message values (onboarding, retention, vision upstream error) that can hold emails or tokens. Decide and state it. The spec also needs rules for non-serializable values (Error, circular) so a log call cannot throw, and for field keys that collide with ts/level/event/requestId.",
+      "severity": "med"
+    },
+    {
+      "path": "src/app/api/session/_http.ts",
+      "line": 0,
+      "issue": "The x-request-id header is client-controlled. It needs a length and charset cap or it becomes a log-injection and log-volume vector. The spec should also say whether the id is echoed in the response header. Workspace id hash: specify the algorithm and truncation (a salted or truncated sha256), because an unsalted hash of a UUID is only pseudonymous. Local mode uses LOCAL_WORKSPACE_ID and needs a defined output.",
+      "severity": "low"
+    },
+    {
+      "path": "src/app/api/**",
+      "line": 0,
+      "issue": "Hidden coupling: the instrumentation hook, Sentry client and CSP or connect-src. vercel.json is out of scope, so if it sets a CSP the browser will block ingest and client capture will silently fail. Check this. 'EU region from the DSN host' is not code-verifiable, so say it is the human's job and state that the code hardcodes no region.",
+      "severity": "low"
+    },
+    {
+      "path": "docs/OBSERVABILITY.md",
+      "line": 0,
+      "issue": "There is no rollback or kill-switch section. Unsetting the DSN disables Sentry, which should be documented as the rollback, along with the fact that NEXT_PUBLIC_ is inlined at build time, so a client-side disable needs a redeploy. Also, `.claude/hooks/tests-green.sh wt/THIS-TASK` is a placeholder and cannot be checked as written. The 'no network' test with a mocked @sentry/nextjs proves no init call but not that nothing is imported with side effects, so assert on import-time behaviour too.",
+      "severity": "low"
+    }
+  ]
+}

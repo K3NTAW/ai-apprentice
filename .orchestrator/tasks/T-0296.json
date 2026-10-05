@@ -1,0 +1,48 @@
+{
+  "id": "T-0296",
+  "created_at": 1791243799.075546,
+  "parent": "T-0280",
+  "role": "execute",
+  "tier": "opus",
+  "complexity": 4,
+  "title": "Measured unit cost: script and procedure that turn usage_events into cost per capture hour and per teach hour",
+  "spec": "Why: roadmap 3.7 costs are estimates (about 11 USD per capture hour, 10 per teach hour); P0-10 replaces them with measured numbers from 10 scripted sessions (5 capture + debrief, 5 teach) on staging. Running the sessions spends API money and is the human's step; this task prepares the measurement.\nWhat:\n1. `scripts/measure-cost.mjs`: reads SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY from env (names only, never printed), takes `--workspace <id> --since <iso> [--until <iso>]`, groups usage_events by session_id and session kind (capture vs teach, from the sessions table), joins model_prices, and prints a table: per session minutes, vision calls, tokens in/out, voice seconds, frames stored and bytes, CHF; then per kind: cost per hour min / median / max and the share per kind (vision, voice, decide, workmap, storage). `--json` prints the same as JSON. Pure function `summarise(events, sessions, prices)` in `scripts/lib/cost.mjs` with unit tests (Vitest, in scripts/lib/cost.test.mjs, included by the root vitest config).\n2. `docs/checks/unit-cost.md`: the 10-session protocol (same general sample task for every session, e.g. \"file five expense receipts in a spreadsheet\", nothing industry-specific), the exact commands, the table template with min/median/max per hour, and the comparison columns against roadmap 3.7's estimates. State that the human runs it on staging and pastes the results into the doc.\nNo new dependencies. Do not touch README.md, docs/DEPLOY.md, .env.example.",
+  "inputs": [],
+  "acceptance": [
+    "scripts/lib/cost.mjs summarise() returns per-session rows and per-kind cost per hour with min/median/max; tests cover capture and teach sessions, empty input and a model without a price row (reported, not thrown)",
+    "scripts/measure-cost.mjs prints the table or --json and never prints the service key",
+    "docs/checks/unit-cost.md has the general 10-session protocol and the result template compared with roadmap 3.7",
+    ".claude/hooks/tests-green.sh wt/THIS-TASK exits 0"
+  ],
+  "scope": [
+    "scripts/measure-cost.mjs",
+    "scripts/lib/cost.mjs",
+    "scripts/lib/cost.test.mjs",
+    "vitest.config.ts",
+    "docs/checks/unit-cost.md"
+  ],
+  "depends_on": [
+    "T-0294"
+  ],
+  "constraints": {
+    "read_only": false,
+    "budget_turns": 50,
+    "timeout_s": 2400,
+    "goal_branch": "goal/T-0280",
+    "task_class": "mechanical",
+    "route": "straightforward",
+    "read_scope": [
+      "src/lib/usage/**",
+      "supabase/migrations/20261006000000_usage_events.sql",
+      "docs/checks/cost-meter.md",
+      ".orchestrator/roadmap.md"
+    ],
+    "roadmap": "P0-10"
+  },
+  "status": "queued",
+  "assigned_to": null,
+  "worktree": null,
+  "codex_thread": null,
+  "result": null,
+  "events": []
+}

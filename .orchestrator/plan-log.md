@@ -1,0 +1,7 @@
+- 2026-10-03 21:20 T-0041 packet (architectural_replan): split into T-0045 (A2a SQL, self-contained spec, c6, fix_round_for T-0030) and T-0047 (A2b lint, c4, depends_on T-0045). T-0041 dead.
+- 2026-10-03 21:35 packet T-0041/T-0045 (architectural_replan): T-0041 noop (dead). T-0045 respec -> T-0048 (10 findings of T-0046 folded in). T-0047 depends_on repointed to T-0048 by direct edit of its task json.
+- 2026-10-03 21:30 T-0032 held at spec review T-0054; fix round T-0055 filed (fix_round_for T-0032). plan.md trimmed.
+- 2026-10-03 21:50 packet T-0058 (architectural_replan): split into T-0062 (B1 auth core), T-0064 (B2 login, callback, signout), T-0065 (B3 workspace API, page, doc), respec_for T-0058, 11 findings of T-0060 folded in. T-0058 dead.
+- 2026-10-03 21:45 T-0031 held (spec review T-0053, 16 findings) -> fix round T-0058 filed (fix_round_for T-0031, depends_on T-0030).
+- 2026-10-06 Planner (Fable 5.1, goal T-0280): roadmap copied to .orchestrator/roadmap.md; goal/T-0280 cut from origin/main dadb235; plan.md rewritten for Phase 0; wave 1 and 2 specs filed (ids below as created).
+- 2026-10-06 T-0280 wave filed: T-0281 DB tests+CI (c7), T-0283 workspace switch (c6), T-0284 capture scope/frames (c7), T-0287 Sentry+logs (c6), T-0288 legal drafts (c3), T-0289 demo cleanup (c5), T-0291 model fallback (c3), T-0292 nightly live (c5); wave 2: T-0293 findings sweep (after T-0283), T-0294 cost meter (after T-0284, T-0291), T-0295 desktop release (after T-0293), T-0296 unit cost (after T-0294), T-0297 docs sync (after all).

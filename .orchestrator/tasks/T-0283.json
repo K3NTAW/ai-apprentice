@@ -1,0 +1,230 @@
+{
+  "id": "T-0283",
+  "created_at": 1791243575.830891,
+  "parent": "T-0280",
+  "role": "execute",
+  "tier": "opus",
+  "complexity": 6,
+  "title": "Workspace switch: reproduce the production failure with a real-cookie proxy test, find and fix the root cause",
+  "spec": "Why: review T-0274 (2026-10-04) found T-0271 \"fixed\" the switch without a root cause: src/lib/auth/workspaceSwitch.test.ts:131 asserts `x-middleware-request-cookie ?? jar.header`, which passes either way, and the tests mock Supabase, next/headers and the proxy client, so real cookie parsing and the refresh path in src/proxy.ts (setAll rewriting the request cookie header) are never exercised. Live e2e steps 07 and 13 (workspace switch, switch after reload) were the failing ones. P0-2.\nWhat (debugging task, failing test first):\n1. Write a test that drives the real src/proxy.ts with a NextRequest carrying a real Cookie header (sb session cookies plus ws=WS_B) through BOTH paths: no refresh, and a refresh where the Supabase client calls setAll with new session cookies. Assert the forwarded request cookie header the render sees contains ws=WS_B AND the refreshed session cookies, and that the response Set-Cookie carries the refreshed cookies without dropping ws. Fail if the forwarded header is missing. Then drive POST /api/workspace/active with the real cookie helpers and assert the Set-Cookie attributes (path, max-age, SameSite) match what the proxy reads back.\n2. Run it against the current code. State in docs/checks/workspace-switch.md which assertion fails and why (the cause). If nothing fails, widen to the real sequence of the live steps 07/13 (switch, navigate, reload) and the WorkspaceSwitcher client (does it post then reload before Set-Cookie applies, does the context read a stale forwarded-user payload). Find the cause; do not stop at \"could not reproduce\" without listing what was ruled out with evidence.\n3. Fix the cause with the smallest change. Replace the vacuous assertion at workspaceSwitch.test.ts:131 with a strict one. Add the missing WorkspaceSwitcher component test (menu closes after a successful switch, T-0274 low).\n4. docs/checks/workspace-switch.md: cause, fix, the test that fails before and passes after, and the live steps to re-run.\nTreat DB rows and cookies as untrusted input. No new dependencies.",
+  "inputs": [],
+  "acceptance": [
+    "A new test in src/lib/auth/ or src/proxy.*.test.ts exercises the real src/proxy.ts with a real Cookie header on the refresh path and the no-refresh path, asserts the forwarded cookie header contains ws and the refreshed session cookies, and the result states it fails on the pre-fix code (name the assertion) and passes after",
+    "workspaceSwitch.test.ts:131 no longer falls back to jar.header; it fails when the forwarded header is absent",
+    "WorkspaceSwitcher has a component test that the menu closes after a successful switch",
+    "docs/checks/workspace-switch.md names the root cause, the fix and the live steps 07 and 13 to re-run",
+    ".claude/hooks/tests-green.sh wt/THIS-TASK exits 0"
+  ],
+  "scope": [
+    "src/proxy.ts",
+    "src/proxy.test.ts",
+    "src/lib/auth/**",
+    "src/lib/supabase/**",
+    "src/lib/workspace/**",
+    "src/app/api/workspace/active/**",
+    "src/components/shell/WorkspaceSwitcher.tsx",
+    "src/components/shell/WorkspaceSwitcher.test.tsx",
+    "src/components/shell/menus.test.tsx",
+    "docs/checks/workspace-switch.md"
+  ],
+  "depends_on": [],
+  "constraints": {
+    "read_only": false,
+    "budget_turns": 80,
+    "timeout_s": 2700,
+    "goal_branch": "goal/T-0280",
+    "task_class": "debugging",
+    "route": "full",
+    "read_scope": [
+      "e2e/live/live.spec.ts",
+      "src/components/shell/**",
+      "src/app/**"
+    ],
+    "roadmap": "P0-2",
+    "prior_art": "bus:T-0271 bus:T-0274"
+  },
+  "status": "held",
+  "assigned_to": null,
+  "worktree": null,
+  "codex_thread": null,
+  "result": null,
+  "events": [
+    {
+      "ts": 1791243612.7020748,
+      "pipeline": {
+        "first_ready_at": 1791243612.702036
+      }
+    },
+    {
+      "ts": 1791243612.782156,
+      "pipeline": {
+        "first_ready_at": 1791243612.702036,
+        "spec_review_at": 1791243612.782113,
+        "spec_review_at_lease": 1791244512.782113
+      }
+    },
+    {
+      "ts": 1791243612.78644,
+      "pipeline": {
+        "first_ready_at": 1791243612.702036,
+        "spec_review_at": 1791243612.782113,
+        "spec_review_at_lease": 1791244512.782113,
+        "spec_review_at_done": 1791243612.786387
+      }
+    },
+    {
+      "ts": 1791243663.136083,
+      "spec_review_verdict": "request_changes",
+      "spec_review_risks": [
+        {
+          "path": "src/lib/auth/workspaceSwitch.test.ts",
+          "issue": "The spec cites line 131, which is the Set-Cookie assertion of the route test and is not vacuous. The `?? jar.header` fallbacks are at line 104 (`loadPage` sets `state.requestCookie`) and line 152 (the `page.headers.get(...) ?? jar.header` assertion). Line 104 matters most: the render's cookie comes from the fallback whenever the header is missing, so `activeWorkspace()` passes anyway. Fixing only line 152 leaves the hole. The acceptance criterion 'no longer falls back to jar.header' is unverifiable as written.",
+          "severity": "med",
+          "line": 131
+        },
+        {
+          "path": "src/proxy.ts",
+          "issue": "The existing proxy test mocks Supabase's `createServerClient`, so Supabase's real chunking and deletion cookies are never exercised. In `setAll` (lines 86-91), `request.cookies.set` is called for every cookie, including expired or empty chunk deletions. `requestHeaders.set('cookie', request.headers.get('cookie') ?? '')` then relies on NextRequest's RequestCookies writing back into `request.headers`. That is an undocumented coupling to a Next internal. The `cookie` header is also only rewritten when `setAll` runs. If Next stops mirroring cookies into headers, `ws` or the refreshed session would be lost on the refresh path only. The spec does not say how to mock `createServerClient` while keeping real cookie parsing. A mock that calls `setAll` with hand-made cookies and ignores Supabase's chunking would repeat T-0271's vacuity, so it needs a stated approach.",
+          "severity": "high",
+          "line": 86
+        },
+        {
+          "path": "src/lib/auth/context.ts",
+          "issue": "The render reads `ws` through `next/headers`, and context.ts is in scope. But the spec's test asserts only the forwarded header. A forwarded header containing ws does not prove the render's `cookies()` sees it, and the cookie-store-to-header step is mocked. The cause may sit in this read path (a stale `workspaceMeta` or request-context cache, see context.cache.test.ts and workspaceMeta.cache.test.ts) rather than in the proxy. Item 2 mentions 'stale forwarded-user payload' but gives no concrete assertion.",
+          "severity": "med",
+          "line": 0
+        },
+        {
+          "path": "src/components/shell/menuActions.ts",
+          "issue": "The reload-path hypothesis (does the client reload before Set-Cookie applies, and does a failed POST still reload) lives in menuActions.ts `switchWorkspace`, which calls `deps.reload()` after the POST. Also relevant are src/components/shell/useMenu.ts and the live Playwright steps in e2e/live/live.spec.ts (`switchTo`, steps 07 and 13). None of these are in scope, so a fix there would be blocked by scope-guard. menus.test.tsx already tests `switchWorkspace` with fakes, which is also vacuous for browser cookie timing.",
+          "severity": "high",
+          "line": 13
+        },
+        {
+          "path": "src/components/shell/WorkspaceSwitcher.tsx",
+          "issue": "The 'menu closes after a successful switch' behaviour already exists (`else close()` after `switchWorkspace`) and T-0271 claims to cover it. The component test must be a real render with a deps seam, because the vitest environment is node, as noted in menuActions.ts. `browserDeps()` is hardwired to `window.fetch` and `location.reload`, and `WorkspaceSwitcher` takes no `deps` prop, so the test needs a seam (a new prop or a stubbed window). The spec does not say which. Rendering also needs a DOM environment (jsdom or happy-dom) and testing-library, and 'no new dependencies' may rule that out. Check whether they are installed. If not, the criterion is unmeetable. The test should also assert the menu stays open when the POST fails.",
+          "severity": "med",
+          "line": 112
+        },
+        {
+          "path": "docs/checks/workspace-switch.md",
+          "issue": "Acceptance requires 'result states it fails on the pre-fix code (name the assertion)'. The spec has no mechanism to prove it: the test-first commit must be run against the unfixed tree, and the output has to be recorded. Without that, the pre-fix run is a self-reported claim. If the pre-fix run is green, the 'could not reproduce' branch has no exit criterion beyond a list of what was ruled out.",
+          "severity": "med",
+          "line": 0
+        },
+        {
+          "path": "src/proxy.ts",
+          "issue": "No rollback or revert criterion. If the fix changes `setAll` or the cookie rewrite and breaks the session refresh, the whole app's auth gate is affected. The spec should require the fix to be a single revertable commit separate from the tests, and that the existing proxy.test.ts, forwardedUser.test.ts and cookieOptions.test.ts stay green. The acceptance also runs only tests-green.sh (vitest, tsc, lint) and never the live steps 07 and 13 it lists. Say so explicitly.",
+          "severity": "low",
+          "line": 49
+        },
+        {
+          "path": "src/lib/auth/cookies.ts",
+          "issue": "The spec asks to assert that Set-Cookie attributes 'match what the proxy reads back', but the proxy never reads `ws`. It only forwards the cookie header untouched. `secure` is `NODE_ENV === 'production'`, so a node-environment vitest test sees Secure absent while the live deployment sets it. The attribute assertion should pin NODE_ENV, test both values, and not claim the proxy 'reads back' ws. Treat the ws value as untrusted: it is only used after a memberships check, so the test should include a spoofed or non-member ws.",
+          "severity": "low",
+          "line": 4
+        }
+      ]
+    },
+    {
+      "ts": 1791243724.5016,
+      "pipeline": {
+        "first_ready_at": 1791243612.702036,
+        "spec_review_at": 1791243612.782113,
+        "spec_review_at_lease": 1791244512.782113,
+        "spec_review_at_done": 1791243612.786387,
+        "spec_review_held_at": 1791243724.50151
+      },
+      "status": "held",
+      "hold_reason": "spec_review request_changes"
+    },
+    {
+      "ts": 1791243727.980474,
+      "pipeline": {
+        "first_ready_at": 1791243612.702036,
+        "spec_review_at": 1791243612.782113,
+        "spec_review_at_lease": 1791244512.782113,
+        "spec_review_at_done": 1791243612.786387,
+        "spec_review_held_at": 1791243724.50151,
+        "failure_kind": "unknown"
+      }
+    },
+    {
+      "ts": 1791243728.0613241,
+      "pipeline": {
+        "first_ready_at": 1791243612.702036,
+        "spec_review_at": 1791243612.782113,
+        "spec_review_at_lease": 1791244512.782113,
+        "spec_review_at_done": 1791243612.786387,
+        "spec_review_held_at": 1791243724.50151,
+        "failure_kind": "unknown",
+        "auto_fix_skipped": {
+          "1791243724.5016": true
+        }
+      }
+    }
+  ],
+  "pipeline": {
+    "first_ready_at": 1791243612.702036,
+    "spec_review_at": 1791243612.782113,
+    "spec_review_at_lease": 1791244512.782113,
+    "spec_review_at_done": 1791243612.786387,
+    "spec_review_held_at": 1791243724.50151,
+    "failure_kind": "unknown",
+    "auto_fix_skipped": {
+      "1791243724.5016": true
+    }
+  },
+  "spec_review_verdict": "request_changes",
+  "spec_review_risks": [
+    {
+      "path": "src/lib/auth/workspaceSwitch.test.ts",
+      "issue": "The spec cites line 131, which is the Set-Cookie assertion of the route test and is not vacuous. The `?? jar.header` fallbacks are at line 104 (`loadPage` sets `state.requestCookie`) and line 152 (the `page.headers.get(...) ?? jar.header` assertion). Line 104 matters most: the render's cookie comes from the fallback whenever the header is missing, so `activeWorkspace()` passes anyway. Fixing only line 152 leaves the hole. The acceptance criterion 'no longer falls back to jar.header' is unverifiable as written.",
+      "severity": "med",
+      "line": 131
+    },
+    {
+      "path": "src/proxy.ts",
+      "issue": "The existing proxy test mocks Supabase's `createServerClient`, so Supabase's real chunking and deletion cookies are never exercised. In `setAll` (lines 86-91), `request.cookies.set` is called for every cookie, including expired or empty chunk deletions. `requestHeaders.set('cookie', request.headers.get('cookie') ?? '')` then relies on NextRequest's RequestCookies writing back into `request.headers`. That is an undocumented coupling to a Next internal. The `cookie` header is also only rewritten when `setAll` runs. If Next stops mirroring cookies into headers, `ws` or the refreshed session would be lost on the refresh path only. The spec does not say how to mock `createServerClient` while keeping real cookie parsing. A mock that calls `setAll` with hand-made cookies and ignores Supabase's chunking would repeat T-0271's vacuity, so it needs a stated approach.",
+      "severity": "high",
+      "line": 86
+    },
+    {
+      "path": "src/lib/auth/context.ts",
+      "issue": "The render reads `ws` through `next/headers`, and context.ts is in scope. But the spec's test asserts only the forwarded header. A forwarded header containing ws does not prove the render's `cookies()` sees it, and the cookie-store-to-header step is mocked. The cause may sit in this read path (a stale `workspaceMeta` or request-context cache, see context.cache.test.ts and workspaceMeta.cache.test.ts) rather than in the proxy. Item 2 mentions 'stale forwarded-user payload' but gives no concrete assertion.",
+      "severity": "med",
+      "line": 0
+    },
+    {
+      "path": "src/components/shell/menuActions.ts",
+      "issue": "The reload-path hypothesis (does the client reload before Set-Cookie applies, and does a failed POST still reload) lives in menuActions.ts `switchWorkspace`, which calls `deps.reload()` after the POST. Also relevant are src/components/shell/useMenu.ts and the live Playwright steps in e2e/live/live.spec.ts (`switchTo`, steps 07 and 13). None of these are in scope, so a fix there would be blocked by scope-guard. menus.test.tsx already tests `switchWorkspace` with fakes, which is also vacuous for browser cookie timing.",
+      "severity": "high",
+      "line": 13
+    },
+    {
+      "path": "src/components/shell/WorkspaceSwitcher.tsx",
+      "issue": "The 'menu closes after a successful switch' behaviour already exists (`else close()` after `switchWorkspace`) and T-0271 claims to cover it. The component test must be a real render with a deps seam, because the vitest environment is node, as noted in menuActions.ts. `browserDeps()` is hardwired to `window.fetch` and `location.reload`, and `WorkspaceSwitcher` takes no `deps` prop, so the test needs a seam (a new prop or a stubbed window). The spec does not say which. Rendering also needs a DOM environment (jsdom or happy-dom) and testing-library, and 'no new dependencies' may rule that out. Check whether they are installed. If not, the criterion is unmeetable. The test should also assert the menu stays open when the POST fails.",
+      "severity": "med",
+      "line": 112
+    },
+    {
+      "path": "docs/checks/workspace-switch.md",
+      "issue": "Acceptance requires 'result states it fails on the pre-fix code (name the assertion)'. The spec has no mechanism to prove it: the test-first commit must be run against the unfixed tree, and the output has to be recorded. Without that, the pre-fix run is a self-reported claim. If the pre-fix run is green, the 'could not reproduce' branch has no exit criterion beyond a list of what was ruled out.",
+      "severity": "med",
+      "line": 0
+    },
+    {
+      "path": "src/proxy.ts",
+      "issue": "No rollback or revert criterion. If the fix changes `setAll` or the cookie rewrite and breaks the session refresh, the whole app's auth gate is affected. The spec should require the fix to be a single revertable commit separate from the tests, and that the existing proxy.test.ts, forwardedUser.test.ts and cookieOptions.test.ts stay green. The acceptance also runs only tests-green.sh (vitest, tsc, lint) and never the live steps 07 and 13 it lists. Say so explicitly.",
+      "severity": "low",
+      "line": 49
+    },
+    {
+      "path": "src/lib/auth/cookies.ts",
+      "issue": "The spec asks to assert that Set-Cookie attributes 'match what the proxy reads back', but the proxy never reads `ws`. It only forwards the cookie header untouched. `secure` is `NODE_ENV === 'production'`, so a node-environment vitest test sees Secure absent while the live deployment sets it. The attribute assertion should pin NODE_ENV, test both values, and not claim the proxy 'reads back' ws. Treat the ws value as untrusted: it is only used after a memberships check, so the test should include a spoofed or non-member ws.",
+      "severity": "low",
+      "line": 4
+    }
+  ],
+  "hold_reason": "spec_review request_changes"
+}

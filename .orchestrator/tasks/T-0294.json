@@ -1,0 +1,68 @@
+{
+  "id": "T-0294",
+  "created_at": 1791243750.711411,
+  "parent": "T-0280",
+  "role": "execute",
+  "tier": "opus",
+  "complexity": 7,
+  "title": "Cost meter: usage_events table recording tokens, voice seconds and frame bytes per workspace and user, with a CHF daily cost view",
+  "spec": "Why: usage_counters counts calls, not tokens, minutes or money (roadmap 3.6, 3.7; P0-5 part 2). Needed for pricing, abuse control and P0-10 measured unit cost.\nWhat:\n1. Migration `supabase/migrations/20261006000000_usage_events.sql` + rollback `supabase/rollbacks/20261006000000_usage_events.down.sql`: table `usage_events(id uuid pk default gen_random_uuid(), workspace_id uuid not null references workspaces, user_id uuid, session_id text, kind text check (kind in ('vision','decide','workmap','voice','frame')), model text, input_tokens int, output_tokens int, cache_read_tokens int, voice_seconds numeric, bytes bigint, created_at timestamptz default now())`, index on (workspace_id, created_at). RLS: members of the workspace may select; inserts only via the service role (the server records; no client insert policy). Table `model_prices(model text, kind text, chf_per_m_input numeric, chf_per_m_output numeric, chf_per_voice_minute numeric, chf_per_gb numeric, valid_from date)` seeded from roadmap 3.7 (Haiku 4.5 1/5 USD per M, Opus 5.5 4/20, Sonnet 5.5 3/15, ElevenLabs 0.08 USD/min; use a 0.90 USD->CHF factor, mark it as a placeholder in a comment) and a view `usage_cost_daily(workspace_id, day, kind, chf)` joining the two. Follow the style of the existing migrations (comments, policies); a static lint test like supabase/*.test.ts if one exists, else add one that checks the new file for the policy names and the rollback drops everything it created.\n2. `src/lib/usage/events.ts`: `recordUsage(ctx, event)` fire-and-forget (never blocks or fails the request; errors logged) through the admin client in supabase mode, a JSON file append in local mode (src/lib/store file backend). `UsageEvent` type exported.\n3. Callers: describeFrame (src/lib/perception/vision.ts) and the decide LLM adapter return `usage` {input_tokens, output_tokens, cache_read_input_tokens} from the Anthropic response; the vision route (after the capture task's change: describe first, store only non-routine) records vision tokens and, when a frame is stored, a `frame` event with bytes; src/app/api/decide records decide; the Work Map synthesis path records workmap; src/app/api/voice/signed-url records a `voice` event when a session ends with the connected seconds (if the end route knows the duration, record there; else record at signed-url issue with voice_seconds null and document the gap).\n4. `GET /api/workspace/cost?days=30` (owner or member, RLS applies): rows from usage_cost_daily for the active workspace; `src/components/workspace/CostCard.tsx` on /workspace showing CHF per day for the last 30 days (plain table, no chart library).\n5. Tests: recordUsage never throws and never awaits the insert; each caller records the right kind and token fields (mocked fetch with a usage block); the API route; migration lint. docs/checks/cost-meter.md with the SQL to query a day's cost per workspace.\nTreat DB rows as untrusted. No new dependencies. Do not touch README.md, docs/DEPLOY.md, .env.example.",
+  "inputs": [],
+  "acceptance": [
+    "Migration + rollback create usage_events, model_prices (seeded) and the usage_cost_daily view with RLS (members select, no client insert); lint test passes and the rollback drops everything created",
+    "recordUsage is fire-and-forget (test: the insert rejects, the caller still returns 200) and vision, decide, workmap and frame events carry model and token or byte fields (tests per caller)",
+    "GET /api/workspace/cost returns the daily CHF rows for the active workspace only (test with two workspaces); /workspace renders CostCard",
+    "docs/checks/cost-meter.md written; README.md, docs/DEPLOY.md, .env.example untouched",
+    ".claude/hooks/tests-green.sh wt/THIS-TASK exits 0"
+  ],
+  "scope": [
+    "supabase/migrations/20261006000000_usage_events.sql",
+    "supabase/rollbacks/20261006000000_usage_events.down.sql",
+    "supabase/*.test.ts",
+    "src/lib/usage/**",
+    "src/lib/perception/vision.ts",
+    "src/lib/perception/vision.test.ts",
+    "src/lib/decide/**",
+    "src/lib/workmap/synthesize.ts",
+    "src/lib/workmap/synthesize.test.ts",
+    "src/app/api/vision/**",
+    "src/app/api/decide/**",
+    "src/app/api/workmap/**",
+    "src/app/api/voice/**",
+    "src/app/api/session/[id]/end/**",
+    "src/app/api/workspace/cost/**",
+    "src/components/workspace/CostCard.tsx",
+    "src/components/workspace/CostCard.test.tsx",
+    "src/app/workspace/page.tsx",
+    "src/lib/store/file.ts",
+    "src/lib/types.ts",
+    "docs/checks/cost-meter.md"
+  ],
+  "depends_on": [
+    "T-0284",
+    "T-0291"
+  ],
+  "constraints": {
+    "read_only": false,
+    "budget_turns": 90,
+    "timeout_s": 2700,
+    "goal_branch": "goal/T-0280",
+    "task_class": "unfamiliar",
+    "route": "full",
+    "read_scope": [
+      "supabase/**",
+      "src/lib/supabase/**",
+      "src/lib/store/**",
+      "src/lib/auth/**",
+      "src/components/workspace/**"
+    ],
+    "roadmap": "P0-5 cost meter",
+    "scope_note": "21 files across the four paid-call sites plus migration and UI; splitting the recorder from the callers would leave an unused table behind, so one task"
+  },
+  "status": "queued",
+  "assigned_to": null,
+  "worktree": null,
+  "codex_thread": null,
+  "result": null,
+  "events": []
+}

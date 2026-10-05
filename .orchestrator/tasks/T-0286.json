@@ -1,0 +1,717 @@
+{
+  "id": "T-0286",
+  "created_at": 1791243612.927726,
+  "parent": "T-0280",
+  "role": "spec_review",
+  "tier": "sonnet",
+  "complexity": 7,
+  "title": "spec review: Capture scope and frame minimisation: window-first picker, store only non-routine frames, 30-day default retention",
+  "spec": "Why: the whole monitor is captured (src/lib/perception/capture.ts:41 `displaySurface: \"monitor\"`) and every changed frame is stored before vision (src/app/api/vision/route.ts: saveFrame, then describeFrame). Human decision 2026-10-06: store only redacted key moments. P0-7. True pixel redaction is Phase 1, out of scope here.\nWhat:\n1. capture.ts: request `displaySurface: \"window\"`, `monitorTypeSurfaces: \"exclude\"` is NOT used (keep monitors selectable but not preferred): use `displaySurface: \"window\"` plus `selfBrowserSurface: \"exclude\"`, `surfaceSwitching: \"include\"`. Keep the existing halo/rect mapping working when the track settings report `monitor`; when they report `window`, report the surface kind to the onFrame caller (extend CapturedFrame with `surface: \"monitor\" | \"window\" | \"browser\" | \"unknown\"`) so the UI can label it. Update capture tests.\n2. companion/src/main.mts setDisplayMediaRequestHandler (line ~1090) and permissionsGrant.mts: offer `types: [\"window\", \"screen\"]` with windows first; pickPrimarySource stays the fallback when the page asks for a monitor. Tests in companion/src/*.test.ts for the chooser order.\n3. vision route: call describeFrame first, then saveFrame only when at least one returned event is not `routine` (field name per ScreenEventSchema in src/lib/types.ts; if the kind lives in a different field, use that). Routine-only frames answer `{events, frame_ref: null}` and store nothing. Off-record behaviour unchanged (not stored, not sent). The response shape stays compatible for the client (frame_ref may be null; adjust the client store of frame refs and its tests).\n4. src/lib/agents/settings.ts: default retention_days 90 -> 30 (keep the 7/30/90/365 options). Update tests and docs/checks/agent-settings.md line for the default.\n5. docs/checks/capture-scope.md: manual check: a 10-minute capture with the defaults stores only frames tied to non-routine events; no stored frame shows a window outside the chosen app.\nTreat captured screen content as untrusted. No new dependencies. Do not touch README.md, docs/DEPLOY.md, .env.example, CaptureApp.tsx (demo cleanup owns it).",
+  "inputs": [
+    "T-0284"
+  ],
+  "acceptance": [
+    "capture.ts requests displaySurface 'window' and CapturedFrame carries the surface kind; capture tests cover monitor and window settings",
+    "companion display-media handler offers window sources before screens (test in companion/src)",
+    "vision route stores a frame only when the model returns at least one non-routine event; a routine-only or empty result stores nothing and answers frame_ref null (route tests for both, plus the off-record case unchanged)",
+    "default retention_days is 30 with 7/30/90/365 still accepted (settings tests)",
+    "docs/checks/capture-scope.md written; README.md, docs/DEPLOY.md, .env.example untouched",
+    ".claude/hooks/tests-green.sh wt/THIS-TASK exits 0 and `npm run test:companion` exits 0 (state it)"
+  ],
+  "scope": [
+    "src/lib/perception/**",
+    "src/app/api/vision/**",
+    "src/lib/capture/**",
+    "src/lib/agents/settings.ts",
+    "src/lib/agents/settings.test.ts",
+    "companion/src/main.mts",
+    "companion/src/permissionsGrant.mts",
+    "companion/src/permissionsGrant.test.ts",
+    "companion/src/displayMedia.test.ts",
+    "docs/checks/capture-scope.md",
+    "docs/checks/agent-settings.md"
+  ],
+  "depends_on": [],
+  "constraints": {
+    "read_only": true,
+    "budget_turns": 20,
+    "timeout_s": 900
+  },
+  "status": "done",
+  "assigned_to": "claude:A",
+  "worktree": "/Users/k3ntaw/code/ai-apprentice/wt/T-0286",
+  "codex_thread": null,
+  "result": {
+    "summary": "",
+    "verdict": "request_changes",
+    "risks": [
+      {
+        "path": "src/app/api/vision/route.ts",
+        "line": 62,
+        "issue": "Reordering to describeFrame before saveFrame breaks the off-record guarantee. Today saveFrame itself returns {stored:false, reason:'off_record'}, and that return is the only off-record gate before the model call. If the model runs first, off-record frames are sent to the model, which violates 'not stored, not sent'. The spec says off-record is unchanged but gives no separate pre-check.",
+        "severity": "high"
+      },
+      {
+        "path": "src/lib/types.ts",
+        "line": 16,
+        "issue": "There is no 'routine' kind. SCREEN_EVENT_TYPES has 10 types, all substantive (record_opened, field_changed, app_switched, and so on). ScreenEventBase has no importance or kind field. 'Not routine' cannot be evaluated, and the spec's fallback ('use that field') has nothing to point at. Adding one means changing types.ts, the VisionEventSchema and the vision prompt in vision.ts. types.ts is outside scope. Without it, either every event with at least one event counts as non-routine, which makes the change a no-op, or the implementer invents a heuristic.",
+        "severity": "high"
+      },
+      {
+        "path": "companion/src/main.mts",
+        "line": 1105,
+        "issue": "Electron's setDisplayMediaRequestHandler takes exactly one source and has no chooser here (DISPLAY_MEDIA_OPTIONS useSystemPicker:false). 'Offer window sources first' therefore means silently auto-picking some window. That could be the wrong app, the companion's own overlay, or the control room. The user never 'chooses an app', so the check that no stored frame shows a window outside the chosen app has nothing behind it. The spec needs either a picker UI or the system picker (useSystemPicker:true), and a rule for excluding the companion's own windows.",
+        "severity": "high"
+      },
+      {
+        "path": "src/lib/agents/settings.ts",
+        "line": 55,
+        "issue": "Changing the default from 90 to 30 silently shortens retention for every existing agent whose settings are {} or lack retention_days. admin.ts:174 applies resolveSettings(...).retention_days in the cron, so the next /api/cron/retention run deletes frames that are 30 to 90 days old. That is irreversible deletion with no migration, no notice and no rollback plan. Alternatively the DB or migration default may stay at 90 and disagree with the code. The spec should say whether this is intended and add a rollback or grace note.",
+        "severity": "high"
+      },
+      {
+        "path": "companion/src/displayMedia.test.ts",
+        "line": 0,
+        "issue": "Scope and acceptance name files that do not exist: companion/src/permissionsGrant.test.ts and companion/src/displayMedia.test.ts. The real test file is companion/src/permissions-grant.test.ts (it covers pickPrimarySource and DISPLAY_MEDIA_OPTIONS), and it is not in scope. The implementer would either create stray files or write outside scope. The chooser logic in main.mts is inline and untestable, so it needs extracting into permissionsGrant.mts as a pure function.",
+        "severity": "med"
+      },
+      {
+        "path": "src/lib/companion/stepAside.ts",
+        "line": 2,
+        "issue": "Hidden coupling outside scope. stepAside.ts and TeachApp.tsx (monitorRef/MONITOR_WARNING, line 428) assume the companion share is a 'monitor', and companion/transport and fakeDesktop.testkit rely on that. With window capture, halo rects map to a window, not the primary display, so halos are wrong or the share shows a warning every time. TeachApp and the companion path are not in scope, so the 'halo/rect mapping keeps working' criterion has no owner. Also, selfBrowserSurface and surfaceSwitching are browser-only hints, and the companion path ignores them.",
+        "severity": "med"
+      }
+    ],
+    "suggested_spec_changes": [
+      "Define 'routine' concretely. Either add an explicit field to VisionEventSchema and the vision prompt (and widen scope to src/lib/types.ts), or state a deterministic rule on existing event types. Add a vision.test.ts case for the new field.",
+      "Keep the off-record check before any model call. Add a store-level isOffRecord(session, t) check, or split saveFrame into check and write. Test that off-record frames never reach describeFrame, and keep the skipped:'off_record' response shape.",
+      "Specify how the companion lets the user pick a window: use useSystemPicker:true, or build a chooser, or default to a named app. Exclude the companion's own windows from the list. Extract the source ordering into a pure function in permissionsGrant.mts and test it in the existing companion/src/permissions-grant.test.ts, correcting the file names in scope.",
+      "Add TeachApp.tsx (monitorRef/warning), src/lib/companion/stepAside.ts and the nullable frame_ref consumers to scope or to an explicit follow-up, or state that they stay untouched and the halo mapping falls back to the warning for window surfaces.",
+      "For retention 90 to 30: say whether existing agents with unset retention are migrated to keep 90 (write 90 explicitly) or accepted as shortened. Check the DB default and migration for retention_days. Add a note that the cron deletion is irreversible.",
+      "Decide the frame_ref null contract (omit vs null) in the vision route, the controller type and bus.publishVision. List the readers that must handle a missing ref.",
+      "Add a rollback switch, for example an env or agent setting 'store_all_frames', so monitor capture and store-everything can be restored without a revert."
+    ],
+    "truncated": {
+      "reason": "over MAX_RESULT_CHARS",
+      "original_chars": 7054,
+      "trimmed": {
+        "risks": 3
+      }
+    },
+    "confidence": 0.0,
+    "provenance": [
+      "repo"
+    ]
+  },
+  "events": [
+    {
+      "ts": 1791243615.097449,
+      "packet_meta": {
+        "prefix_sha": "37a97024d931",
+        "prefix_chars": 686,
+        "suffix_chars": 4101,
+        "dynamic_sections": [
+          "spec",
+          "acceptance",
+          "scope",
+          "depends_on",
+          "existing tests",
+          "complexity",
+          "tier"
+        ]
+      }
+    },
+    {
+      "ts": 1791243615.1193972,
+      "packet_meta": {
+        "chars": 4100,
+        "est_tokens": 1025,
+        "presented_tokens": 1025,
+        "sections": {
+          "_preamble": {
+            "chars": 69,
+            "est_tokens": 17,
+            "sha256": "46d581f6c3aefd687b7c77eced84e97387e6e3654bf68db885275517c3c6dcd3"
+          },
+          "spec": {
+            "chars": 2135,
+            "est_tokens": 533,
+            "sha256": "8d79da20823e72938479831f5dd90ac44abe7d3e4708297ed45b7408e34dabbc"
+          },
+          "acceptance": {
+            "chars": 739,
+            "est_tokens": 184,
+            "sha256": "5be9dcf43aa8c4026c5b65b5cba5041700d0c840862a84823d562a1464158bb8"
+          },
+          "scope": {
+            "chars": 344,
+            "est_tokens": 86,
+            "sha256": "2e0efb69711eb06ddbbb6f31d3e1d54cc4b125343b3d89c839fd40f3a975b4c6"
+          },
+          "depends_on": {
+            "chars": 23,
+            "est_tokens": 5,
+            "sha256": "a1f80c68ea5dfed4c164f0a1b57674c850b8e75df45a22fc0e938ae8cbfc28ab"
+          },
+          "existing tests": {
+            "chars": 762,
+            "est_tokens": 190,
+            "sha256": "4d8b9840bd1b525d8f359980b5fd3ee1afb3b2d0bd7a5a49884245e0dea32c16"
+          },
+          "complexity": {
+            "chars": 16,
+            "est_tokens": 4,
+            "sha256": "48a0d75060c96df5c16f0e3782f148ab3629f08b4272ab15542e3f44caa02c94"
+          },
+          "tier": {
+            "chars": 12,
+            "est_tokens": 3,
+            "sha256": "f3170b9573b83cb0aed2288100dd1360a1fff6c7bb13cd6b6615eefa9fe0d302"
+          }
+        },
+        "hash": "86dcece9231c",
+        "version": "86dcece9231c",
+        "candidate_known": false,
+        "base": "bc60ad3d015b",
+        "sources": "task@T-0284 tree@HEAD",
+        "prefix_sha": "37a97024d931",
+        "prefix_chars": 686,
+        "suffix_chars": 4101,
+        "dynamic_sections": [
+          "spec",
+          "acceptance",
+          "scope",
+          "depends_on",
+          "existing tests",
+          "complexity",
+          "tier"
+        ],
+        "instruction_tokens": 171,
+        "instruction_tokens_modular": 171,
+        "role": "spec_review",
+        "tool_tokens_disclosed": 1722,
+        "tool_tokens_minimal": 1722,
+        "tool_allowlist_source": "minimal",
+        "skills_exposed": [
+          "executor/implement-spec",
+          "planner/memory",
+          "planner/orchestrate",
+          "planner/resume",
+          "planner/write-spec",
+          "review/adversarial-review",
+          "review/challenge",
+          "scout/repo-map",
+          "scout/test-gap",
+          "scout/trace-callers",
+          "triage/classify",
+          "triage/compact-memory"
+        ],
+        "skill_tokens_l0": 219,
+        "skills_selected": [
+          "review/adversarial-review"
+        ],
+        "skill_tokens_selected_l0": 16,
+        "skill_tokens_selected_l2": 67,
+        "skill_tokens_presented_l2": 0,
+        "skill_routing_mode": "shadow"
+      }
+    },
+    {
+      "ts": 1791243615.857168,
+      "status": "running",
+      "assigned_to": "claude:A",
+      "worktree": "/Users/k3ntaw/code/ai-apprentice/wt/T-0286",
+      "claimed_at": 1791243615.856895
+    },
+    {
+      "ts": 1791243615.8583412,
+      "account": "A"
+    },
+    {
+      "ts": 1791243617.72352,
+      "pid": 12358,
+      "account": "A"
+    },
+    {
+      "ts": 1791243657.73908,
+      "packet_meta": {
+        "chars": 4100,
+        "est_tokens": 1025,
+        "presented_tokens": 1025,
+        "sections": {
+          "_preamble": {
+            "chars": 69,
+            "est_tokens": 17,
+            "sha256": "46d581f6c3aefd687b7c77eced84e97387e6e3654bf68db885275517c3c6dcd3"
+          },
+          "spec": {
+            "chars": 2135,
+            "est_tokens": 533,
+            "sha256": "8d79da20823e72938479831f5dd90ac44abe7d3e4708297ed45b7408e34dabbc"
+          },
+          "acceptance": {
+            "chars": 739,
+            "est_tokens": 184,
+            "sha256": "5be9dcf43aa8c4026c5b65b5cba5041700d0c840862a84823d562a1464158bb8"
+          },
+          "scope": {
+            "chars": 344,
+            "est_tokens": 86,
+            "sha256": "2e0efb69711eb06ddbbb6f31d3e1d54cc4b125343b3d89c839fd40f3a975b4c6"
+          },
+          "depends_on": {
+            "chars": 23,
+            "est_tokens": 5,
+            "sha256": "a1f80c68ea5dfed4c164f0a1b57674c850b8e75df45a22fc0e938ae8cbfc28ab"
+          },
+          "existing tests": {
+            "chars": 762,
+            "est_tokens": 190,
+            "sha256": "4d8b9840bd1b525d8f359980b5fd3ee1afb3b2d0bd7a5a49884245e0dea32c16"
+          },
+          "complexity": {
+            "chars": 16,
+            "est_tokens": 4,
+            "sha256": "48a0d75060c96df5c16f0e3782f148ab3629f08b4272ab15542e3f44caa02c94"
+          },
+          "tier": {
+            "chars": 12,
+            "est_tokens": 3,
+            "sha256": "f3170b9573b83cb0aed2288100dd1360a1fff6c7bb13cd6b6615eefa9fe0d302"
+          }
+        },
+        "hash": "86dcece9231c",
+        "version": "86dcece9231c",
+        "candidate_known": false,
+        "base": "bc60ad3d015b",
+        "sources": "task@T-0284 tree@HEAD",
+        "prefix_sha": "37a97024d931",
+        "prefix_chars": 686,
+        "suffix_chars": 4101,
+        "dynamic_sections": [
+          "spec",
+          "acceptance",
+          "scope",
+          "depends_on",
+          "existing tests",
+          "complexity",
+          "tier"
+        ],
+        "instruction_tokens": 171,
+        "instruction_tokens_modular": 171,
+        "role": "spec_review",
+        "tool_tokens_disclosed": 1722,
+        "tool_tokens_minimal": 1722,
+        "tool_allowlist_source": "minimal",
+        "skills_exposed": [
+          "executor/implement-spec",
+          "planner/memory",
+          "planner/orchestrate",
+          "planner/resume",
+          "planner/write-spec",
+          "review/adversarial-review",
+          "review/challenge",
+          "scout/repo-map",
+          "scout/test-gap",
+          "scout/trace-callers",
+          "triage/classify",
+          "triage/compact-memory"
+        ],
+        "skill_tokens_l0": 219,
+        "skills_selected": [
+          "review/adversarial-review"
+        ],
+        "skill_tokens_selected_l0": 16,
+        "skill_tokens_selected_l2": 67,
+        "skill_tokens_presented_l2": 0,
+        "skill_routing_mode": "shadow",
+        "session_id": "710ec871-cc40-4d23-8467-a27e56f1f03f"
+      }
+    },
+    {
+      "ts": 1791243657.757758,
+      "packet_meta": {
+        "chars": 4100,
+        "est_tokens": 1025,
+        "presented_tokens": 1025,
+        "sections": {
+          "_preamble": {
+            "chars": 69,
+            "est_tokens": 17,
+            "sha256": "46d581f6c3aefd687b7c77eced84e97387e6e3654bf68db885275517c3c6dcd3"
+          },
+          "spec": {
+            "chars": 2135,
+            "est_tokens": 533,
+            "sha256": "8d79da20823e72938479831f5dd90ac44abe7d3e4708297ed45b7408e34dabbc"
+          },
+          "acceptance": {
+            "chars": 739,
+            "est_tokens": 184,
+            "sha256": "5be9dcf43aa8c4026c5b65b5cba5041700d0c840862a84823d562a1464158bb8"
+          },
+          "scope": {
+            "chars": 344,
+            "est_tokens": 86,
+            "sha256": "2e0efb69711eb06ddbbb6f31d3e1d54cc4b125343b3d89c839fd40f3a975b4c6"
+          },
+          "depends_on": {
+            "chars": 23,
+            "est_tokens": 5,
+            "sha256": "a1f80c68ea5dfed4c164f0a1b57674c850b8e75df45a22fc0e938ae8cbfc28ab"
+          },
+          "existing tests": {
+            "chars": 762,
+            "est_tokens": 190,
+            "sha256": "4d8b9840bd1b525d8f359980b5fd3ee1afb3b2d0bd7a5a49884245e0dea32c16"
+          },
+          "complexity": {
+            "chars": 16,
+            "est_tokens": 4,
+            "sha256": "48a0d75060c96df5c16f0e3782f148ab3629f08b4272ab15542e3f44caa02c94"
+          },
+          "tier": {
+            "chars": 12,
+            "est_tokens": 3,
+            "sha256": "f3170b9573b83cb0aed2288100dd1360a1fff6c7bb13cd6b6615eefa9fe0d302"
+          }
+        },
+        "hash": "86dcece9231c",
+        "version": "86dcece9231c",
+        "candidate_known": false,
+        "base": "bc60ad3d015b",
+        "sources": "task@T-0284 tree@HEAD",
+        "prefix_sha": "37a97024d931",
+        "prefix_chars": 686,
+        "suffix_chars": 4101,
+        "dynamic_sections": [
+          "spec",
+          "acceptance",
+          "scope",
+          "depends_on",
+          "existing tests",
+          "complexity",
+          "tier"
+        ],
+        "instruction_tokens": 171,
+        "instruction_tokens_modular": 171,
+        "role": "spec_review",
+        "tool_tokens_disclosed": 1722,
+        "tool_tokens_minimal": 1722,
+        "tool_allowlist_source": "minimal",
+        "skills_exposed": [
+          "executor/implement-spec",
+          "planner/memory",
+          "planner/orchestrate",
+          "planner/resume",
+          "planner/write-spec",
+          "review/adversarial-review",
+          "review/challenge",
+          "scout/repo-map",
+          "scout/test-gap",
+          "scout/trace-callers",
+          "triage/classify",
+          "triage/compact-memory"
+        ],
+        "skill_tokens_l0": 219,
+        "skills_selected": [
+          "review/adversarial-review"
+        ],
+        "skill_tokens_selected_l0": 16,
+        "skill_tokens_selected_l2": 67,
+        "skill_tokens_presented_l2": 0,
+        "skill_routing_mode": "shadow",
+        "session_id": "710ec871-cc40-4d23-8467-a27e56f1f03f",
+        "skills_used": [],
+        "skill_tokens_l2": 0
+      },
+      "pipeline": {
+        "skills_used": []
+      }
+    },
+    {
+      "ts": 1791243659.439106,
+      "status": "done",
+      "result": {
+        "summary": "",
+        "verdict": "request_changes",
+        "risks": [
+          {
+            "path": "src/app/api/vision/route.ts",
+            "line": 62,
+            "issue": "Reordering to describeFrame before saveFrame breaks the off-record guarantee. Today saveFrame itself returns {stored:false, reason:'off_record'}, and that return is the only off-record gate before the model call. If the model runs first, off-record frames are sent to the model, which violates 'not stored, not sent'. The spec says off-record is unchanged but gives no separate pre-check.",
+            "severity": "high"
+          },
+          {
+            "path": "src/lib/types.ts",
+            "line": 16,
+            "issue": "There is no 'routine' kind. SCREEN_EVENT_TYPES has 10 types, all substantive (record_opened, field_changed, app_switched, and so on). ScreenEventBase has no importance or kind field. 'Not routine' cannot be evaluated, and the spec's fallback ('use that field') has nothing to point at. Adding one means changing types.ts, the VisionEventSchema and the vision prompt in vision.ts. types.ts is outside scope. Without it, either every event with at least one event counts as non-routine, which makes the change a no-op, or the implementer invents a heuristic.",
+            "severity": "high"
+          },
+          {
+            "path": "companion/src/main.mts",
+            "line": 1105,
+            "issue": "Electron's setDisplayMediaRequestHandler takes exactly one source and has no chooser here (DISPLAY_MEDIA_OPTIONS useSystemPicker:false). 'Offer window sources first' therefore means silently auto-picking some window. That could be the wrong app, the companion's own overlay, or the control room. The user never 'chooses an app', so the check that no stored frame shows a window outside the chosen app has nothing behind it. The spec needs either a picker UI or the system picker (useSystemPicker:true), and a rule for excluding the companion's own windows.",
+            "severity": "high"
+          },
+          {
+            "path": "src/lib/agents/settings.ts",
+            "line": 55,
+            "issue": "Changing the default from 90 to 30 silently shortens retention for every existing agent whose settings are {} or lack retention_days. admin.ts:174 applies resolveSettings(...).retention_days in the cron, so the next /api/cron/retention run deletes frames that are 30 to 90 days old. That is irreversible deletion with no migration, no notice and no rollback plan. Alternatively the DB or migration default may stay at 90 and disagree with the code. The spec should say whether this is intended and add a rollback or grace note.",
+            "severity": "high"
+          },
+          {
+            "path": "companion/src/displayMedia.test.ts",
+            "line": 0,
+            "issue": "Scope and acceptance name files that do not exist: companion/src/permissionsGrant.test.ts and companion/src/displayMedia.test.ts. The real test file is companion/src/permissions-grant.test.ts (it covers pickPrimarySource and DISPLAY_MEDIA_OPTIONS), and it is not in scope. The implementer would either create stray files or write outside scope. The chooser logic in main.mts is inline and untestable, so it needs extracting into permissionsGrant.mts as a pure function.",
+            "severity": "med"
+          },
+          {
+            "path": "src/lib/companion/stepAside.ts",
+            "line": 2,
+            "issue": "Hidden coupling outside scope. stepAside.ts and TeachApp.tsx (monitorRef/MONITOR_WARNING, line 428) assume the companion share is a 'monitor', and companion/transport and fakeDesktop.testkit rely on that. With window capture, halo rects map to a window, not the primary display, so halos are wrong or the share shows a warning every time. TeachApp and the companion path are not in scope, so the 'halo/rect mapping keeps working' criterion has no owner. Also, selfBrowserSurface and surfaceSwitching are browser-only hints, and the companion path ignores them.",
+            "severity": "med"
+          }
+        ],
+        "suggested_spec_changes": [
+          "Define 'routine' concretely. Either add an explicit field to VisionEventSchema and the vision prompt (and widen scope to src/lib/types.ts), or state a deterministic rule on existing event types. Add a vision.test.ts case for the new field.",
+          "Keep the off-record check before any model call. Add a store-level isOffRecord(session, t) check, or split saveFrame into check and write. Test that off-record frames never reach describeFrame, and keep the skipped:'off_record' response shape.",
+          "Specify how the companion lets the user pick a window: use useSystemPicker:true, or build a chooser, or default to a named app. Exclude the companion's own windows from the list. Extract the source ordering into a pure function in permissionsGrant.mts and test it in the existing companion/src/permissions-grant.test.ts, correcting the file names in scope.",
+          "Add TeachApp.tsx (monitorRef/warning), src/lib/companion/stepAside.ts and the nullable frame_ref consumers to scope or to an explicit follow-up, or state that they stay untouched and the halo mapping falls back to the warning for window surfaces.",
+          "For retention 90 to 30: say whether existing agents with unset retention are migrated to keep 90 (write 90 explicitly) or accepted as shortened. Check the DB default and migration for retention_days. Add a note that the cron deletion is irreversible.",
+          "Decide the frame_ref null contract (omit vs null) in the vision route, the controller type and bus.publishVision. List the readers that must handle a missing ref.",
+          "Add a rollback switch, for example an env or agent setting 'store_all_frames', so monitor capture and store-everything can be restored without a revert."
+        ],
+        "truncated": {
+          "reason": "over MAX_RESULT_CHARS",
+          "original_chars": 7054,
+          "trimmed": {
+            "risks": 3
+          }
+        },
+        "confidence": 0.0,
+        "provenance": [
+          "repo"
+        ]
+      }
+    },
+    {
+      "ts": 1791243659.4425972,
+      "spec_review_verdict": "request_changes",
+      "spec_review_risks": [
+        {
+          "path": "src/app/api/vision/route.ts",
+          "line": 62,
+          "issue": "Reordering to describeFrame before saveFrame breaks the off-record guarantee. Today saveFrame itself returns {stored:false, reason:'off_record'}, and that return is the only off-record gate before the model call. If the model runs first, off-record frames are sent to the model, which violates 'not stored, not sent'. The spec says off-record is unchanged but gives no separate pre-check.",
+          "severity": "high"
+        },
+        {
+          "path": "src/lib/types.ts",
+          "line": 16,
+          "issue": "There is no 'routine' kind. SCREEN_EVENT_TYPES has 10 types, all substantive (record_opened, field_changed, app_switched, and so on). ScreenEventBase has no importance or kind field. 'Not routine' cannot be evaluated, and the spec's fallback ('use that field') has nothing to point at. Adding one means changing types.ts, the VisionEventSchema and the vision prompt in vision.ts. types.ts is outside scope. Without it, either every event with at least one event counts as non-routine, which makes the change a no-op, or the implementer invents a heuristic.",
+          "severity": "high"
+        },
+        {
+          "path": "companion/src/main.mts",
+          "line": 1105,
+          "issue": "Electron's setDisplayMediaRequestHandler takes exactly one source and has no chooser here (DISPLAY_MEDIA_OPTIONS useSystemPicker:false). 'Offer window sources first' therefore means silently auto-picking some window. That could be the wrong app, the companion's own overlay, or the control room. The user never 'chooses an app', so the check that no stored frame shows a window outside the chosen app has nothing behind it. The spec needs either a picker UI or the system picker (useSystemPicker:true), and a rule for excluding the companion's own windows.",
+          "severity": "high"
+        },
+        {
+          "path": "src/lib/agents/settings.ts",
+          "line": 55,
+          "issue": "Changing the default from 90 to 30 silently shortens retention for every existing agent whose settings are {} or lack retention_days. admin.ts:174 applies resolveSettings(...).retention_days in the cron, so the next /api/cron/retention run deletes frames that are 30 to 90 days old. That is irreversible deletion with no migration, no notice and no rollback plan. Alternatively the DB or migration default may stay at 90 and disagree with the code. The spec should say whether this is intended and add a rollback or grace note.",
+          "severity": "high"
+        },
+        {
+          "path": "companion/src/displayMedia.test.ts",
+          "line": 0,
+          "issue": "Scope and acceptance name files that do not exist: companion/src/permissionsGrant.test.ts and companion/src/displayMedia.test.ts. The real test file is companion/src/permissions-grant.test.ts (it covers pickPrimarySource and DISPLAY_MEDIA_OPTIONS), and it is not in scope. The implementer would either create stray files or write outside scope. The chooser logic in main.mts is inline and untestable, so it needs extracting into permissionsGrant.mts as a pure function.",
+          "severity": "med"
+        },
+        {
+          "path": "src/lib/companion/stepAside.ts",
+          "line": 2,
+          "issue": "Hidden coupling outside scope. stepAside.ts and TeachApp.tsx (monitorRef/MONITOR_WARNING, line 428) assume the companion share is a 'monitor', and companion/transport and fakeDesktop.testkit rely on that. With window capture, halo rects map to a window, not the primary display, so halos are wrong or the share shows a warning every time. TeachApp and the companion path are not in scope, so the 'halo/rect mapping keeps working' criterion has no owner. Also, selfBrowserSurface and surfaceSwitching are browser-only hints, and the companion path ignores them.",
+          "severity": "med"
+        },
+        {
+          "path": "src/lib/capture/controller.ts",
+          "line": 644,
+          "issue": "frame_ref becoming null touches consumers outside scope. controller.ts:53 types frame_ref as optional string, not nullable, and downstream readers (workmap synthesize, StepMoment, TeachApp, intervention) may assume a ref exists for steps. Routine-only frames drop their ref, and events from non-routine frames are linked to one frame only. The spec should say what the UI shows for refless events and that bus.publishVision accepts undefined or null. It should also say whether the type is changed to nullable or the field is omitted. 'Adjust the client store' is vague.",
+          "severity": "med"
+        },
+        {
+          "path": "src/lib/perception/route.test.ts",
+          "line": 60,
+          "issue": "Existing route tests (off_record skipped, saved frame_ref) assume save-then-describe. They need to be rewritten against the new order, and the spec does not say whether skipped:'off_record' stays in the response shape. Also: when ANTHROPIC_API_KEY is missing, events is [], so nothing is ever stored in that mode. When describeFrame returns result.error, the 502 means the frame is lost with no retry. The spec should state both behaviours explicitly.",
+          "severity": "low"
+        },
+        {
+          "path": "docs/checks/capture-scope.md",
+          "line": 0,
+          "issue": "Acceptance is only manual. The 10-minute capture and 'no window outside the chosen app' check cannot be verified by tests, and there is no automated assertion that a window-surface frame is what is stored. The 'tests-green.sh wt/THIS-TASK' and 'npm run test:companion' criteria are fine. There is also no rollback or feature flag to restore the monitor capture and store-everything behaviour if the model's routine labelling proves too aggressive.",
+          "severity": "low"
+        }
+      ]
+    }
+  ],
+  "packet_meta": {
+    "chars": 4100,
+    "est_tokens": 1025,
+    "presented_tokens": 1025,
+    "sections": {
+      "_preamble": {
+        "chars": 69,
+        "est_tokens": 17,
+        "sha256": "46d581f6c3aefd687b7c77eced84e97387e6e3654bf68db885275517c3c6dcd3"
+      },
+      "spec": {
+        "chars": 2135,
+        "est_tokens": 533,
+        "sha256": "8d79da20823e72938479831f5dd90ac44abe7d3e4708297ed45b7408e34dabbc"
+      },
+      "acceptance": {
+        "chars": 739,
+        "est_tokens": 184,
+        "sha256": "5be9dcf43aa8c4026c5b65b5cba5041700d0c840862a84823d562a1464158bb8"
+      },
+      "scope": {
+        "chars": 344,
+        "est_tokens": 86,
+        "sha256": "2e0efb69711eb06ddbbb6f31d3e1d54cc4b125343b3d89c839fd40f3a975b4c6"
+      },
+      "depends_on": {
+        "chars": 23,
+        "est_tokens": 5,
+        "sha256": "a1f80c68ea5dfed4c164f0a1b57674c850b8e75df45a22fc0e938ae8cbfc28ab"
+      },
+      "existing tests": {
+        "chars": 762,
+        "est_tokens": 190,
+        "sha256": "4d8b9840bd1b525d8f359980b5fd3ee1afb3b2d0bd7a5a49884245e0dea32c16"
+      },
+      "complexity": {
+        "chars": 16,
+        "est_tokens": 4,
+        "sha256": "48a0d75060c96df5c16f0e3782f148ab3629f08b4272ab15542e3f44caa02c94"
+      },
+      "tier": {
+        "chars": 12,
+        "est_tokens": 3,
+        "sha256": "f3170b9573b83cb0aed2288100dd1360a1fff6c7bb13cd6b6615eefa9fe0d302"
+      }
+    },
+    "hash": "86dcece9231c",
+    "version": "86dcece9231c",
+    "candidate_known": false,
+    "base": "bc60ad3d015b",
+    "sources": "task@T-0284 tree@HEAD",
+    "prefix_sha": "37a97024d931",
+    "prefix_chars": 686,
+    "suffix_chars": 4101,
+    "dynamic_sections": [
+      "spec",
+      "acceptance",
+      "scope",
+      "depends_on",
+      "existing tests",
+      "complexity",
+      "tier"
+    ],
+    "instruction_tokens": 171,
+    "instruction_tokens_modular": 171,
+    "role": "spec_review",
+    "tool_tokens_disclosed": 1722,
+    "tool_tokens_minimal": 1722,
+    "tool_allowlist_source": "minimal",
+    "skills_exposed": [
+      "executor/implement-spec",
+      "planner/memory",
+      "planner/orchestrate",
+      "planner/resume",
+      "planner/write-spec",
+      "review/adversarial-review",
+      "review/challenge",
+      "scout/repo-map",
+      "scout/test-gap",
+      "scout/trace-callers",
+      "triage/classify",
+      "triage/compact-memory"
+    ],
+    "skill_tokens_l0": 219,
+    "skills_selected": [
+      "review/adversarial-review"
+    ],
+    "skill_tokens_selected_l0": 16,
+    "skill_tokens_selected_l2": 67,
+    "skill_tokens_presented_l2": 0,
+    "skill_routing_mode": "shadow",
+    "session_id": "710ec871-cc40-4d23-8467-a27e56f1f03f",
+    "skills_used": [],
+    "skill_tokens_l2": 0
+  },
+  "claimed_at": 1791243615.856895,
+  "account": "A",
+  "pid": 12358,
+  "pipeline": {
+    "skills_used": []
+  },
+  "spec_review_verdict": "request_changes",
+  "spec_review_risks": [
+    {
+      "path": "src/app/api/vision/route.ts",
+      "line": 62,
+      "issue": "Reordering to describeFrame before saveFrame breaks the off-record guarantee. Today saveFrame itself returns {stored:false, reason:'off_record'}, and that return is the only off-record gate before the model call. If the model runs first, off-record frames are sent to the model, which violates 'not stored, not sent'. The spec says off-record is unchanged but gives no separate pre-check.",
+      "severity": "high"
+    },
+    {
+      "path": "src/lib/types.ts",
+      "line": 16,
+      "issue": "There is no 'routine' kind. SCREEN_EVENT_TYPES has 10 types, all substantive (record_opened, field_changed, app_switched, and so on). ScreenEventBase has no importance or kind field. 'Not routine' cannot be evaluated, and the spec's fallback ('use that field') has nothing to point at. Adding one means changing types.ts, the VisionEventSchema and the vision prompt in vision.ts. types.ts is outside scope. Without it, either every event with at least one event counts as non-routine, which makes the change a no-op, or the implementer invents a heuristic.",
+      "severity": "high"
+    },
+    {
+      "path": "companion/src/main.mts",
+      "line": 1105,
+      "issue": "Electron's setDisplayMediaRequestHandler takes exactly one source and has no chooser here (DISPLAY_MEDIA_OPTIONS useSystemPicker:false). 'Offer window sources first' therefore means silently auto-picking some window. That could be the wrong app, the companion's own overlay, or the control room. The user never 'chooses an app', so the check that no stored frame shows a window outside the chosen app has nothing behind it. The spec needs either a picker UI or the system picker (useSystemPicker:true), and a rule for excluding the companion's own windows.",
+      "severity": "high"
+    },
+    {
+      "path": "src/lib/agents/settings.ts",
+      "line": 55,
+      "issue": "Changing the default from 90 to 30 silently shortens retention for every existing agent whose settings are {} or lack retention_days. admin.ts:174 applies resolveSettings(...).retention_days in the cron, so the next /api/cron/retention run deletes frames that are 30 to 90 days old. That is irreversible deletion with no migration, no notice and no rollback plan. Alternatively the DB or migration default may stay at 90 and disagree with the code. The spec should say whether this is intended and add a rollback or grace note.",
+      "severity": "high"
+    },
+    {
+      "path": "companion/src/displayMedia.test.ts",
+      "line": 0,
+      "issue": "Scope and acceptance name files that do not exist: companion/src/permissionsGrant.test.ts and companion/src/displayMedia.test.ts. The real test file is companion/src/permissions-grant.test.ts (it covers pickPrimarySource and DISPLAY_MEDIA_OPTIONS), and it is not in scope. The implementer would either create stray files or write outside scope. The chooser logic in main.mts is inline and untestable, so it needs extracting into permissionsGrant.mts as a pure function.",
+      "severity": "med"
+    },
+    {
+      "path": "src/lib/companion/stepAside.ts",
+      "line": 2,
+      "issue": "Hidden coupling outside scope. stepAside.ts and TeachApp.tsx (monitorRef/MONITOR_WARNING, line 428) assume the companion share is a 'monitor', and companion/transport and fakeDesktop.testkit rely on that. With window capture, halo rects map to a window, not the primary display, so halos are wrong or the share shows a warning every time. TeachApp and the companion path are not in scope, so the 'halo/rect mapping keeps working' criterion has no owner. Also, selfBrowserSurface and surfaceSwitching are browser-only hints, and the companion path ignores them.",
+      "severity": "med"
+    },
+    {
+      "path": "src/lib/capture/controller.ts",
+      "line": 644,
+      "issue": "frame_ref becoming null touches consumers outside scope. controller.ts:53 types frame_ref as optional string, not nullable, and downstream readers (workmap synthesize, StepMoment, TeachApp, intervention) may assume a ref exists for steps. Routine-only frames drop their ref, and events from non-routine frames are linked to one frame only. The spec should say what the UI shows for refless events and that bus.publishVision accepts undefined or null. It should also say whether the type is changed to nullable or the field is omitted. 'Adjust the client store' is vague.",
+      "severity": "med"
+    },
+    {
+      "path": "src/lib/perception/route.test.ts",
+      "line": 60,
+      "issue": "Existing route tests (off_record skipped, saved frame_ref) assume save-then-describe. They need to be rewritten against the new order, and the spec does not say whether skipped:'off_record' stays in the response shape. Also: when ANTHROPIC_API_KEY is missing, events is [], so nothing is ever stored in that mode. When describeFrame returns result.error, the 502 means the frame is lost with no retry. The spec should state both behaviours explicitly.",
+      "severity": "low"
+    },
+    {
+      "path": "docs/checks/capture-scope.md",
+      "line": 0,
+      "issue": "Acceptance is only manual. The 10-minute capture and 'no window outside the chosen app' check cannot be verified by tests, and there is no automated assertion that a window-surface frame is what is stored. The 'tests-green.sh wt/THIS-TASK' and 'npm run test:companion' criteria are fine. There is also no rollback or feature flag to restore the monitor capture and store-everything behaviour if the model's routine labelling proves too aggressive.",
+      "severity": "low"
+    }
+  ]
+}

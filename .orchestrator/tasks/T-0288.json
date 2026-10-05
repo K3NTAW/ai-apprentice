@@ -1,0 +1,654 @@
+{
+  "id": "T-0288",
+  "created_at": 1791243638.09179,
+  "parent": "T-0280",
+  "role": "execute",
+  "tier": "opus",
+  "complexity": 3,
+  "title": "Legal minimum drafts as documents: privacy policy, imprint placeholder, subprocessor list, DPA and beta agreement templates",
+  "spec": "Why: marketing/app/privacy/page.tsx:7 and imprint/page.tsx:7 are placeholders; personal data cannot legally be collected from outside users (roadmap 3.3, P0-9). Human decisions 2026-10-06: NO legal entity exists yet; drafts only, unpublished, with \"[entity to be founded]\" placeholders; product name, domain and US-vs-EU hosting are open (use \"[product name]\", \"[domain]\"). The product is a GENERAL tool for any team, globally, English-first: no country or industry niche in the text.\nWhat: write under docs/legal/ (Markdown, plain English, no legal advice claims):\n1. privacy-policy.md: controller \"[entity to be founded], Switzerland\"; what is processed (account email, screen frames of the chosen window, transcripts, screen events, Work Maps, usage counters); purposes; legal bases (Swiss nFADP and EU GDPR Art. 6(1)(b) and (f), consent for Teach practice mode which is opt-in and private to the learner); retention (frames per workspace setting, default 30 days; transcripts and Work Maps until deleted by the workspace); recipients = the subprocessor list; international transfers (US vendors under DPF/SCCs, hosting region \"[US or EU, to be decided]\"); rights; off-the-record and redaction described factually (frames are NOT redacted yet, say so).\n2. imprint.md: placeholder block with the fields Swiss and German law require (name, address, contact, register/VAT once founded), all as \"[...]\".\n3. subprocessors.md: table derived from the code: Supabase (auth, Postgres, storage), Vercel (hosting, functions, cron), Anthropic (vision, decisions, Work Map), ElevenLabs (voice agents) and its agent LLM provider Google (gemini-2.5-flash, src/lib/voice/createAgents.ts), GitHub (desktop releases), Sentry (error tracking, EU, once enabled), optional Presidio (self-hosted, no vendor), Jev/TypeSafe AI (optional, only when JEV_API_KEY is set). Columns: purpose, data categories, region, DPA link placeholder.\n4. dpa-template.md and beta-agreement-template.md: short templates with the clauses a design partner expects (roles, instructions, subprocessors, security measures, deletion at end, no training on customer data, beta disclaimer), placeholders throughout.\n5. docs/legal/README.md: status \"UNPUBLISHED DRAFTS, not reviewed by a lawyer, no entity yet\", what must be true before publishing, and a one-line pointer to the roadmap decision 5.6.\nDo not touch marketing/**, README.md, docs/DEPLOY.md. Cite the code paths for every factual claim about processing.",
+  "inputs": [],
+  "acceptance": [
+    "docs/legal/{README,privacy-policy,imprint,subprocessors,dpa-template,beta-agreement-template}.md exist, English, general (no country or industry niche), every unknown as a bracketed placeholder",
+    "subprocessors.md lists every external processor the code calls (Supabase, Vercel, Anthropic, ElevenLabs, Google via ElevenLabs, GitHub, Sentry, optional Presidio and Jev) with purpose, data categories, region",
+    "privacy-policy.md states factually that frames are not yet redacted, Teach is opt-in and private to the learner, default frame retention 30 days",
+    "marketing/** untouched (a guard: git diff --stat shows no marketing files)",
+    ".claude/hooks/tests-green.sh wt/THIS-TASK exits 0"
+  ],
+  "scope": [
+    "docs/legal/**"
+  ],
+  "depends_on": [],
+  "constraints": {
+    "read_only": false,
+    "budget_turns": 40,
+    "timeout_s": 1800,
+    "goal_branch": "goal/T-0280",
+    "task_class": "mechanical",
+    "route": "straightforward",
+    "read_scope": [
+      "src/lib/voice/createAgents.ts",
+      "src/lib/agents/settings.ts",
+      "src/lib/redact/**",
+      "src/app/api/**",
+      "marketing/app/privacy/page.tsx",
+      "marketing/app/imprint/page.tsx",
+      ".orchestrator/roadmap.md"
+    ],
+    "roadmap": "P0-9"
+  },
+  "status": "running",
+  "assigned_to": "claude:B",
+  "worktree": "/Users/k3ntaw/code/ai-apprentice/wt/T-0288",
+  "codex_thread": null,
+  "result": null,
+  "events": [
+    {
+      "ts": 1791243662.2195961,
+      "pipeline": {
+        "first_ready_at": 1791243662.2192671
+      }
+    },
+    {
+      "ts": 1791243662.22239,
+      "pipeline": {
+        "first_ready_at": 1791243662.2192671,
+        "dispatched_at": 1791243662.222347,
+        "dispatched_at_lease": 1791244562.222347
+      }
+    },
+    {
+      "ts": 1791243662.223645,
+      "pipeline": {
+        "first_ready_at": 1791243662.2192671,
+        "dispatched_at": 1791243662.222347,
+        "dispatched_at_lease": 1791244562.222347
+      }
+    },
+    {
+      "ts": 1791243664.611466,
+      "packet_meta": {
+        "prefix_sha": "47d8a2fdfe08",
+        "prefix_chars": 764,
+        "suffix_chars": 4382,
+        "dynamic_sections": [
+          "objective",
+          "acceptance",
+          "base",
+          "write_scope",
+          "read_scope",
+          "constraints",
+          "relevant_tests",
+          "symbols",
+          "gotchas",
+          "decisions",
+          "verify",
+          "evidence",
+          "conditional instructions"
+        ]
+      }
+    },
+    {
+      "ts": 1791243664.629017,
+      "pipeline": {
+        "first_ready_at": 1791243662.2192671,
+        "dispatched_at": 1791243662.222347,
+        "dispatched_at_lease": 1791244562.222347,
+        "dispatched_at_done": 1791243664.6274402
+      }
+    },
+    {
+      "ts": 1791243701.918216,
+      "pipeline": {
+        "first_ready_at": 1791243662.2192671,
+        "dispatched_at": 1791243662.222347,
+        "dispatched_at_lease": 1791244562.222347,
+        "dispatched_at_done": 1791243664.6274402,
+        "handoff": {
+          "baseline": "claude:opus",
+          "selected": "claude:opus",
+          "switched": false,
+          "gain": 0.0,
+          "reason": "allocation_active",
+          "ts": 1791243701.917999
+        }
+      }
+    },
+    {
+      "ts": 1791243702.014838,
+      "tier": "opus",
+      "fallback": "claude",
+      "review_rule": "same-family-review: other account, different model"
+    },
+    {
+      "ts": 1791243702.01872,
+      "pipeline": {
+        "first_ready_at": 1791243662.2192671,
+        "dispatched_at": 1791243662.222347,
+        "dispatched_at_lease": 1791244562.222347,
+        "dispatched_at_done": 1791243664.6274402,
+        "handoff": {
+          "baseline": "claude:opus",
+          "selected": "claude:opus",
+          "switched": false,
+          "gain": 0.0,
+          "reason": "allocation_active",
+          "ts": 1791243701.917999
+        },
+        "jev_route": {
+          "baseline": "opus",
+          "hypothetical": "claude:opus",
+          "key": "a6b4fb429920f42099035393b44496ccd0aa5821",
+          "adjustment": {
+            "claude:opus": 1.0
+          },
+          "mode": "active"
+        }
+      }
+    },
+    {
+      "ts": 1791243703.552219,
+      "executor": "claude:opus"
+    },
+    {
+      "ts": 1791243703.8487139,
+      "packet_meta": {
+        "prefix_sha": "47d8a2fdfe08",
+        "prefix_chars": 764,
+        "suffix_chars": 5216,
+        "dynamic_sections": [
+          "skills",
+          "Trigger",
+          "Objective",
+          "Procedure",
+          "Tools",
+          "Evidence requirements",
+          "Output contract",
+          "Stop conditions",
+          "Failure/recovery",
+          "objective",
+          "acceptance",
+          "base",
+          "write_scope",
+          "read_scope",
+          "constraints",
+          "relevant_tests",
+          "symbols",
+          "gotchas",
+          "decisions",
+          "verify",
+          "evidence",
+          "conditional instructions"
+        ]
+      }
+    },
+    {
+      "ts": 1791243703.868335,
+      "packet_meta": {
+        "chars": 5046,
+        "est_tokens": 1261,
+        "presented_tokens": 1261,
+        "sections": {
+          "_preamble": {
+            "chars": 202,
+            "est_tokens": 50,
+            "sha256": "262ca470e80763781cb3d4d077b20f6bbd8682caf788677fa243b3cb078eb57c"
+          },
+          "skills": {
+            "chars": 54,
+            "est_tokens": 13,
+            "sha256": "838bd3c68843c4ae23465b45fe524bc6494df170043de05781a01051e5bc300f"
+          },
+          "Trigger": {
+            "chars": 52,
+            "est_tokens": 13,
+            "sha256": "0ea37148175078772f282ed7c36d48cca318e17c54fee750766ece36c13a6673"
+          },
+          "Objective": {
+            "chars": 80,
+            "est_tokens": 20,
+            "sha256": "440f7e6f18bb93673075eb83a6eee00e7a349b2883ed943b025f3be203e60bf9"
+          },
+          "Procedure": {
+            "chars": 176,
+            "est_tokens": 44,
+            "sha256": "9fd7041c54a1bdb037dfc82d152704e1a4d2337ae2c90c0ef10ef70244869768"
+          },
+          "Tools": {
+            "chars": 56,
+            "est_tokens": 14,
+            "sha256": "8d72764fd7832c5a454ee8b85fca70c3757aea1305987d93da924318181d4e58"
+          },
+          "Evidence requirements": {
+            "chars": 68,
+            "est_tokens": 17,
+            "sha256": "66b75fdc1469a08f54ab4a93060d919fcf85bcae13d1ed2b513472d4fe6d247a"
+          },
+          "Output contract": {
+            "chars": 109,
+            "est_tokens": 27,
+            "sha256": "d8724ee2f0aa4e5907629d54f99ba39965003a54550674886e4113d7691eb907"
+          },
+          "Stop conditions": {
+            "chars": 64,
+            "est_tokens": 16,
+            "sha256": "854ee38ff4593ded68986348d72c8eaa25af70dbbace29f321bb02b5d923e2d8"
+          },
+          "Failure/recovery": {
+            "chars": 141,
+            "est_tokens": 35,
+            "sha256": "1e3a058ad4a0189419a3ff63128e9c3de972ef4f83580c3f19dc7e6064a3f714"
+          },
+          "objective": {
+            "chars": 2618,
+            "est_tokens": 654,
+            "sha256": "e6d874bfb8e62f8396c0c8c2fae17db6bfe6c915ef60989980a78d5cedf3c703"
+          },
+          "acceptance": {
+            "chars": 697,
+            "est_tokens": 174,
+            "sha256": "72be13c21ca319671c67a74927483ee57fc8c934691e1cbdbf89e220292312cd"
+          },
+          "base": {
+            "chars": 105,
+            "est_tokens": 26,
+            "sha256": "80f81d2b87ea3f5c7c7d30eb29d5a2bd563777eba2b7798eb4eae0a6bf5eae16"
+          },
+          "write_scope": {
+            "chars": 31,
+            "est_tokens": 7,
+            "sha256": "15db93d5a0182759bac54e313c714f6bae80913303aca8480aa75fd7573891a4"
+          },
+          "read_scope": {
+            "chars": 37,
+            "est_tokens": 9,
+            "sha256": "84a9cec12a64e22bc771cec68ccb452fe39019971a47b159b6401ea9a2b95795"
+          },
+          "constraints": {
+            "chars": 385,
+            "est_tokens": 96,
+            "sha256": "14921b0983e120f09874a89849aede33042ee02bc999b9efca7085aaa98a9323"
+          },
+          "relevant_tests": {
+            "chars": 19,
+            "est_tokens": 4,
+            "sha256": "2bbd4d344e45096df74e2d03c0bbcc4c1f60b8f9b4237fe5488ffe39e8d8e007"
+          },
+          "symbols": {
+            "chars": 12,
+            "est_tokens": 3,
+            "sha256": "c293a57bf2986b79c37e7023eb301b36d46585d48d2abdf77cd7039eac674dcc"
+          },
+          "gotchas": {
+            "chars": 12,
+            "est_tokens": 3,
+            "sha256": "7c670b1b070b09a99e8a1eeaa8bd3ba82a90e5c2107972c30df9c5356b3228c7"
+          },
+          "decisions": {
+            "chars": 14,
+            "est_tokens": 3,
+            "sha256": "6e20e8e7b5529980e6c61cfcee7a3f6a30d7563f443c19b179a29dbd5acc1125"
+          },
+          "verify": {
+            "chars": 102,
+            "est_tokens": 25,
+            "sha256": "67b8c5735d9f1bb7d89849f69178de377441bca5491fea17c21a0ab934e75c8a"
+          },
+          "evidence": {
+            "chars": 12,
+            "est_tokens": 3,
+            "sha256": "8183020adcccc2230233d51594ada7a491a854834ae78dba6bfa5d7c8f1a2381"
+          }
+        },
+        "hash": "e7c5f79c902f",
+        "version": "e7c5f79c902f",
+        "candidate_known": true,
+        "base": "ec2d4f4f21ef",
+        "sources": "pool.toml@4b59f10be1e5 gotchas@e3b0c44298fc memory@notes,bus specialist: execute+implement-spec over cap by 246 chars: acceptance kept whole routed=shadow",
+        "policy_version": "4b59f10be1e5",
+        "gotchas": "e3b0c44298fc",
+        "candidate_tokens": 1795,
+        "skill_tokens_presented_l2": 186,
+        "routed_mode": "shadow",
+        "routed_tokens": 1217,
+        "routed_reduction_ratio": 0.7673392181588903,
+        "routed_hidden": 0,
+        "routed_ambiguous": 11,
+        "routed_rules_version": "v1",
+        "evidence_ids": [
+          "c672979a9c2c",
+          "c9f9c6e0d196",
+          "5ea3e86c63f6",
+          "a0c3ad4f4a37",
+          "108cc7ebe0c3",
+          "186bc5f65d5a",
+          "f2f37526592a",
+          "9ea39468a2ec",
+          "18f7cb21cd69",
+          "197d38bfff91",
+          "36a0b4d94708",
+          "39d3acc72c05",
+          "3dc0defa1fc0",
+          "448234bad0f5",
+          "4cdc5323eded",
+          "52494c303d12",
+          "7c28bf3582f0",
+          "b0395d701403",
+          "c1db2ed02707",
+          "cd1b8c56aaa8",
+          "e41197a64e7e",
+          "e511fc623aeb"
+        ],
+        "prefix_sha": "47d8a2fdfe08",
+        "prefix_chars": 764,
+        "suffix_chars": 5216,
+        "dynamic_sections": [
+          "skills",
+          "Trigger",
+          "Objective",
+          "Procedure",
+          "Tools",
+          "Evidence requirements",
+          "Output contract",
+          "Stop conditions",
+          "Failure/recovery",
+          "objective",
+          "acceptance",
+          "base",
+          "write_scope",
+          "read_scope",
+          "constraints",
+          "relevant_tests",
+          "symbols",
+          "gotchas",
+          "decisions",
+          "verify",
+          "evidence",
+          "conditional instructions"
+        ],
+        "instruction_tokens": 294,
+        "instruction_tokens_modular": 234,
+        "role": "execute",
+        "tool_tokens_disclosed": 5995,
+        "tool_tokens_minimal": 5995,
+        "tool_allowlist_source": "specialist",
+        "skills_exposed": [
+          "executor/implement-spec",
+          "planner/memory",
+          "planner/orchestrate",
+          "planner/resume",
+          "planner/write-spec",
+          "review/adversarial-review",
+          "review/challenge",
+          "scout/repo-map",
+          "scout/test-gap",
+          "scout/trace-callers",
+          "triage/classify",
+          "triage/compact-memory"
+        ],
+        "skill_tokens_l0": 219,
+        "skills_selected": [
+          "executor/implement-spec"
+        ],
+        "skill_tokens_selected_l0": 25,
+        "skill_tokens_selected_l2": 62,
+        "skill_routing_mode": "active"
+      }
+    },
+    {
+      "ts": 1791243704.767066,
+      "status": "running",
+      "assigned_to": "claude:B",
+      "worktree": "/Users/k3ntaw/code/ai-apprentice/wt/T-0288",
+      "claimed_at": 1791243704.681546
+    },
+    {
+      "ts": 1791243704.7684748,
+      "account": "B"
+    },
+    {
+      "ts": 1791243706.274199,
+      "pid": 13999,
+      "account": "B"
+    }
+  ],
+  "pipeline": {
+    "first_ready_at": 1791243662.2192671,
+    "dispatched_at": 1791243662.222347,
+    "dispatched_at_lease": 1791244562.222347,
+    "dispatched_at_done": 1791243664.6274402,
+    "handoff": {
+      "baseline": "claude:opus",
+      "selected": "claude:opus",
+      "switched": false,
+      "gain": 0.0,
+      "reason": "allocation_active",
+      "ts": 1791243701.917999
+    },
+    "jev_route": {
+      "baseline": "opus",
+      "hypothetical": "claude:opus",
+      "key": "a6b4fb429920f42099035393b44496ccd0aa5821",
+      "adjustment": {
+        "claude:opus": 1.0
+      },
+      "mode": "active"
+    }
+  },
+  "packet_meta": {
+    "chars": 5046,
+    "est_tokens": 1261,
+    "presented_tokens": 1261,
+    "sections": {
+      "_preamble": {
+        "chars": 202,
+        "est_tokens": 50,
+        "sha256": "262ca470e80763781cb3d4d077b20f6bbd8682caf788677fa243b3cb078eb57c"
+      },
+      "skills": {
+        "chars": 54,
+        "est_tokens": 13,
+        "sha256": "838bd3c68843c4ae23465b45fe524bc6494df170043de05781a01051e5bc300f"
+      },
+      "Trigger": {
+        "chars": 52,
+        "est_tokens": 13,
+        "sha256": "0ea37148175078772f282ed7c36d48cca318e17c54fee750766ece36c13a6673"
+      },
+      "Objective": {
+        "chars": 80,
+        "est_tokens": 20,
+        "sha256": "440f7e6f18bb93673075eb83a6eee00e7a349b2883ed943b025f3be203e60bf9"
+      },
+      "Procedure": {
+        "chars": 176,
+        "est_tokens": 44,
+        "sha256": "9fd7041c54a1bdb037dfc82d152704e1a4d2337ae2c90c0ef10ef70244869768"
+      },
+      "Tools": {
+        "chars": 56,
+        "est_tokens": 14,
+        "sha256": "8d72764fd7832c5a454ee8b85fca70c3757aea1305987d93da924318181d4e58"
+      },
+      "Evidence requirements": {
+        "chars": 68,
+        "est_tokens": 17,
+        "sha256": "66b75fdc1469a08f54ab4a93060d919fcf85bcae13d1ed2b513472d4fe6d247a"
+      },
+      "Output contract": {
+        "chars": 109,
+        "est_tokens": 27,
+        "sha256": "d8724ee2f0aa4e5907629d54f99ba39965003a54550674886e4113d7691eb907"
+      },
+      "Stop conditions": {
+        "chars": 64,
+        "est_tokens": 16,
+        "sha256": "854ee38ff4593ded68986348d72c8eaa25af70dbbace29f321bb02b5d923e2d8"
+      },
+      "Failure/recovery": {
+        "chars": 141,
+        "est_tokens": 35,
+        "sha256": "1e3a058ad4a0189419a3ff63128e9c3de972ef4f83580c3f19dc7e6064a3f714"
+      },
+      "objective": {
+        "chars": 2618,
+        "est_tokens": 654,
+        "sha256": "e6d874bfb8e62f8396c0c8c2fae17db6bfe6c915ef60989980a78d5cedf3c703"
+      },
+      "acceptance": {
+        "chars": 697,
+        "est_tokens": 174,
+        "sha256": "72be13c21ca319671c67a74927483ee57fc8c934691e1cbdbf89e220292312cd"
+      },
+      "base": {
+        "chars": 105,
+        "est_tokens": 26,
+        "sha256": "80f81d2b87ea3f5c7c7d30eb29d5a2bd563777eba2b7798eb4eae0a6bf5eae16"
+      },
+      "write_scope": {
+        "chars": 31,
+        "est_tokens": 7,
+        "sha256": "15db93d5a0182759bac54e313c714f6bae80913303aca8480aa75fd7573891a4"
+      },
+      "read_scope": {
+        "chars": 37,
+        "est_tokens": 9,
+        "sha256": "84a9cec12a64e22bc771cec68ccb452fe39019971a47b159b6401ea9a2b95795"
+      },
+      "constraints": {
+        "chars": 385,
+        "est_tokens": 96,
+        "sha256": "14921b0983e120f09874a89849aede33042ee02bc999b9efca7085aaa98a9323"
+      },
+      "relevant_tests": {
+        "chars": 19,
+        "est_tokens": 4,
+        "sha256": "2bbd4d344e45096df74e2d03c0bbcc4c1f60b8f9b4237fe5488ffe39e8d8e007"
+      },
+      "symbols": {
+        "chars": 12,
+        "est_tokens": 3,
+        "sha256": "c293a57bf2986b79c37e7023eb301b36d46585d48d2abdf77cd7039eac674dcc"
+      },
+      "gotchas": {
+        "chars": 12,
+        "est_tokens": 3,
+        "sha256": "7c670b1b070b09a99e8a1eeaa8bd3ba82a90e5c2107972c30df9c5356b3228c7"
+      },
+      "decisions": {
+        "chars": 14,
+        "est_tokens": 3,
+        "sha256": "6e20e8e7b5529980e6c61cfcee7a3f6a30d7563f443c19b179a29dbd5acc1125"
+      },
+      "verify": {
+        "chars": 102,
+        "est_tokens": 25,
+        "sha256": "67b8c5735d9f1bb7d89849f69178de377441bca5491fea17c21a0ab934e75c8a"
+      },
+      "evidence": {
+        "chars": 12,
+        "est_tokens": 3,
+        "sha256": "8183020adcccc2230233d51594ada7a491a854834ae78dba6bfa5d7c8f1a2381"
+      }
+    },
+    "hash": "e7c5f79c902f",
+    "version": "e7c5f79c902f",
+    "candidate_known": true,
+    "base": "ec2d4f4f21ef",
+    "sources": "pool.toml@4b59f10be1e5 gotchas@e3b0c44298fc memory@notes,bus specialist: execute+implement-spec over cap by 246 chars: acceptance kept whole routed=shadow",
+    "policy_version": "4b59f10be1e5",
+    "gotchas": "e3b0c44298fc",
+    "candidate_tokens": 1795,
+    "skill_tokens_presented_l2": 186,
+    "routed_mode": "shadow",
+    "routed_tokens": 1217,
+    "routed_reduction_ratio": 0.7673392181588903,
+    "routed_hidden": 0,
+    "routed_ambiguous": 11,
+    "routed_rules_version": "v1",
+    "evidence_ids": [
+      "c672979a9c2c",
+      "c9f9c6e0d196",
+      "5ea3e86c63f6",
+      "a0c3ad4f4a37",
+      "108cc7ebe0c3",
+      "186bc5f65d5a",
+      "f2f37526592a",
+      "9ea39468a2ec",
+      "18f7cb21cd69",
+      "197d38bfff91",
+      "36a0b4d94708",
+      "39d3acc72c05",
+      "3dc0defa1fc0",
+      "448234bad0f5",
+      "4cdc5323eded",
+      "52494c303d12",
+      "7c28bf3582f0",
+      "b0395d701403",
+      "c1db2ed02707",
+      "cd1b8c56aaa8",
+      "e41197a64e7e",
+      "e511fc623aeb"
+    ],
+    "prefix_sha": "47d8a2fdfe08",
+    "prefix_chars": 764,
+    "suffix_chars": 5216,
+    "dynamic_sections": [
+      "skills",
+      "Trigger",
+      "Objective",
+      "Procedure",
+      "Tools",
+      "Evidence requirements",
+      "Output contract",
+      "Stop conditions",
+      "Failure/recovery",
+      "objective",
+      "acceptance",
+      "base",
+      "write_scope",
+      "read_scope",
+      "constraints",
+      "relevant_tests",
+      "symbols",
+      "gotchas",
+      "decisions",
+      "verify",
+      "evidence",
+      "conditional instructions"
+    ],
+    "instruction_tokens": 294,
+    "instruction_tokens_modular": 234,
+    "role": "execute",
+    "tool_tokens_disclosed": 5995,
+    "tool_tokens_minimal": 5995,
+    "tool_allowlist_source": "specialist",
+    "skills_exposed": [
+      "executor/implement-spec",
+      "planner/memory",
+      "planner/orchestrate",
+      "planner/resume",
+      "planner/write-spec",
+      "review/adversarial-review",
+      "review/challenge",
+      "scout/repo-map",
+      "scout/test-gap",
+      "scout/trace-callers",
+      "triage/classify",
+      "triage/compact-memory"
+    ],
+    "skill_tokens_l0": 219,
+    "skills_selected": [
+      "executor/implement-spec"
+    ],
+    "skill_tokens_selected_l0": 25,
+    "skill_tokens_selected_l2": 62,
+    "skill_routing_mode": "active"
+  },
+  "fallback": "claude",
+  "review_rule": "same-family-review: other account, different model",
+  "executor": "claude:opus",
+  "claimed_at": 1791243704.681546,
+  "account": "B",
+  "pid": 13999
+}

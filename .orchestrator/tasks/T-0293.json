@@ -1,0 +1,68 @@
+{
+  "id": "T-0293",
+  "created_at": 1791243723.9643788,
+  "parent": "T-0280",
+  "role": "execute",
+  "tier": "opus",
+  "complexity": 5,
+  "title": "Deferred review findings sweep: T-0268 lows, T-0270 idle-capture port, T-0274 leftovers, each closed with a test",
+  "spec": "Why: two merges were forced under the hackathon deadline rule (T-0264, T-0271) and their review findings were deferred (roadmap 3.1, P0-3). Inputs: bus:T-0268, bus:T-0270, bus:T-0274 results.\nWhat (each item: fix + test, and one line in docs/checks/deferred-findings.md linking the finding to the commit):\n1. T-0268 low: companion/src/window.test.ts:140 greps main.mts text for the partition. Replace with a behavioural test: extract the main-window BrowserWindow options into a pure function (e.g. `mainWindowOptions()` in companion/src/windowActions.mts) returning `webPreferences.partition === MAIN_PARTITION`, and assert `installGuards` is applied to `session.fromPartition(MAIN_PARTITION)` through an injected session factory in a unit test (mock electron). main.mts uses the function.\n2. T-0268 low: the move to persist:apprentice drops old sign-in cookies: add the one-time note to companion/README.md under its release notes/known changes (\"first launch after this update asks you to sign in once\") and to docs/checks/one-app-desktop.md.\n3. T-0268 low: src/lib/auth/context.ts:30,240 comment \"absent means completed\" is stale since forwardedUser.ts:64 always carries onboarding. Update the comment to the real contract, and add a test that a payload without the onboarding field (signed before deploy, inside the 30 s TTL) is treated the SAME way by AppShell and the onboarding page (pick: treated as \"unknown, fetch server state\"), so old and new payloads cannot disagree.\n4. T-0270 med: src/lib/agents/admin.ts:523 supabaseIdleCapturePort untested: test it against the existing fake Supabase client used by other admin tests (table names, the `t` column on session_events/session_transcript/session_frames, lt/is filters, 42703 and missing-table behaviour).\n5. T-0270 med: admin.ts:541 openCaptures runs three queries per open session with no cap: add a per-run batch cap (constant IDLE_BATCH, default 50, oldest first) and return `{ended, remaining}` so the cron reports when work is left; test the cap.\n6. T-0270 lows: fileIdleCapturePort.endSessions honours endedAt (test); cron-ended sessions go through the same end path as /end (call the shared end helper or document in the route why not).\n7. T-0274 low: e2e/live/live.spec.ts:338 theme restore matches a fixed name list (Dark, Light, System) instead of textContent.\nNo new dependencies. Do not touch src/proxy.ts (workspace switch task owns it), README.md, docs/DEPLOY.md, .env.example.",
+  "inputs": [],
+  "acceptance": [
+    "companion partition test is behavioural: mainWindowOptions() returns the persist partition and the guards are installed on that session via an injected session factory (no text grep)",
+    "context.ts comment updated and a test proves a forwarded payload without onboarding is handled identically by AppShell and the onboarding page",
+    "supabaseIdleCapturePort is tested against the fake Supabase client incl. 42703 and missing-table; openCaptures is capped per run and reports remaining (tests)",
+    "fileIdleCapturePort honours endedAt (test); live.spec theme restore uses the fixed name list",
+    "docs/checks/deferred-findings.md maps each finding to its commit; README.md, docs/DEPLOY.md, .env.example untouched",
+    ".claude/hooks/tests-green.sh wt/THIS-TASK exits 0 and `npm run test:companion` exits 0 (state it)"
+  ],
+  "scope": [
+    "companion/src/main.mts",
+    "companion/src/windowActions.mts",
+    "companion/src/window.test.ts",
+    "companion/src/windowActions.test.ts",
+    "companion/README.md",
+    "docs/checks/one-app-desktop.md",
+    "docs/checks/deferred-findings.md",
+    "src/lib/auth/context.ts",
+    "src/lib/auth/forwardedUser.ts",
+    "src/lib/auth/forwardedUser.test.ts",
+    "src/lib/auth/context.test.ts",
+    "src/lib/onboarding/**",
+    "src/components/shell/AppShell.tsx",
+    "src/components/shell/AppShell.test.tsx",
+    "src/app/onboarding/**",
+    "src/lib/agents/admin.ts",
+    "src/lib/agents/admin.test.ts",
+    "src/lib/agents/idle.test.ts",
+    "src/app/api/cron/retention/**",
+    "src/lib/store/file.ts",
+    "src/lib/store/file.test.ts",
+    "e2e/live/live.spec.ts"
+  ],
+  "depends_on": [
+    "T-0283"
+  ],
+  "constraints": {
+    "read_only": false,
+    "budget_turns": 80,
+    "timeout_s": 2700,
+    "goal_branch": "goal/T-0280",
+    "task_class": "mechanical",
+    "route": "straightforward",
+    "read_scope": [
+      "src/app/api/session/[id]/end/**",
+      "src/lib/store/**",
+      "companion/src/**"
+    ],
+    "roadmap": "P0-3",
+    "prior_art": "bus:T-0268 bus:T-0270 bus:T-0274",
+    "scope_note": "22 files, above the five-file warning: the findings sit in five unrelated modules and splitting by module would mean five one-finding tasks each paying a full gate; split only if the executor reports conflicts"
+  },
+  "status": "queued",
+  "assigned_to": null,
+  "worktree": null,
+  "codex_thread": null,
+  "result": null,
+  "events": []
+}

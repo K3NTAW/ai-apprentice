@@ -1,0 +1,258 @@
+{
+  "id": "T-0287",
+  "created_at": 1791243615.279653,
+  "parent": "T-0280",
+  "role": "execute",
+  "tier": "opus",
+  "complexity": 6,
+  "title": "Observability: Sentry error tracking for web and API behind SENTRY_DSN, structured JSON server logs",
+  "spec": "Why: no error tracking, log drain or alerting; only console.error (roadmap 3.6). P0-5 part 1 (web/API). Electron crash reporting lands with the desktop release task; the cost meter is a separate task.\nWhat:\n1. Add `@sentry/nextjs` (named new dependency). Wire `instrumentation.ts` (server + edge via `register` and `onRequestError`), `instrumentation-client.ts`, and `withSentryConfig` in next.config.ts. Everything is a no-op when `SENTRY_DSN` / `NEXT_PUBLIC_SENTRY_DSN` is unset: no init, no source-map upload, no network. Region comes from the DSN host (the human creates an EU org). `sendDefaultPii: false`; a `beforeSend` that strips cookies, request bodies, the forwarded-user header and anything matching the redact recognizers from `src/lib/redact` (import, do not copy). Set `environment` from VERCEL_ENV and `release` from VERCEL_GIT_COMMIT_SHA.\n2. `src/lib/log/index.ts`: `log.info|warn|error(event: string, fields?: Record<string, unknown>)` printing one JSON line {ts, level, event, ...fields, requestId?} on the server; `withApi` in src/app/api/session/_http.ts attaches a request id (header x-request-id or random) and logs one line per request with route, status, ms, workspace id hash, never emails or tokens. Convert the console.warn/console.error calls inside src/app/api/** to log.* (mechanical). Captured exceptions in withApi go to Sentry when enabled.\n3. `src/app/api/health/route.ts`: GET answers {ok: true, sentry: boolean, mode} for uptime probes, no auth, no secrets.\n4. Tests: log line shape and redaction; beforeSend strips cookies/body/PII; instrumentation does nothing without a DSN; health route. docs/OBSERVABILITY.md: env names, how to force a test error on web and API (a `?__sentry_test=1` is NOT acceptable in production; document throwing from a dev-only route or using the Sentry CLI), what the human sets up.\nDo not touch README.md, docs/DEPLOY.md, .env.example (docs-sync task). No other new dependencies.",
+  "inputs": [],
+  "acceptance": [
+    "With SENTRY_DSN unset, instrumentation registers nothing and tests prove no init call and no network (mock @sentry/nextjs)",
+    "beforeSend drops cookies, request body, authorization and forwarded-user headers and runs redact on message strings (tests)",
+    "src/lib/log emits one JSON line per call with ts, level, event, fields; withApi logs route, status, ms and a request id for every API response (tests); no console.error/console.warn remain under src/app/api/** (grep in a guard test)",
+    "GET /api/health answers 200 {ok:true, sentry:<bool>, mode} without auth (test)",
+    "docs/OBSERVABILITY.md written; README.md, docs/DEPLOY.md, .env.example untouched",
+    ".claude/hooks/tests-green.sh wt/THIS-TASK exits 0"
+  ],
+  "scope": [
+    "instrumentation.ts",
+    "instrumentation-client.ts",
+    "sentry.*.config.ts",
+    "next.config.ts",
+    "package.json",
+    "package-lock.json",
+    "src/lib/log/**",
+    "src/lib/observability/**",
+    "src/app/api/**",
+    "docs/OBSERVABILITY.md",
+    "src/proxy.ts"
+  ],
+  "depends_on": [],
+  "constraints": {
+    "read_only": false,
+    "budget_turns": 80,
+    "timeout_s": 2700,
+    "goal_branch": "goal/T-0280",
+    "task_class": "unfamiliar",
+    "route": "full",
+    "allowed_dependencies": [
+      "@sentry/nextjs"
+    ],
+    "read_scope": [
+      "src/lib/redact/**",
+      "src/lib/auth/**",
+      "vercel.json"
+    ],
+    "roadmap": "P0-5"
+  },
+  "status": "held",
+  "assigned_to": null,
+  "worktree": null,
+  "codex_thread": null,
+  "result": null,
+  "events": [
+    {
+      "ts": 1791243666.123199,
+      "pipeline": {
+        "first_ready_at": 1791243666.1228821
+      }
+    },
+    {
+      "ts": 1791243667.0465229,
+      "pipeline": {
+        "first_ready_at": 1791243666.1228821,
+        "spec_review_at": 1791243667.046417,
+        "spec_review_at_lease": 1791244567.046417
+      }
+    },
+    {
+      "ts": 1791243667.060498,
+      "pipeline": {
+        "first_ready_at": 1791243666.1228821,
+        "spec_review_at": 1791243667.046417,
+        "spec_review_at_lease": 1791244567.046417,
+        "spec_review_at_done": 1791243667.060201
+      }
+    },
+    {
+      "ts": 1791243723.911246,
+      "spec_review_verdict": "request_changes",
+      "spec_review_risks": [
+        {
+          "path": "src/app/api/session/_http.ts",
+          "line": 88,
+          "issue": "Acceptance says withApi logs a line for every API response, but withApi covers only part of the routes. cron/retention, redact, vision, auth/onboarding and the new health route do not appear to call it (the grep showed withApi in processes, agents, workmaps and similar). Two more gaps: the requireContext early return (401/403/503) is a separate branch, so it needs its own log call. handle() also turns store errors into 500/503 responses without throwing, so those never reach any 'captured exception' path.",
+          "severity": "med"
+        },
+        {
+          "path": "src/app/api/session/_http.ts",
+          "line": 93,
+          "issue": "Double reporting. handle() rethrows unknown errors, and Next's onRequestError hook already reports thrown route errors. Calling Sentry.captureException in withApi as well gives two events per failure. The handled 500s (store_context_required) are never thrown, so they would be captured only if you add an explicit call. The spec does not say which path owns capture.",
+          "severity": "med"
+        },
+        {
+          "path": "src/app/api/health/route.ts",
+          "line": 0,
+          "issue": "src/app/api/runtime.test.ts requires every route.ts to export `runtime = \"nodejs\"` on its own line. routes.auth.test.ts and routes.scope.test.ts probably enumerate routes and expect 401 or scoping, so an unauthenticated route may fail them. The spec does not mention these suites, and they sit outside the new-tests list.",
+          "severity": "med"
+        },
+        {
+          "path": "next.config.ts",
+          "line": 3,
+          "issue": "Wrapping with withSentryConfig is not a no-op by default. It injects webpack/turbopack plugins, can add a tunnel route (which would run through src/proxy.ts auth) and tries source-map upload. 'No upload when DSN unset' is the wrong gate, because upload depends on SENTRY_AUTH_TOKEN, org and project. The spec should say to apply the wrapper only when the DSN is set, to set `telemetry:false`, to leave `tunnelRoute` off, and to upload only when the auth token exists. It also needs a build-time test, since next.config.ts has no existing test.",
+          "severity": "med"
+        },
+        {
+          "path": "instrumentation.ts",
+          "line": 0,
+          "issue": "The spec asks for an edge init, but every route is nodejs, proxy.ts runs on Node in Next 16, and the Vercel guidance deprecates edge. A sentry.edge.config.ts is dead code that adds bundle risk. Specify nodejs only, with an `if (process.env.NEXT_RUNTIME === 'nodejs')` guard.",
+          "severity": "low"
+        },
+        {
+          "path": "src/lib/observability/beforeSend",
+          "line": 0,
+          "issue": "The redaction scope is under-specified. Message strings only is not enough: exception values, breadcrumbs (fetch URLs, console), request.url and query strings, `extra`/`contexts`, and the user object also carry PII. Redact has sync (redactText) and async variants, and beforeSend must stay sync or handle the promise. The client bundle would also import the full redact lib, so the client size cost should be checked. A throw inside beforeSend must drop the event (fail closed), not send it raw. The spec does not say this.",
+          "severity": "high"
+        },
+        {
+          "path": "src/lib/log/index.ts",
+          "line": 0,
+          "issue": "The test list mentions 'log line shape and redaction', but item 2 never says whether log fields are passed through redact. Fields are `Record<string, unknown>` and callers pass err.message values (onboarding, retention, vision upstream error) that can hold emails or tokens. Decide and state it. The spec also needs rules for non-serializable values (Error, circular) so a log call cannot throw, and for field keys that collide with ts/level/event/requestId.",
+          "severity": "med"
+        },
+        {
+          "path": "src/app/api/session/_http.ts",
+          "line": 0,
+          "issue": "The x-request-id header is client-controlled. It needs a length and charset cap or it becomes a log-injection and log-volume vector. The spec should also say whether the id is echoed in the response header. Workspace id hash: specify the algorithm and truncation (a salted or truncated sha256), because an unsalted hash of a UUID is only pseudonymous. Local mode uses LOCAL_WORKSPACE_ID and needs a defined output.",
+          "severity": "low"
+        },
+        {
+          "path": "src/app/api/**",
+          "line": 0,
+          "issue": "Hidden coupling: the instrumentation hook, Sentry client and CSP or connect-src. vercel.json is out of scope, so if it sets a CSP the browser will block ingest and client capture will silently fail. Check this. 'EU region from the DSN host' is not code-verifiable, so say it is the human's job and state that the code hardcodes no region.",
+          "severity": "low"
+        },
+        {
+          "path": "docs/OBSERVABILITY.md",
+          "line": 0,
+          "issue": "There is no rollback or kill-switch section. Unsetting the DSN disables Sentry, which should be documented as the rollback, along with the fact that NEXT_PUBLIC_ is inlined at build time, so a client-side disable needs a redeploy. Also, `.claude/hooks/tests-green.sh wt/THIS-TASK` is a placeholder and cannot be checked as written. The 'no network' test with a mocked @sentry/nextjs proves no init call but not that nothing is imported with side effects, so assert on import-time behaviour too.",
+          "severity": "low"
+        }
+      ]
+    },
+    {
+      "ts": 1791243777.593348,
+      "pipeline": {
+        "first_ready_at": 1791243666.1228821,
+        "spec_review_at": 1791243667.046417,
+        "spec_review_at_lease": 1791244567.046417,
+        "spec_review_at_done": 1791243667.060201,
+        "spec_review_held_at": 1791243777.5932622
+      },
+      "status": "held",
+      "hold_reason": "spec_review request_changes"
+    },
+    {
+      "ts": 1791243782.040365,
+      "pipeline": {
+        "first_ready_at": 1791243666.1228821,
+        "spec_review_at": 1791243667.046417,
+        "spec_review_at_lease": 1791244567.046417,
+        "spec_review_at_done": 1791243667.060201,
+        "spec_review_held_at": 1791243777.5932622,
+        "failure_kind": "unknown"
+      }
+    },
+    {
+      "ts": 1791243782.124258,
+      "pipeline": {
+        "first_ready_at": 1791243666.1228821,
+        "spec_review_at": 1791243667.046417,
+        "spec_review_at_lease": 1791244567.046417,
+        "spec_review_at_done": 1791243667.060201,
+        "spec_review_held_at": 1791243777.5932622,
+        "failure_kind": "unknown",
+        "auto_fix_skipped": {
+          "1791243777.593348": true
+        }
+      }
+    }
+  ],
+  "pipeline": {
+    "first_ready_at": 1791243666.1228821,
+    "spec_review_at": 1791243667.046417,
+    "spec_review_at_lease": 1791244567.046417,
+    "spec_review_at_done": 1791243667.060201,
+    "spec_review_held_at": 1791243777.5932622,
+    "failure_kind": "unknown",
+    "auto_fix_skipped": {
+      "1791243777.593348": true
+    }
+  },
+  "spec_review_verdict": "request_changes",
+  "spec_review_risks": [
+    {
+      "path": "src/app/api/session/_http.ts",
+      "line": 88,
+      "issue": "Acceptance says withApi logs a line for every API response, but withApi covers only part of the routes. cron/retention, redact, vision, auth/onboarding and the new health route do not appear to call it (the grep showed withApi in processes, agents, workmaps and similar). Two more gaps: the requireContext early return (401/403/503) is a separate branch, so it needs its own log call. handle() also turns store errors into 500/503 responses without throwing, so those never reach any 'captured exception' path.",
+      "severity": "med"
+    },
+    {
+      "path": "src/app/api/session/_http.ts",
+      "line": 93,
+      "issue": "Double reporting. handle() rethrows unknown errors, and Next's onRequestError hook already reports thrown route errors. Calling Sentry.captureException in withApi as well gives two events per failure. The handled 500s (store_context_required) are never thrown, so they would be captured only if you add an explicit call. The spec does not say which path owns capture.",
+      "severity": "med"
+    },
+    {
+      "path": "src/app/api/health/route.ts",
+      "line": 0,
+      "issue": "src/app/api/runtime.test.ts requires every route.ts to export `runtime = \"nodejs\"` on its own line. routes.auth.test.ts and routes.scope.test.ts probably enumerate routes and expect 401 or scoping, so an unauthenticated route may fail them. The spec does not mention these suites, and they sit outside the new-tests list.",
+      "severity": "med"
+    },
+    {
+      "path": "next.config.ts",
+      "line": 3,
+      "issue": "Wrapping with withSentryConfig is not a no-op by default. It injects webpack/turbopack plugins, can add a tunnel route (which would run through src/proxy.ts auth) and tries source-map upload. 'No upload when DSN unset' is the wrong gate, because upload depends on SENTRY_AUTH_TOKEN, org and project. The spec should say to apply the wrapper only when the DSN is set, to set `telemetry:false`, to leave `tunnelRoute` off, and to upload only when the auth token exists. It also needs a build-time test, since next.config.ts has no existing test.",
+      "severity": "med"
+    },
+    {
+      "path": "instrumentation.ts",
+      "line": 0,
+      "issue": "The spec asks for an edge init, but every route is nodejs, proxy.ts runs on Node in Next 16, and the Vercel guidance deprecates edge. A sentry.edge.config.ts is dead code that adds bundle risk. Specify nodejs only, with an `if (process.env.NEXT_RUNTIME === 'nodejs')` guard.",
+      "severity": "low"
+    },
+    {
+      "path": "src/lib/observability/beforeSend",
+      "line": 0,
+      "issue": "The redaction scope is under-specified. Message strings only is not enough: exception values, breadcrumbs (fetch URLs, console), request.url and query strings, `extra`/`contexts`, and the user object also carry PII. Redact has sync (redactText) and async variants, and beforeSend must stay sync or handle the promise. The client bundle would also import the full redact lib, so the client size cost should be checked. A throw inside beforeSend must drop the event (fail closed), not send it raw. The spec does not say this.",
+      "severity": "high"
+    },
+    {
+      "path": "src/lib/log/index.ts",
+      "line": 0,
+      "issue": "The test list mentions 'log line shape and redaction', but item 2 never says whether log fields are passed through redact. Fields are `Record<string, unknown>` and callers pass err.message values (onboarding, retention, vision upstream error) that can hold emails or tokens. Decide and state it. The spec also needs rules for non-serializable values (Error, circular) so a log call cannot throw, and for field keys that collide with ts/level/event/requestId.",
+      "severity": "med"
+    },
+    {
+      "path": "src/app/api/session/_http.ts",
+      "line": 0,
+      "issue": "The x-request-id header is client-controlled. It needs a length and charset cap or it becomes a log-injection and log-volume vector. The spec should also say whether the id is echoed in the response header. Workspace id hash: specify the algorithm and truncation (a salted or truncated sha256), because an unsalted hash of a UUID is only pseudonymous. Local mode uses LOCAL_WORKSPACE_ID and needs a defined output.",
+      "severity": "low"
+    },
+    {
+      "path": "src/app/api/**",
+      "line": 0,
+      "issue": "Hidden coupling: the instrumentation hook, Sentry client and CSP or connect-src. vercel.json is out of scope, so if it sets a CSP the browser will block ingest and client capture will silently fail. Check this. 'EU region from the DSN host' is not code-verifiable, so say it is the human's job and state that the code hardcodes no region.",
+      "severity": "low"
+    },
+    {
+      "path": "docs/OBSERVABILITY.md",
+      "line": 0,
+      "issue": "There is no rollback or kill-switch section. Unsetting the DSN disables Sentry, which should be documented as the rollback, along with the fact that NEXT_PUBLIC_ is inlined at build time, so a client-side disable needs a redeploy. Also, `.claude/hooks/tests-green.sh wt/THIS-TASK` is a placeholder and cannot be checked as written. The 'no network' test with a mocked @sentry/nextjs proves no init call but not that nothing is imported with side effects, so assert on import-time behaviour too.",
+      "severity": "low"
+    }
+  ],
+  "hold_reason": "spec_review request_changes"
+}

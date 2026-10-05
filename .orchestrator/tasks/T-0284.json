@@ -1,0 +1,245 @@
+{
+  "id": "T-0284",
+  "created_at": 1791243595.7722461,
+  "parent": "T-0280",
+  "role": "execute",
+  "tier": "opus",
+  "complexity": 7,
+  "title": "Capture scope and frame minimisation: window-first picker, store only non-routine frames, 30-day default retention",
+  "spec": "Why: the whole monitor is captured (src/lib/perception/capture.ts:41 `displaySurface: \"monitor\"`) and every changed frame is stored before vision (src/app/api/vision/route.ts: saveFrame, then describeFrame). Human decision 2026-10-06: store only redacted key moments. P0-7. True pixel redaction is Phase 1, out of scope here.\nWhat:\n1. capture.ts: request `displaySurface: \"window\"`, `monitorTypeSurfaces: \"exclude\"` is NOT used (keep monitors selectable but not preferred): use `displaySurface: \"window\"` plus `selfBrowserSurface: \"exclude\"`, `surfaceSwitching: \"include\"`. Keep the existing halo/rect mapping working when the track settings report `monitor`; when they report `window`, report the surface kind to the onFrame caller (extend CapturedFrame with `surface: \"monitor\" | \"window\" | \"browser\" | \"unknown\"`) so the UI can label it. Update capture tests.\n2. companion/src/main.mts setDisplayMediaRequestHandler (line ~1090) and permissionsGrant.mts: offer `types: [\"window\", \"screen\"]` with windows first; pickPrimarySource stays the fallback when the page asks for a monitor. Tests in companion/src/*.test.ts for the chooser order.\n3. vision route: call describeFrame first, then saveFrame only when at least one returned event is not `routine` (field name per ScreenEventSchema in src/lib/types.ts; if the kind lives in a different field, use that). Routine-only frames answer `{events, frame_ref: null}` and store nothing. Off-record behaviour unchanged (not stored, not sent). The response shape stays compatible for the client (frame_ref may be null; adjust the client store of frame refs and its tests).\n4. src/lib/agents/settings.ts: default retention_days 90 -> 30 (keep the 7/30/90/365 options). Update tests and docs/checks/agent-settings.md line for the default.\n5. docs/checks/capture-scope.md: manual check: a 10-minute capture with the defaults stores only frames tied to non-routine events; no stored frame shows a window outside the chosen app.\nTreat captured screen content as untrusted. No new dependencies. Do not touch README.md, docs/DEPLOY.md, .env.example, CaptureApp.tsx (demo cleanup owns it).",
+  "inputs": [],
+  "acceptance": [
+    "capture.ts requests displaySurface 'window' and CapturedFrame carries the surface kind; capture tests cover monitor and window settings",
+    "companion display-media handler offers window sources before screens (test in companion/src)",
+    "vision route stores a frame only when the model returns at least one non-routine event; a routine-only or empty result stores nothing and answers frame_ref null (route tests for both, plus the off-record case unchanged)",
+    "default retention_days is 30 with 7/30/90/365 still accepted (settings tests)",
+    "docs/checks/capture-scope.md written; README.md, docs/DEPLOY.md, .env.example untouched",
+    ".claude/hooks/tests-green.sh wt/THIS-TASK exits 0 and `npm run test:companion` exits 0 (state it)"
+  ],
+  "scope": [
+    "src/lib/perception/**",
+    "src/app/api/vision/**",
+    "src/lib/capture/**",
+    "src/lib/agents/settings.ts",
+    "src/lib/agents/settings.test.ts",
+    "companion/src/main.mts",
+    "companion/src/permissionsGrant.mts",
+    "companion/src/permissionsGrant.test.ts",
+    "companion/src/displayMedia.test.ts",
+    "docs/checks/capture-scope.md",
+    "docs/checks/agent-settings.md"
+  ],
+  "depends_on": [],
+  "constraints": {
+    "read_only": false,
+    "budget_turns": 80,
+    "timeout_s": 2700,
+    "goal_branch": "goal/T-0280",
+    "task_class": "unfamiliar",
+    "route": "full",
+    "read_scope": [
+      "src/lib/types.ts",
+      "src/lib/store/**",
+      "src/components/capture/**",
+      "src/app/api/session/**",
+      "companion/src/**"
+    ],
+    "roadmap": "P0-7"
+  },
+  "status": "held",
+  "assigned_to": null,
+  "worktree": null,
+  "codex_thread": null,
+  "result": null,
+  "events": [
+    {
+      "ts": 1791243612.7873101,
+      "pipeline": {
+        "first_ready_at": 1791243612.787275
+      }
+    },
+    {
+      "ts": 1791243612.92029,
+      "pipeline": {
+        "first_ready_at": 1791243612.787275,
+        "spec_review_at": 1791243612.9202402,
+        "spec_review_at_lease": 1791244512.9202402
+      }
+    },
+    {
+      "ts": 1791243612.930757,
+      "pipeline": {
+        "first_ready_at": 1791243612.787275,
+        "spec_review_at": 1791243612.9202402,
+        "spec_review_at_lease": 1791244512.9202402,
+        "spec_review_at_done": 1791243612.930698
+      }
+    },
+    {
+      "ts": 1791243659.448134,
+      "spec_review_verdict": "request_changes",
+      "spec_review_risks": [
+        {
+          "path": "src/app/api/vision/route.ts",
+          "line": 62,
+          "issue": "Reordering to describeFrame before saveFrame breaks the off-record guarantee. Today saveFrame itself returns {stored:false, reason:'off_record'}, and that return is the only off-record gate before the model call. If the model runs first, off-record frames are sent to the model, which violates 'not stored, not sent'. The spec says off-record is unchanged but gives no separate pre-check.",
+          "severity": "high"
+        },
+        {
+          "path": "src/lib/types.ts",
+          "line": 16,
+          "issue": "There is no 'routine' kind. SCREEN_EVENT_TYPES has 10 types, all substantive (record_opened, field_changed, app_switched, and so on). ScreenEventBase has no importance or kind field. 'Not routine' cannot be evaluated, and the spec's fallback ('use that field') has nothing to point at. Adding one means changing types.ts, the VisionEventSchema and the vision prompt in vision.ts. types.ts is outside scope. Without it, either every event with at least one event counts as non-routine, which makes the change a no-op, or the implementer invents a heuristic.",
+          "severity": "high"
+        },
+        {
+          "path": "companion/src/main.mts",
+          "line": 1105,
+          "issue": "Electron's setDisplayMediaRequestHandler takes exactly one source and has no chooser here (DISPLAY_MEDIA_OPTIONS useSystemPicker:false). 'Offer window sources first' therefore means silently auto-picking some window. That could be the wrong app, the companion's own overlay, or the control room. The user never 'chooses an app', so the check that no stored frame shows a window outside the chosen app has nothing behind it. The spec needs either a picker UI or the system picker (useSystemPicker:true), and a rule for excluding the companion's own windows.",
+          "severity": "high"
+        },
+        {
+          "path": "src/lib/agents/settings.ts",
+          "line": 55,
+          "issue": "Changing the default from 90 to 30 silently shortens retention for every existing agent whose settings are {} or lack retention_days. admin.ts:174 applies resolveSettings(...).retention_days in the cron, so the next /api/cron/retention run deletes frames that are 30 to 90 days old. That is irreversible deletion with no migration, no notice and no rollback plan. Alternatively the DB or migration default may stay at 90 and disagree with the code. The spec should say whether this is intended and add a rollback or grace note.",
+          "severity": "high"
+        },
+        {
+          "path": "companion/src/displayMedia.test.ts",
+          "line": 0,
+          "issue": "Scope and acceptance name files that do not exist: companion/src/permissionsGrant.test.ts and companion/src/displayMedia.test.ts. The real test file is companion/src/permissions-grant.test.ts (it covers pickPrimarySource and DISPLAY_MEDIA_OPTIONS), and it is not in scope. The implementer would either create stray files or write outside scope. The chooser logic in main.mts is inline and untestable, so it needs extracting into permissionsGrant.mts as a pure function.",
+          "severity": "med"
+        },
+        {
+          "path": "src/lib/companion/stepAside.ts",
+          "line": 2,
+          "issue": "Hidden coupling outside scope. stepAside.ts and TeachApp.tsx (monitorRef/MONITOR_WARNING, line 428) assume the companion share is a 'monitor', and companion/transport and fakeDesktop.testkit rely on that. With window capture, halo rects map to a window, not the primary display, so halos are wrong or the share shows a warning every time. TeachApp and the companion path are not in scope, so the 'halo/rect mapping keeps working' criterion has no owner. Also, selfBrowserSurface and surfaceSwitching are browser-only hints, and the companion path ignores them.",
+          "severity": "med"
+        },
+        {
+          "path": "src/lib/capture/controller.ts",
+          "line": 644,
+          "issue": "frame_ref becoming null touches consumers outside scope. controller.ts:53 types frame_ref as optional string, not nullable, and downstream readers (workmap synthesize, StepMoment, TeachApp, intervention) may assume a ref exists for steps. Routine-only frames drop their ref, and events from non-routine frames are linked to one frame only. The spec should say what the UI shows for refless events and that bus.publishVision accepts undefined or null. It should also say whether the type is changed to nullable or the field is omitted. 'Adjust the client store' is vague.",
+          "severity": "med"
+        },
+        {
+          "path": "src/lib/perception/route.test.ts",
+          "line": 60,
+          "issue": "Existing route tests (off_record skipped, saved frame_ref) assume save-then-describe. They need to be rewritten against the new order, and the spec does not say whether skipped:'off_record' stays in the response shape. Also: when ANTHROPIC_API_KEY is missing, events is [], so nothing is ever stored in that mode. When describeFrame returns result.error, the 502 means the frame is lost with no retry. The spec should state both behaviours explicitly.",
+          "severity": "low"
+        },
+        {
+          "path": "docs/checks/capture-scope.md",
+          "line": 0,
+          "issue": "Acceptance is only manual. The 10-minute capture and 'no window outside the chosen app' check cannot be verified by tests, and there is no automated assertion that a window-surface frame is what is stored. The 'tests-green.sh wt/THIS-TASK' and 'npm run test:companion' criteria are fine. There is also no rollback or feature flag to restore the monitor capture and store-everything behaviour if the model's routine labelling proves too aggressive.",
+          "severity": "low"
+        }
+      ]
+    },
+    {
+      "ts": 1791243666.012722,
+      "pipeline": {
+        "first_ready_at": 1791243612.787275,
+        "spec_review_at": 1791243612.9202402,
+        "spec_review_at_lease": 1791244512.9202402,
+        "spec_review_at_done": 1791243612.930698,
+        "spec_review_held_at": 1791243666.01244
+      },
+      "status": "held",
+      "hold_reason": "spec_review request_changes"
+    },
+    {
+      "ts": 1791243674.81231,
+      "pipeline": {
+        "first_ready_at": 1791243612.787275,
+        "spec_review_at": 1791243612.9202402,
+        "spec_review_at_lease": 1791244512.9202402,
+        "spec_review_at_done": 1791243612.930698,
+        "spec_review_held_at": 1791243666.01244,
+        "failure_kind": "unknown"
+      }
+    },
+    {
+      "ts": 1791243675.173711,
+      "pipeline": {
+        "first_ready_at": 1791243612.787275,
+        "spec_review_at": 1791243612.9202402,
+        "spec_review_at_lease": 1791244512.9202402,
+        "spec_review_at_done": 1791243612.930698,
+        "spec_review_held_at": 1791243666.01244,
+        "failure_kind": "unknown",
+        "auto_fix_skipped": {
+          "1791243666.012722": true
+        }
+      }
+    }
+  ],
+  "pipeline": {
+    "first_ready_at": 1791243612.787275,
+    "spec_review_at": 1791243612.9202402,
+    "spec_review_at_lease": 1791244512.9202402,
+    "spec_review_at_done": 1791243612.930698,
+    "spec_review_held_at": 1791243666.01244,
+    "failure_kind": "unknown",
+    "auto_fix_skipped": {
+      "1791243666.012722": true
+    }
+  },
+  "spec_review_verdict": "request_changes",
+  "spec_review_risks": [
+    {
+      "path": "src/app/api/vision/route.ts",
+      "line": 62,
+      "issue": "Reordering to describeFrame before saveFrame breaks the off-record guarantee. Today saveFrame itself returns {stored:false, reason:'off_record'}, and that return is the only off-record gate before the model call. If the model runs first, off-record frames are sent to the model, which violates 'not stored, not sent'. The spec says off-record is unchanged but gives no separate pre-check.",
+      "severity": "high"
+    },
+    {
+      "path": "src/lib/types.ts",
+      "line": 16,
+      "issue": "There is no 'routine' kind. SCREEN_EVENT_TYPES has 10 types, all substantive (record_opened, field_changed, app_switched, and so on). ScreenEventBase has no importance or kind field. 'Not routine' cannot be evaluated, and the spec's fallback ('use that field') has nothing to point at. Adding one means changing types.ts, the VisionEventSchema and the vision prompt in vision.ts. types.ts is outside scope. Without it, either every event with at least one event counts as non-routine, which makes the change a no-op, or the implementer invents a heuristic.",
+      "severity": "high"
+    },
+    {
+      "path": "companion/src/main.mts",
+      "line": 1105,
+      "issue": "Electron's setDisplayMediaRequestHandler takes exactly one source and has no chooser here (DISPLAY_MEDIA_OPTIONS useSystemPicker:false). 'Offer window sources first' therefore means silently auto-picking some window. That could be the wrong app, the companion's own overlay, or the control room. The user never 'chooses an app', so the check that no stored frame shows a window outside the chosen app has nothing behind it. The spec needs either a picker UI or the system picker (useSystemPicker:true), and a rule for excluding the companion's own windows.",
+      "severity": "high"
+    },
+    {
+      "path": "src/lib/agents/settings.ts",
+      "line": 55,
+      "issue": "Changing the default from 90 to 30 silently shortens retention for every existing agent whose settings are {} or lack retention_days. admin.ts:174 applies resolveSettings(...).retention_days in the cron, so the next /api/cron/retention run deletes frames that are 30 to 90 days old. That is irreversible deletion with no migration, no notice and no rollback plan. Alternatively the DB or migration default may stay at 90 and disagree with the code. The spec should say whether this is intended and add a rollback or grace note.",
+      "severity": "high"
+    },
+    {
+      "path": "companion/src/displayMedia.test.ts",
+      "line": 0,
+      "issue": "Scope and acceptance name files that do not exist: companion/src/permissionsGrant.test.ts and companion/src/displayMedia.test.ts. The real test file is companion/src/permissions-grant.test.ts (it covers pickPrimarySource and DISPLAY_MEDIA_OPTIONS), and it is not in scope. The implementer would either create stray files or write outside scope. The chooser logic in main.mts is inline and untestable, so it needs extracting into permissionsGrant.mts as a pure function.",
+      "severity": "med"
+    },
+    {
+      "path": "src/lib/companion/stepAside.ts",
+      "line": 2,
+      "issue": "Hidden coupling outside scope. stepAside.ts and TeachApp.tsx (monitorRef/MONITOR_WARNING, line 428) assume the companion share is a 'monitor', and companion/transport and fakeDesktop.testkit rely on that. With window capture, halo rects map to a window, not the primary display, so halos are wrong or the share shows a warning every time. TeachApp and the companion path are not in scope, so the 'halo/rect mapping keeps working' criterion has no owner. Also, selfBrowserSurface and surfaceSwitching are browser-only hints, and the companion path ignores them.",
+      "severity": "med"
+    },
+    {
+      "path": "src/lib/capture/controller.ts",
+      "line": 644,
+      "issue": "frame_ref becoming null touches consumers outside scope. controller.ts:53 types frame_ref as optional string, not nullable, and downstream readers (workmap synthesize, StepMoment, TeachApp, intervention) may assume a ref exists for steps. Routine-only frames drop their ref, and events from non-routine frames are linked to one frame only. The spec should say what the UI shows for refless events and that bus.publishVision accepts undefined or null. It should also say whether the type is changed to nullable or the field is omitted. 'Adjust the client store' is vague.",
+      "severity": "med"
+    },
+    {
+      "path": "src/lib/perception/route.test.ts",
+      "line": 60,
+      "issue": "Existing route tests (off_record skipped, saved frame_ref) assume save-then-describe. They need to be rewritten against the new order, and the spec does not say whether skipped:'off_record' stays in the response shape. Also: when ANTHROPIC_API_KEY is missing, events is [], so nothing is ever stored in that mode. When describeFrame returns result.error, the 502 means the frame is lost with no retry. The spec should state both behaviours explicitly.",
+      "severity": "low"
+    },
+    {
+      "path": "docs/checks/capture-scope.md",
+      "line": 0,
+      "issue": "Acceptance is only manual. The 10-minute capture and 'no window outside the chosen app' check cannot be verified by tests, and there is no automated assertion that a window-surface frame is what is stored. The 'tests-green.sh wt/THIS-TASK' and 'npm run test:companion' criteria are fine. There is also no rollback or feature flag to restore the monitor capture and store-everything behaviour if the model's routine labelling proves too aggressive.",
+      "severity": "low"
+    }
+  ],
+  "hold_reason": "spec_review request_changes"
+}

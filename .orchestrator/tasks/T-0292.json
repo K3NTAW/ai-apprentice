@@ -1,0 +1,57 @@
+{
+  "id": "T-0292",
+  "created_at": 1791243688.9310641,
+  "parent": "T-0280",
+  "role": "execute",
+  "tier": "opus",
+  "complexity": 5,
+  "title": "Nightly live e2e: scheduled GitHub Actions run of e2e:live against staging with the summary posted to the run and an issue on failure",
+  "spec": "Why: no recorded green end-to-end run on production (roadmap 3.1, P0-4). The suite e2e/live/* exists (14 steps, summary reporter writes e2e/live/out/summary.md, credentials only via env, see docs/checks/e2e-live.md).\nWhat:\n1. `.github/workflows/nightly-live.yml`: `schedule` cron 03:00 UTC daily plus `workflow_dispatch`; ubuntu-latest, npm ci, `npx playwright install chrome` (the live config uses channel chrome), run `npm run e2e:live` with BASE_URL, E2E_EMAIL, E2E_PASSWORD from repository secrets (names only; the workflow fails fast with a clear message when a secret is missing). Upload e2e/live/out/ as an artifact (retention 14 days). Append summary.md to $GITHUB_STEP_SUMMARY. On failure, create or update one GitHub issue titled \"Nightly live e2e failed\" (label `nightly-live`) with the summary table and the run URL, using `actions/github-script` and GITHUB_TOKEN; on success close that issue if open. Concurrency group so two runs never overlap.\n2. `e2e/live/summary-reporter.ts`: also write `e2e/live/out/summary.json` {passed, total, status, steps:[{title,status,ms}]} so the workflow can read counts without parsing Markdown; keep the Markdown output unchanged. Keep every scrub() rule (credentials never reach the summary) and the live.guard.test.ts rules.\n3. `docs/checks/e2e-live.md`: new section \"Nightly run\": the secrets to set (names only), where the results appear (run summary, artifact, the issue), and the acceptance rule from the roadmap: 14/14 green on two consecutive nights before Phase 0 closes, recorded by the human in that doc with the two run URLs.\n4. A Vitest guard (e2e/live-nightly.guard.test.ts) parses the workflow YAML (use the yaml package if already present, else a minimal check on required strings) and asserts: secrets are read from `secrets.*` only, no `echo` of them, artifact upload present, concurrency set.\nNo new dependencies except a YAML parser if none exists (state it). Do not touch README.md, docs/DEPLOY.md, .env.example, .github/workflows/ci.yml or db-tests.yml (another task owns them).",
+  "inputs": [],
+  "acceptance": [
+    ".github/workflows/nightly-live.yml exists with schedule + workflow_dispatch, secrets only via secrets.*, artifact upload of e2e/live/out, step summary, issue create/update on failure and close on success, concurrency group (guard test asserts these)",
+    "summary-reporter writes summary.json next to summary.md with passed/total/status/steps; existing summary.md content unchanged (reporter test)",
+    "e2e/live.guard.test.ts still passes: no credential can reach the summary",
+    "docs/checks/e2e-live.md has the Nightly run section with the two-consecutive-nights rule",
+    ".claude/hooks/tests-green.sh wt/THIS-TASK exits 0"
+  ],
+  "scope": [
+    ".github/workflows/nightly-live.yml",
+    "e2e/live/summary-reporter.ts",
+    "e2e/live/summary-reporter.test.ts",
+    "e2e/live-nightly.guard.test.ts",
+    "docs/checks/e2e-live.md",
+    "package.json",
+    "package-lock.json"
+  ],
+  "depends_on": [],
+  "constraints": {
+    "read_only": false,
+    "budget_turns": 60,
+    "timeout_s": 2400,
+    "goal_branch": "goal/T-0280",
+    "task_class": "unfamiliar",
+    "route": "straightforward",
+    "read_scope": [
+      "e2e/**",
+      "playwright.config.ts"
+    ],
+    "roadmap": "P0-4"
+  },
+  "status": "queued",
+  "assigned_to": null,
+  "worktree": null,
+  "codex_thread": null,
+  "result": null,
+  "events": [
+    {
+      "ts": 1791243724.7279801,
+      "pipeline": {
+        "first_ready_at": 1791243724.727943
+      }
+    }
+  ],
+  "pipeline": {
+    "first_ready_at": 1791243724.727943
+  }
+}
