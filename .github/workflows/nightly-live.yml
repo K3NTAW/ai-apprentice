@@ -1,0 +1,115 @@
+# Nightly live e2e (T-0292): runs npm run e2e:live against staging, posts summary.md to the run, uploads e2e/live/out/,
+# and keeps one issue "Nightly live e2e failed" (label nightly-live) open while the run fails. See docs/checks/e2e-live.md.
+name: Nightly live e2e
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: nightly-live
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      BASE_URL: ${{ secrets.BASE_URL }}
+      E2E_EMAIL: ${{ secrets.E2E_EMAIL }}
+      E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
+    steps:
+      - name: Check secrets (names only)
+        run: |
+          missing=0
+          for name in BASE_URL E2E_EMAIL E2E_PASSWORD; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Repository secret $name is not set (Settings, Secrets and variables, Actions)."
+              missing=1
+            fi
+          done
+          exit $missing
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npx playwright install chrome
+
+      - name: Run e2e:live
+        run: npm run e2e:live
+
+      - name: Post summary to the run
+        if: always()
+        run: |
+          if [ -f e2e/live/out/summary.md ]; then
+            cat e2e/live/out/summary.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            printf '# e2e:live summary\n\nNo summary.md was written (the run stopped before the reporter).\n' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload e2e/live/out
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-live-out
+          path: e2e/live/out/
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Open or update the failure issue
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require("fs");
+            const title = "Nightly live e2e failed";
+            const label = "nightly-live";
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            let counts = "No summary.json (the run stopped before the reporter).";
+            if (fs.existsSync("e2e/live/out/summary.json")) {
+              const s = JSON.parse(fs.readFileSync("e2e/live/out/summary.json", "utf8"));
+              counts = `${s.passed}/${s.total} steps passed, overall ${s.status}.`;
+            }
+            const summary = fs.existsSync("e2e/live/out/summary.md")
+              ? fs.readFileSync("e2e/live/out/summary.md", "utf8")
+              : "";
+            const body = [`Run: ${runUrl}`, "", counts, "", summary].join("\n").slice(0, 60000);
+            try {
+              await github.rest.issues.createLabel({ ...context.repo, name: label, color: "d73a4a" });
+            } catch (e) {
+              if (e.status !== 422) throw e;
+            }
+            const open = await github.rest.issues.listForRepo({ ...context.repo, state: "open", labels: label, per_page: 100 });
+            const existing = open.data.find((i) => i.title === title && !i.pull_request);
+            if (existing) {
+              await github.rest.issues.update({ ...context.repo, issue_number: existing.number, body });
+              await github.rest.issues.createComment({ ...context.repo, issue_number: existing.number, body: `Failed again: ${runUrl}\n\n${counts}` });
+            } else {
+              await github.rest.issues.create({ ...context.repo, title, body, labels: [label] });
+            }
+
+      - name: Close the failure issue
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const title = "Nightly live e2e failed";
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const open = await github.rest.issues.listForRepo({ ...context.repo, state: "open", labels: "nightly-live", per_page: 100 });
+            for (const issue of open.data.filter((i) => i.title === title && !i.pull_request)) {
+              await github.rest.issues.createComment({ ...context.repo, issue_number: issue.number, body: `Green again: ${runUrl}` });
+              await github.rest.issues.update({ ...context.repo, issue_number: issue.number, state: "closed" });
+            }

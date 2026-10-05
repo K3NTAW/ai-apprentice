@@ -1,9 +1,18 @@
 // Writes e2e/live/out/summary.md: each step with pass/fail, duration, console errors, failed requests, app gaps found,
 // and the page load times from the load-times step. Everything in here already went through scrub() in fixtures.ts.
+// Also writes summary.json next to it ({passed, total, status, steps: [{title, status, ms}]}) for the nightly workflow;
+// it carries step titles, statuses and durations only, no error text or observations.
 import type { FullResult, Reporter, TestCase, TestResult } from "@playwright/test/reporter";
 import fs from "node:fs";
 import path from "node:path";
 import type { Observations } from "./fixtures";
+
+export type SummaryJson = {
+  passed: number;
+  total: number;
+  status: FullResult["status"];
+  steps: { title: string; status: string; ms: number }[];
+};
 
 export type LoadTime = { path: string; ttfbMs: number; domContentLoadedMs: number; loadMs: number };
 
@@ -73,6 +82,14 @@ export default class SummaryReporter implements Reporter {
     } else lines.push("Not measured (the load-times step did not run).");
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, `${lines.join("\n")}\n`);
+    const json: SummaryJson = {
+      passed,
+      total: this.rows.length,
+      status: result.status,
+      steps: this.rows.map((r) => ({ title: r.title, status: r.status, ms: r.ms })),
+    };
+    const jsonFile = path.join(path.dirname(file), "summary.json");
+    fs.writeFileSync(jsonFile, `${JSON.stringify(json, null, 2)}\n`);
   }
 
   printsToStdio() {

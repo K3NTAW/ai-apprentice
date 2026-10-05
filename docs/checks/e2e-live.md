@@ -34,6 +34,35 @@ E2E_EMAIL=... E2E_PASSWORD=... BASE_URL=https://<deployed-app> npm run e2e:live
   only counted), app gaps found, and page load times (TTFB, DOMContentLoaded, load from navigation timing) for
   /agents, /learn, /map, /workspace and /capture.
 
+## Nightly run (T-0292)
+
+`.github/workflows/nightly-live.yml` runs `npm run e2e:live` against staging every day at 03:00 UTC, and on demand
+(Actions, Nightly live e2e, Run workflow). One run at a time (concurrency group `nightly-live`).
+
+Repository secrets to set (Settings, Secrets and variables, Actions), names only:
+
+- `BASE_URL`: the staging app URL.
+- `E2E_EMAIL`, `E2E_PASSWORD`: the staging test user.
+
+The workflow fails at its first step with the missing secret's name when one is not set. It reads them only through
+`secrets.*` and never echoes them.
+
+Where the results appear:
+
+- Run summary: `summary.md` is appended to the run's summary page.
+- Artifact `e2e-live-out`: everything in `e2e/live/out/` (screenshots, `summary.md`, `summary.json`), kept 14 days.
+- Issue "Nightly live e2e failed" (label `nightly-live`): opened on the first failing run with the run URL and the
+  summary table, updated with a comment on each further failure, closed on the next green run.
+
+The reporter also writes `summary.json` (`{passed, total, status, steps: [{title, status, ms}]}`) so the workflow
+reads counts without parsing Markdown. `e2e/live-nightly.guard.test.ts` (Vitest) checks the workflow and the reporter.
+
+Acceptance rule (roadmap 3.1, P0-4): 14/14 green on two consecutive nights before Phase 0 closes. The human records
+the two run URLs here:
+
+- Night 1: (not yet)
+- Night 2: (not yet)
+
 ## Steps
 
 Each step is one test. A failed step restarts the browser, signs in again and the run continues.
