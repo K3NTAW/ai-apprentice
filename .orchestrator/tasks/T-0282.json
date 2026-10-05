@@ -1,0 +1,769 @@
+{
+  "id": "T-0282",
+  "created_at": 1791243567.008485,
+  "parent": "T-0280",
+  "role": "spec_review",
+  "tier": "sonnet",
+  "complexity": 7,
+  "title": "spec review: Real-database tests: cross-tenant RLS suite against the Supabase local stack, plus GitHub Actions CI",
+  "spec": "Why: SQL and RLS are verified only by manual checks (roadmap 3.1 \"The gate runs no database\"); tenant isolation rests on RLS over 15 tables plus two service-role paths (supabase/migrations/*). P0-1.\nWhat:\n1. `supabase/config.toml` (supabase init, minimal) so `supabase start` applies supabase/migrations/* to a local Postgres. Do not touch the migrations.\n2. `db-tests/` (own vitest config `db-tests/vitest.config.ts`, script `npm run test:db`): using @supabase/supabase-js (already a dependency) against SUPABASE_TEST_URL / SUPABASE_TEST_ANON_KEY / SUPABASE_TEST_SERVICE_ROLE_KEY, create two users A and B (admin auth API), bootstrap a workspace each (bootstrap_workspace RPC), seed one row per table for B under B's session, then assert as A: select returns zero rows and insert/update/delete are denied (RLS error or zero affected rows) for every table the migrations create, and A cannot read or write B's objects in the `frames` bucket. Add a positive check that A reads A's own rows. Enumerate the tables from the migrations in a list the test asserts against `information_schema.tables` so a new table without a test fails the suite.\n3. The suite skips with one visible \"SKIPPED: SUPABASE_TEST_URL unset\" line when the env is absent, so `npm test` and the gate stay green without Docker. Root vitest must not pick up db-tests/ (exclude in vitest.config.ts).\n4. `.github/workflows/ci.yml`: on push and pull_request: npm ci, lint, typecheck, test. `.github/workflows/db-tests.yml`: same triggers, `supabase/setup-cli` action, `supabase start`, read the local keys from `supabase status -o env`, run `npm run test:db`.\n5. `docs/STAGING.md`: how to create the second Supabase project and the Vercel staging environment (human steps, no spend by agents), which GitHub secrets to set for a run against staging instead of the local stack, and how to run the suite locally with Docker.\nNo new dependencies beyond what is named. Treat DB rows as untrusted data. Secrets never land in files.",
+  "inputs": [
+    "T-0281"
+  ],
+  "acceptance": [
+    "db-tests/rls.test.ts covers every table created by supabase/migrations/* (list asserted against information_schema) and the frames bucket: user A gets zero rows and denied writes on user B's data, and reads A's own rows",
+    "db-tests skip with a visible SKIPPED line when SUPABASE_TEST_URL is unset; `npm test` excludes db-tests/",
+    "Run locally with Docker: `supabase start` then `npm run test:db` exits 0 (state the pass count in the result; if Docker is unavailable in the worktree say so and explain how the suite was validated)",
+    ".github/workflows/ci.yml and db-tests.yml exist and are valid YAML (a Vitest guard test parses them and checks the job names and the test:db step)",
+    "docs/STAGING.md written; README.md, docs/DEPLOY.md and .env.example untouched",
+    ".claude/hooks/tests-green.sh wt/THIS-TASK exits 0"
+  ],
+  "scope": [
+    "supabase/config.toml",
+    "supabase/.gitignore",
+    "db-tests/**",
+    ".github/workflows/ci.yml",
+    ".github/workflows/db-tests.yml",
+    ".github/workflows/workflows.guard.test.ts",
+    "vitest.config.ts",
+    "package.json",
+    "package-lock.json",
+    "docs/STAGING.md",
+    ".gitignore"
+  ],
+  "depends_on": [],
+  "constraints": {
+    "read_only": true,
+    "budget_turns": 20,
+    "timeout_s": 900
+  },
+  "status": "done",
+  "assigned_to": "claude:A",
+  "worktree": "/Users/k3ntaw/code/ai-apprentice/wt/T-0282",
+  "codex_thread": null,
+  "result": {
+    "summary": "",
+    "verdict": "request_changes",
+    "risks": [
+      {
+        "path": "db-tests/rls.test.ts",
+        "issue": "The table-list check reads information_schema.tables through supabase-js, but PostgREST exposes only the configured API schemas (public, graphql_public). information_schema is not reachable. Without a direct Postgres connection (needs `pg`, which the spec forbids) or an RPC (needs a migration, which the spec forbids), the check cannot be built as written. It also has to filter to schema public, otherwise auth.* and storage.* tables show up as untested.",
+        "severity": "high",
+        "line": 0
+      },
+      {
+        "path": "vitest.config.ts",
+        "issue": "Root `include` is an explicit allowlist (src/**, e2e/*.guard.test.ts), so db-tests/ is already excluded and the extra exclude does nothing. The real problem is the opposite one: `.github/workflows/workflows.guard.test.ts` matches no include pattern, so the guard test would never run in `npm test`. Acceptance bullet 4 would pass vacuously.",
+        "severity": "high",
+        "line": 0
+      },
+      {
+        "path": ".github/workflows/workflows.guard.test.ts",
+        "issue": "The guard has to parse YAML, but no yaml or js-yaml dependency is declared, and the spec says no new dependencies. `yaml` could only be used as an undeclared transitive dependency, which breaks `npm ci` if the tree changes. Otherwise it has to fall back to regexes, which is not parsing valid YAML. The root tsconfig also type-checks `**/*.ts`, so db-tests/ and the guard test enter `npm run typecheck`, while `lint` only covers `src e2e`. Neither is stated.",
+        "severity": "med",
+        "line": 0
+      },
+      {
+        "path": ".github/workflows/db-tests.yml",
+        "issue": "Silent fallback: the suite skips with one line when SUPABASE_TEST_URL is unset. If `supabase status -o env` fails or a key name differs, the CI job goes green having tested nothing. The same applies to a staging run with a missing secret.",
+        "severity": "high",
+        "line": 0
+      },
+      {
+        "path": ".github/workflows/db-tests.yml",
+        "issue": "Local keys read from `supabase status -o env` are not masked and not pinned. The `setup-cli` version, the action version and the Node version are all unspecified. Exporting the keys through GITHUB_ENV without `::add-mask::` puts them in the logs. The staging service-role key lives in GitHub secrets and is exposed to fork pull requests under the `pull_request` trigger.",
+        "severity": "med",
+        "line": 0
+      },
+      {
+        "path": "db-tests/rls.test.ts",
+        "issue": "No safety guard on the target. The suite creates and deletes users with the service-role key. If SUPABASE_TEST_URL points at the production project, the suite writes to production. Nothing requires an allowlist (localhost or a named staging host), and user cleanup/teardown is not specified. Repeated staging runs would leak users and workspaces.",
+        "severity": "high",
+        "line": 0
+      },
+      {
+        "path": "db-tests/rls.test.ts",
+        "issue": "The seed step cannot work as specified for several tables. workspaces and workspace_members have no insert policy (create_workspace and bootstrap_workspace are security definer). usage_counters, processes_tombstones and agent_deletion_requests are likely written only by RPCs, triggers or the service role. Rows in sessions, session_* and process_versions depend on parent rows and guard triggers. 'One row per table under B's session' has to be 'via RPC or service role, per table', with the order spelled out.",
+        "severity": "med",
+        "line": 0
+      }
+    ],
+    "suggested_spec_changes": [
+      "Replace the information_schema assertion. Either (a) assert the hard-coded table list against the migration SQL text (parse `create table public.x` from supabase/migrations/*.sql, which needs no database), or (b) add `pg` as a named devDependency and query information_schema.tables where table_schema='public'. Say which one; (a) works with no new dependency.",
+      "Add `.github/workflows/*.guard.test.ts` to the root vitest include, or move the guard to e2e/workflows.guard.test.ts (already matched by the include) and update scope. Keep the db-tests exclude only as documentation.",
+      "Name the YAML parser: either add `yaml` as a devDependency, listed in package.json and package-lock.json, or specify that the guard checks structure with documented string matches. Update the dependency clause.",
+      "Add REQUIRE_DB=1 (set in db-tests.yml). When it is set and SUPABASE_TEST_URL is unset, the suite fails instead of skipping. In the workflow, fail the step if any of the three keys is empty, and run `::add-mask::` on them.",
+      "Add a target guard: refuse to run unless the URL host is localhost/127.0.0.1 or is in an explicit SUPABASE_TEST_ALLOWED_HOST. Specify afterAll cleanup (admin deleteUser, which cascades) and use unique emails per run.",
+      "Specify the seeding path per table (RPC, service role, or user session) and the order. Require a precondition assertion via the service role that every B row exists before A's assertions run, and a postcondition that B's rows are unchanged after A's update and delete attempts.",
+      "Add scope: A calling security-definer RPCs with B's workspace id is denied, anon is denied on every table and on the frames bucket, and frames upload, download, list and remove are each asserted for A against B's prefix.",
+      "Pin the Node version and the supabase/setup-cli version in both workflows. Restrict the staging secrets to push and workflow_dispatch, not fork pull requests. State that eslint and tsc coverage of db-tests/ is either intended or excluded.",
+      "Add a rollback line: everything is additive. Removal means deleting db-tests/, the workflows, config.toml and docs/STAGING.md, with no migration or runtime change. If Docker is unavailable, require the suite to be validated at least through the table-list and skip-path tests, and mark the acceptance bullet as unverified."
+    ],
+    "truncated": {
+      "reason": "over MAX_RESULT_CHARS",
+      "original_chars": 7812,
+      "trimmed": {
+        "risks": 5
+      }
+    },
+    "confidence": 0.0,
+    "provenance": [
+      "repo"
+    ]
+  },
+  "events": [
+    {
+      "ts": 1791243568.422785,
+      "packet_meta": {
+        "prefix_sha": "37a97024d931",
+        "prefix_chars": 686,
+        "suffix_chars": 3860,
+        "dynamic_sections": [
+          "spec",
+          "acceptance",
+          "scope",
+          "depends_on",
+          "existing tests",
+          "complexity",
+          "tier"
+        ]
+      }
+    },
+    {
+      "ts": 1791243568.443837,
+      "packet_meta": {
+        "chars": 3859,
+        "est_tokens": 964,
+        "presented_tokens": 964,
+        "sections": {
+          "_preamble": {
+            "chars": 69,
+            "est_tokens": 17,
+            "sha256": "9b3dde7431d7199e3215f5e2d18425a6681e90307cac477c5889928f1bc15720"
+          },
+          "spec": {
+            "chars": 1997,
+            "est_tokens": 499,
+            "sha256": "720b73435ddbda1ae4ca03e51becbb978ec3f41105ed89e32b3975e2615e3d88"
+          },
+          "acceptance": {
+            "chars": 825,
+            "est_tokens": 206,
+            "sha256": "5f125588130beab252fb799022a0beb12c654be096ea1847a5cc4a01bdc420ac"
+          },
+          "scope": {
+            "chars": 257,
+            "est_tokens": 64,
+            "sha256": "9199883aee6b513d8ce42d72749b85e921a55e35086a1a64adb2a19670049f44"
+          },
+          "depends_on": {
+            "chars": 23,
+            "est_tokens": 5,
+            "sha256": "a1f80c68ea5dfed4c164f0a1b57674c850b8e75df45a22fc0e938ae8cbfc28ab"
+          },
+          "existing tests": {
+            "chars": 660,
+            "est_tokens": 165,
+            "sha256": "3e33499f26dc0d12582cac9da9bc7bf4ddfeefcff0182f94ba61da3986785ace"
+          },
+          "complexity": {
+            "chars": 16,
+            "est_tokens": 4,
+            "sha256": "48a0d75060c96df5c16f0e3782f148ab3629f08b4272ab15542e3f44caa02c94"
+          },
+          "tier": {
+            "chars": 12,
+            "est_tokens": 3,
+            "sha256": "f3170b9573b83cb0aed2288100dd1360a1fff6c7bb13cd6b6615eefa9fe0d302"
+          }
+        },
+        "hash": "5117f4dc0a95",
+        "version": "5117f4dc0a95",
+        "candidate_known": false,
+        "base": "bc60ad3d015b",
+        "sources": "task@T-0281 tree@HEAD",
+        "prefix_sha": "37a97024d931",
+        "prefix_chars": 686,
+        "suffix_chars": 3860,
+        "dynamic_sections": [
+          "spec",
+          "acceptance",
+          "scope",
+          "depends_on",
+          "existing tests",
+          "complexity",
+          "tier"
+        ],
+        "instruction_tokens": 172,
+        "instruction_tokens_modular": 172,
+        "role": "spec_review",
+        "tool_tokens_disclosed": 1722,
+        "tool_tokens_minimal": 1722,
+        "tool_allowlist_source": "minimal",
+        "skills_exposed": [
+          "executor/implement-spec",
+          "planner/memory",
+          "planner/orchestrate",
+          "planner/resume",
+          "planner/write-spec",
+          "review/adversarial-review",
+          "review/challenge",
+          "scout/repo-map",
+          "scout/test-gap",
+          "scout/trace-callers",
+          "triage/classify",
+          "triage/compact-memory"
+        ],
+        "skill_tokens_l0": 219,
+        "skills_selected": [
+          "review/adversarial-review"
+        ],
+        "skill_tokens_selected_l0": 16,
+        "skill_tokens_selected_l2": 67,
+        "skill_tokens_presented_l2": 0,
+        "skill_routing_mode": "shadow"
+      }
+    },
+    {
+      "ts": 1791243569.234709,
+      "status": "running",
+      "assigned_to": "claude:A",
+      "worktree": "/Users/k3ntaw/code/ai-apprentice/wt/T-0282",
+      "claimed_at": 1791243569.2343612
+    },
+    {
+      "ts": 1791243569.23583,
+      "account": "A"
+    },
+    {
+      "ts": 1791243570.243788,
+      "pid": 11724,
+      "account": "A"
+    },
+    {
+      "ts": 1791243625.320695,
+      "packet_meta": {
+        "chars": 3859,
+        "est_tokens": 964,
+        "presented_tokens": 964,
+        "sections": {
+          "_preamble": {
+            "chars": 69,
+            "est_tokens": 17,
+            "sha256": "9b3dde7431d7199e3215f5e2d18425a6681e90307cac477c5889928f1bc15720"
+          },
+          "spec": {
+            "chars": 1997,
+            "est_tokens": 499,
+            "sha256": "720b73435ddbda1ae4ca03e51becbb978ec3f41105ed89e32b3975e2615e3d88"
+          },
+          "acceptance": {
+            "chars": 825,
+            "est_tokens": 206,
+            "sha256": "5f125588130beab252fb799022a0beb12c654be096ea1847a5cc4a01bdc420ac"
+          },
+          "scope": {
+            "chars": 257,
+            "est_tokens": 64,
+            "sha256": "9199883aee6b513d8ce42d72749b85e921a55e35086a1a64adb2a19670049f44"
+          },
+          "depends_on": {
+            "chars": 23,
+            "est_tokens": 5,
+            "sha256": "a1f80c68ea5dfed4c164f0a1b57674c850b8e75df45a22fc0e938ae8cbfc28ab"
+          },
+          "existing tests": {
+            "chars": 660,
+            "est_tokens": 165,
+            "sha256": "3e33499f26dc0d12582cac9da9bc7bf4ddfeefcff0182f94ba61da3986785ace"
+          },
+          "complexity": {
+            "chars": 16,
+            "est_tokens": 4,
+            "sha256": "48a0d75060c96df5c16f0e3782f148ab3629f08b4272ab15542e3f44caa02c94"
+          },
+          "tier": {
+            "chars": 12,
+            "est_tokens": 3,
+            "sha256": "f3170b9573b83cb0aed2288100dd1360a1fff6c7bb13cd6b6615eefa9fe0d302"
+          }
+        },
+        "hash": "5117f4dc0a95",
+        "version": "5117f4dc0a95",
+        "candidate_known": false,
+        "base": "bc60ad3d015b",
+        "sources": "task@T-0281 tree@HEAD",
+        "prefix_sha": "37a97024d931",
+        "prefix_chars": 686,
+        "suffix_chars": 3860,
+        "dynamic_sections": [
+          "spec",
+          "acceptance",
+          "scope",
+          "depends_on",
+          "existing tests",
+          "complexity",
+          "tier"
+        ],
+        "instruction_tokens": 172,
+        "instruction_tokens_modular": 172,
+        "role": "spec_review",
+        "tool_tokens_disclosed": 1722,
+        "tool_tokens_minimal": 1722,
+        "tool_allowlist_source": "minimal",
+        "skills_exposed": [
+          "executor/implement-spec",
+          "planner/memory",
+          "planner/orchestrate",
+          "planner/resume",
+          "planner/write-spec",
+          "review/adversarial-review",
+          "review/challenge",
+          "scout/repo-map",
+          "scout/test-gap",
+          "scout/trace-callers",
+          "triage/classify",
+          "triage/compact-memory"
+        ],
+        "skill_tokens_l0": 219,
+        "skills_selected": [
+          "review/adversarial-review"
+        ],
+        "skill_tokens_selected_l0": 16,
+        "skill_tokens_selected_l2": 67,
+        "skill_tokens_presented_l2": 0,
+        "skill_routing_mode": "shadow",
+        "session_id": "a2239d7b-692a-4e42-a009-6f580f1371b8"
+      }
+    },
+    {
+      "ts": 1791243625.339255,
+      "packet_meta": {
+        "chars": 3859,
+        "est_tokens": 964,
+        "presented_tokens": 964,
+        "sections": {
+          "_preamble": {
+            "chars": 69,
+            "est_tokens": 17,
+            "sha256": "9b3dde7431d7199e3215f5e2d18425a6681e90307cac477c5889928f1bc15720"
+          },
+          "spec": {
+            "chars": 1997,
+            "est_tokens": 499,
+            "sha256": "720b73435ddbda1ae4ca03e51becbb978ec3f41105ed89e32b3975e2615e3d88"
+          },
+          "acceptance": {
+            "chars": 825,
+            "est_tokens": 206,
+            "sha256": "5f125588130beab252fb799022a0beb12c654be096ea1847a5cc4a01bdc420ac"
+          },
+          "scope": {
+            "chars": 257,
+            "est_tokens": 64,
+            "sha256": "9199883aee6b513d8ce42d72749b85e921a55e35086a1a64adb2a19670049f44"
+          },
+          "depends_on": {
+            "chars": 23,
+            "est_tokens": 5,
+            "sha256": "a1f80c68ea5dfed4c164f0a1b57674c850b8e75df45a22fc0e938ae8cbfc28ab"
+          },
+          "existing tests": {
+            "chars": 660,
+            "est_tokens": 165,
+            "sha256": "3e33499f26dc0d12582cac9da9bc7bf4ddfeefcff0182f94ba61da3986785ace"
+          },
+          "complexity": {
+            "chars": 16,
+            "est_tokens": 4,
+            "sha256": "48a0d75060c96df5c16f0e3782f148ab3629f08b4272ab15542e3f44caa02c94"
+          },
+          "tier": {
+            "chars": 12,
+            "est_tokens": 3,
+            "sha256": "f3170b9573b83cb0aed2288100dd1360a1fff6c7bb13cd6b6615eefa9fe0d302"
+          }
+        },
+        "hash": "5117f4dc0a95",
+        "version": "5117f4dc0a95",
+        "candidate_known": false,
+        "base": "bc60ad3d015b",
+        "sources": "task@T-0281 tree@HEAD",
+        "prefix_sha": "37a97024d931",
+        "prefix_chars": 686,
+        "suffix_chars": 3860,
+        "dynamic_sections": [
+          "spec",
+          "acceptance",
+          "scope",
+          "depends_on",
+          "existing tests",
+          "complexity",
+          "tier"
+        ],
+        "instruction_tokens": 172,
+        "instruction_tokens_modular": 172,
+        "role": "spec_review",
+        "tool_tokens_disclosed": 1722,
+        "tool_tokens_minimal": 1722,
+        "tool_allowlist_source": "minimal",
+        "skills_exposed": [
+          "executor/implement-spec",
+          "planner/memory",
+          "planner/orchestrate",
+          "planner/resume",
+          "planner/write-spec",
+          "review/adversarial-review",
+          "review/challenge",
+          "scout/repo-map",
+          "scout/test-gap",
+          "scout/trace-callers",
+          "triage/classify",
+          "triage/compact-memory"
+        ],
+        "skill_tokens_l0": 219,
+        "skills_selected": [
+          "review/adversarial-review"
+        ],
+        "skill_tokens_selected_l0": 16,
+        "skill_tokens_selected_l2": 67,
+        "skill_tokens_presented_l2": 0,
+        "skill_routing_mode": "shadow",
+        "session_id": "a2239d7b-692a-4e42-a009-6f580f1371b8",
+        "skills_used": [],
+        "skill_tokens_l2": 0
+      },
+      "pipeline": {
+        "skills_used": []
+      }
+    },
+    {
+      "ts": 1791243625.539104,
+      "status": "done",
+      "result": {
+        "summary": "",
+        "verdict": "request_changes",
+        "risks": [
+          {
+            "path": "db-tests/rls.test.ts",
+            "issue": "The table-list check reads information_schema.tables through supabase-js, but PostgREST exposes only the configured API schemas (public, graphql_public). information_schema is not reachable. Without a direct Postgres connection (needs `pg`, which the spec forbids) or an RPC (needs a migration, which the spec forbids), the check cannot be built as written. It also has to filter to schema public, otherwise auth.* and storage.* tables show up as untested.",
+            "severity": "high",
+            "line": 0
+          },
+          {
+            "path": "vitest.config.ts",
+            "issue": "Root `include` is an explicit allowlist (src/**, e2e/*.guard.test.ts), so db-tests/ is already excluded and the extra exclude does nothing. The real problem is the opposite one: `.github/workflows/workflows.guard.test.ts` matches no include pattern, so the guard test would never run in `npm test`. Acceptance bullet 4 would pass vacuously.",
+            "severity": "high",
+            "line": 0
+          },
+          {
+            "path": ".github/workflows/workflows.guard.test.ts",
+            "issue": "The guard has to parse YAML, but no yaml or js-yaml dependency is declared, and the spec says no new dependencies. `yaml` could only be used as an undeclared transitive dependency, which breaks `npm ci` if the tree changes. Otherwise it has to fall back to regexes, which is not parsing valid YAML. The root tsconfig also type-checks `**/*.ts`, so db-tests/ and the guard test enter `npm run typecheck`, while `lint` only covers `src e2e`. Neither is stated.",
+            "severity": "med",
+            "line": 0
+          },
+          {
+            "path": ".github/workflows/db-tests.yml",
+            "issue": "Silent fallback: the suite skips with one line when SUPABASE_TEST_URL is unset. If `supabase status -o env` fails or a key name differs, the CI job goes green having tested nothing. The same applies to a staging run with a missing secret.",
+            "severity": "high",
+            "line": 0
+          },
+          {
+            "path": ".github/workflows/db-tests.yml",
+            "issue": "Local keys read from `supabase status -o env` are not masked and not pinned. The `setup-cli` version, the action version and the Node version are all unspecified. Exporting the keys through GITHUB_ENV without `::add-mask::` puts them in the logs. The staging service-role key lives in GitHub secrets and is exposed to fork pull requests under the `pull_request` trigger.",
+            "severity": "med",
+            "line": 0
+          },
+          {
+            "path": "db-tests/rls.test.ts",
+            "issue": "No safety guard on the target. The suite creates and deletes users with the service-role key. If SUPABASE_TEST_URL points at the production project, the suite writes to production. Nothing requires an allowlist (localhost or a named staging host), and user cleanup/teardown is not specified. Repeated staging runs would leak users and workspaces.",
+            "severity": "high",
+            "line": 0
+          },
+          {
+            "path": "db-tests/rls.test.ts",
+            "issue": "The seed step cannot work as specified for several tables. workspaces and workspace_members have no insert policy (create_workspace and bootstrap_workspace are security definer). usage_counters, processes_tombstones and agent_deletion_requests are likely written only by RPCs, triggers or the service role. Rows in sessions, session_* and process_versions depend on parent rows and guard triggers. 'One row per table under B's session' has to be 'via RPC or service role, per table', with the order spelled out.",
+            "severity": "med",
+            "line": 0
+          }
+        ],
+        "suggested_spec_changes": [
+          "Replace the information_schema assertion. Either (a) assert the hard-coded table list against the migration SQL text (parse `create table public.x` from supabase/migrations/*.sql, which needs no database), or (b) add `pg` as a named devDependency and query information_schema.tables where table_schema='public'. Say which one; (a) works with no new dependency.",
+          "Add `.github/workflows/*.guard.test.ts` to the root vitest include, or move the guard to e2e/workflows.guard.test.ts (already matched by the include) and update scope. Keep the db-tests exclude only as documentation.",
+          "Name the YAML parser: either add `yaml` as a devDependency, listed in package.json and package-lock.json, or specify that the guard checks structure with documented string matches. Update the dependency clause.",
+          "Add REQUIRE_DB=1 (set in db-tests.yml). When it is set and SUPABASE_TEST_URL is unset, the suite fails instead of skipping. In the workflow, fail the step if any of the three keys is empty, and run `::add-mask::` on them.",
+          "Add a target guard: refuse to run unless the URL host is localhost/127.0.0.1 or is in an explicit SUPABASE_TEST_ALLOWED_HOST. Specify afterAll cleanup (admin deleteUser, which cascades) and use unique emails per run.",
+          "Specify the seeding path per table (RPC, service role, or user session) and the order. Require a precondition assertion via the service role that every B row exists before A's assertions run, and a postcondition that B's rows are unchanged after A's update and delete attempts.",
+          "Add scope: A calling security-definer RPCs with B's workspace id is denied, anon is denied on every table and on the frames bucket, and frames upload, download, list and remove are each asserted for A against B's prefix.",
+          "Pin the Node version and the supabase/setup-cli version in both workflows. Restrict the staging secrets to push and workflow_dispatch, not fork pull requests. State that eslint and tsc coverage of db-tests/ is either intended or excluded.",
+          "Add a rollback line: everything is additive. Removal means deleting db-tests/, the workflows, config.toml and docs/STAGING.md, with no migration or runtime change. If Docker is unavailable, require the suite to be validated at least through the table-list and skip-path tests, and mark the acceptance bullet as unverified."
+        ],
+        "truncated": {
+          "reason": "over MAX_RESULT_CHARS",
+          "original_chars": 7812,
+          "trimmed": {
+            "risks": 5
+          }
+        },
+        "confidence": 0.0,
+        "provenance": [
+          "repo"
+        ]
+      }
+    },
+    {
+      "ts": 1791243625.540434,
+      "spec_review_verdict": "request_changes",
+      "spec_review_risks": [
+        {
+          "path": "db-tests/rls.test.ts",
+          "issue": "The table-list check reads information_schema.tables through supabase-js, but PostgREST exposes only the configured API schemas (public, graphql_public). information_schema is not reachable. Without a direct Postgres connection (needs `pg`, which the spec forbids) or an RPC (needs a migration, which the spec forbids), the check cannot be built as written. It also has to filter to schema public, otherwise auth.* and storage.* tables show up as untested.",
+          "severity": "high",
+          "line": 0
+        },
+        {
+          "path": "vitest.config.ts",
+          "issue": "Root `include` is an explicit allowlist (src/**, e2e/*.guard.test.ts), so db-tests/ is already excluded and the extra exclude does nothing. The real problem is the opposite one: `.github/workflows/workflows.guard.test.ts` matches no include pattern, so the guard test would never run in `npm test`. Acceptance bullet 4 would pass vacuously.",
+          "severity": "high",
+          "line": 0
+        },
+        {
+          "path": ".github/workflows/workflows.guard.test.ts",
+          "issue": "The guard has to parse YAML, but no yaml or js-yaml dependency is declared, and the spec says no new dependencies. `yaml` could only be used as an undeclared transitive dependency, which breaks `npm ci` if the tree changes. Otherwise it has to fall back to regexes, which is not parsing valid YAML. The root tsconfig also type-checks `**/*.ts`, so db-tests/ and the guard test enter `npm run typecheck`, while `lint` only covers `src e2e`. Neither is stated.",
+          "severity": "med",
+          "line": 0
+        },
+        {
+          "path": ".github/workflows/db-tests.yml",
+          "issue": "Silent fallback: the suite skips with one line when SUPABASE_TEST_URL is unset. If `supabase status -o env` fails or a key name differs, the CI job goes green having tested nothing. The same applies to a staging run with a missing secret.",
+          "severity": "high",
+          "line": 0
+        },
+        {
+          "path": ".github/workflows/db-tests.yml",
+          "issue": "Local keys read from `supabase status -o env` are not masked and not pinned. The `setup-cli` version, the action version and the Node version are all unspecified. Exporting the keys through GITHUB_ENV without `::add-mask::` puts them in the logs. The staging service-role key lives in GitHub secrets and is exposed to fork pull requests under the `pull_request` trigger.",
+          "severity": "med",
+          "line": 0
+        },
+        {
+          "path": "db-tests/rls.test.ts",
+          "issue": "No safety guard on the target. The suite creates and deletes users with the service-role key. If SUPABASE_TEST_URL points at the production project, the suite writes to production. Nothing requires an allowlist (localhost or a named staging host), and user cleanup/teardown is not specified. Repeated staging runs would leak users and workspaces.",
+          "severity": "high",
+          "line": 0
+        },
+        {
+          "path": "db-tests/rls.test.ts",
+          "issue": "The seed step cannot work as specified for several tables. workspaces and workspace_members have no insert policy (create_workspace and bootstrap_workspace are security definer). usage_counters, processes_tombstones and agent_deletion_requests are likely written only by RPCs, triggers or the service role. Rows in sessions, session_* and process_versions depend on parent rows and guard triggers. 'One row per table under B's session' has to be 'via RPC or service role, per table', with the order spelled out.",
+          "severity": "med",
+          "line": 0
+        },
+        {
+          "path": "db-tests/rls.test.ts",
+          "issue": "The assertions can pass vacuously. With RLS, A's update and delete on B's rows return no error and zero rows, so the test must use `.select()` and then confirm with the service role that B's rows are unchanged. Zero rows is also what an empty table returns, so the suite must first confirm via the service role that B's seed rows exist. Storage has the same trap: `remove()` returns an empty array rather than an error. Upload, download, list and remove all need explicit assertions, and object paths must follow the workspace/session/name layout the policies expect.",
+          "severity": "med",
+          "line": 0
+        },
+        {
+          "path": "db-tests/rls.test.ts",
+          "issue": "Table RLS is only part of the isolation surface. The security-definer RPCs granted to authenticated (consume_usage, agent_settings_patch, create_workspace, is_workspace_member and others) take a workspace id and are the likelier cross-tenant leak. Calls from A with B's workspace id are not covered. There is also no anon-role check, even though the migrations revoke anon on every table.",
+          "severity": "med",
+          "line": 0
+        },
+        {
+          "path": "supabase/config.toml",
+          "issue": "A minimal `supabase init` config may leave email confirmation on or the db major_version mismatched. The admin createUser flow and the Postgres version the migrations assume are not pinned. Local migration application cannot be verified in the worktree.",
+          "severity": "low",
+          "line": 0
+        },
+        {
+          "path": "db-tests/vitest.config.ts",
+          "issue": "Acceptance bullet 3 ('exits 0 with the pass count') cannot be met if Docker is missing in the worktree. The fallback 'explain how it was validated' is unverifiable, and the suite would land unrun. Nothing is said about running the files serially (fileParallelism false) or about test and hook timeouts for a cold stack.",
+          "severity": "low",
+          "line": 0
+        },
+        {
+          "path": "docs/STAGING.md",
+          "issue": "No rollback or removal path: how to undo the CI workflows, how to stop test users accumulating in staging. The doc also has to say that the staging service-role secret must never be the production key.",
+          "severity": "low",
+          "line": 0
+        }
+      ]
+    }
+  ],
+  "packet_meta": {
+    "chars": 3859,
+    "est_tokens": 964,
+    "presented_tokens": 964,
+    "sections": {
+      "_preamble": {
+        "chars": 69,
+        "est_tokens": 17,
+        "sha256": "9b3dde7431d7199e3215f5e2d18425a6681e90307cac477c5889928f1bc15720"
+      },
+      "spec": {
+        "chars": 1997,
+        "est_tokens": 499,
+        "sha256": "720b73435ddbda1ae4ca03e51becbb978ec3f41105ed89e32b3975e2615e3d88"
+      },
+      "acceptance": {
+        "chars": 825,
+        "est_tokens": 206,
+        "sha256": "5f125588130beab252fb799022a0beb12c654be096ea1847a5cc4a01bdc420ac"
+      },
+      "scope": {
+        "chars": 257,
+        "est_tokens": 64,
+        "sha256": "9199883aee6b513d8ce42d72749b85e921a55e35086a1a64adb2a19670049f44"
+      },
+      "depends_on": {
+        "chars": 23,
+        "est_tokens": 5,
+        "sha256": "a1f80c68ea5dfed4c164f0a1b57674c850b8e75df45a22fc0e938ae8cbfc28ab"
+      },
+      "existing tests": {
+        "chars": 660,
+        "est_tokens": 165,
+        "sha256": "3e33499f26dc0d12582cac9da9bc7bf4ddfeefcff0182f94ba61da3986785ace"
+      },
+      "complexity": {
+        "chars": 16,
+        "est_tokens": 4,
+        "sha256": "48a0d75060c96df5c16f0e3782f148ab3629f08b4272ab15542e3f44caa02c94"
+      },
+      "tier": {
+        "chars": 12,
+        "est_tokens": 3,
+        "sha256": "f3170b9573b83cb0aed2288100dd1360a1fff6c7bb13cd6b6615eefa9fe0d302"
+      }
+    },
+    "hash": "5117f4dc0a95",
+    "version": "5117f4dc0a95",
+    "candidate_known": false,
+    "base": "bc60ad3d015b",
+    "sources": "task@T-0281 tree@HEAD",
+    "prefix_sha": "37a97024d931",
+    "prefix_chars": 686,
+    "suffix_chars": 3860,
+    "dynamic_sections": [
+      "spec",
+      "acceptance",
+      "scope",
+      "depends_on",
+      "existing tests",
+      "complexity",
+      "tier"
+    ],
+    "instruction_tokens": 172,
+    "instruction_tokens_modular": 172,
+    "role": "spec_review",
+    "tool_tokens_disclosed": 1722,
+    "tool_tokens_minimal": 1722,
+    "tool_allowlist_source": "minimal",
+    "skills_exposed": [
+      "executor/implement-spec",
+      "planner/memory",
+      "planner/orchestrate",
+      "planner/resume",
+      "planner/write-spec",
+      "review/adversarial-review",
+      "review/challenge",
+      "scout/repo-map",
+      "scout/test-gap",
+      "scout/trace-callers",
+      "triage/classify",
+      "triage/compact-memory"
+    ],
+    "skill_tokens_l0": 219,
+    "skills_selected": [
+      "review/adversarial-review"
+    ],
+    "skill_tokens_selected_l0": 16,
+    "skill_tokens_selected_l2": 67,
+    "skill_tokens_presented_l2": 0,
+    "skill_routing_mode": "shadow",
+    "session_id": "a2239d7b-692a-4e42-a009-6f580f1371b8",
+    "skills_used": [],
+    "skill_tokens_l2": 0
+  },
+  "claimed_at": 1791243569.2343612,
+  "account": "A",
+  "pid": 11724,
+  "pipeline": {
+    "skills_used": []
+  },
+  "spec_review_verdict": "request_changes",
+  "spec_review_risks": [
+    {
+      "path": "db-tests/rls.test.ts",
+      "issue": "The table-list check reads information_schema.tables through supabase-js, but PostgREST exposes only the configured API schemas (public, graphql_public). information_schema is not reachable. Without a direct Postgres connection (needs `pg`, which the spec forbids) or an RPC (needs a migration, which the spec forbids), the check cannot be built as written. It also has to filter to schema public, otherwise auth.* and storage.* tables show up as untested.",
+      "severity": "high",
+      "line": 0
+    },
+    {
+      "path": "vitest.config.ts",
+      "issue": "Root `include` is an explicit allowlist (src/**, e2e/*.guard.test.ts), so db-tests/ is already excluded and the extra exclude does nothing. The real problem is the opposite one: `.github/workflows/workflows.guard.test.ts` matches no include pattern, so the guard test would never run in `npm test`. Acceptance bullet 4 would pass vacuously.",
+      "severity": "high",
+      "line": 0
+    },
+    {
+      "path": ".github/workflows/workflows.guard.test.ts",
+      "issue": "The guard has to parse YAML, but no yaml or js-yaml dependency is declared, and the spec says no new dependencies. `yaml` could only be used as an undeclared transitive dependency, which breaks `npm ci` if the tree changes. Otherwise it has to fall back to regexes, which is not parsing valid YAML. The root tsconfig also type-checks `**/*.ts`, so db-tests/ and the guard test enter `npm run typecheck`, while `lint` only covers `src e2e`. Neither is stated.",
+      "severity": "med",
+      "line": 0
+    },
+    {
+      "path": ".github/workflows/db-tests.yml",
+      "issue": "Silent fallback: the suite skips with one line when SUPABASE_TEST_URL is unset. If `supabase status -o env` fails or a key name differs, the CI job goes green having tested nothing. The same applies to a staging run with a missing secret.",
+      "severity": "high",
+      "line": 0
+    },
+    {
+      "path": ".github/workflows/db-tests.yml",
+      "issue": "Local keys read from `supabase status -o env` are not masked and not pinned. The `setup-cli` version, the action version and the Node version are all unspecified. Exporting the keys through GITHUB_ENV without `::add-mask::` puts them in the logs. The staging service-role key lives in GitHub secrets and is exposed to fork pull requests under the `pull_request` trigger.",
+      "severity": "med",
+      "line": 0
+    },
+    {
+      "path": "db-tests/rls.test.ts",
+      "issue": "No safety guard on the target. The suite creates and deletes users with the service-role key. If SUPABASE_TEST_URL points at the production project, the suite writes to production. Nothing requires an allowlist (localhost or a named staging host), and user cleanup/teardown is not specified. Repeated staging runs would leak users and workspaces.",
+      "severity": "high",
+      "line": 0
+    },
+    {
+      "path": "db-tests/rls.test.ts",
+      "issue": "The seed step cannot work as specified for several tables. workspaces and workspace_members have no insert policy (create_workspace and bootstrap_workspace are security definer). usage_counters, processes_tombstones and agent_deletion_requests are likely written only by RPCs, triggers or the service role. Rows in sessions, session_* and process_versions depend on parent rows and guard triggers. 'One row per table under B's session' has to be 'via RPC or service role, per table', with the order spelled out.",
+      "severity": "med",
+      "line": 0
+    },
+    {
+      "path": "db-tests/rls.test.ts",
+      "issue": "The assertions can pass vacuously. With RLS, A's update and delete on B's rows return no error and zero rows, so the test must use `.select()` and then confirm with the service role that B's rows are unchanged. Zero rows is also what an empty table returns, so the suite must first confirm via the service role that B's seed rows exist. Storage has the same trap: `remove()` returns an empty array rather than an error. Upload, download, list and remove all need explicit assertions, and object paths must follow the workspace/session/name layout the policies expect.",
+      "severity": "med",
+      "line": 0
+    },
+    {
+      "path": "db-tests/rls.test.ts",
+      "issue": "Table RLS is only part of the isolation surface. The security-definer RPCs granted to authenticated (consume_usage, agent_settings_patch, create_workspace, is_workspace_member and others) take a workspace id and are the likelier cross-tenant leak. Calls from A with B's workspace id are not covered. There is also no anon-role check, even though the migrations revoke anon on every table.",
+      "severity": "med",
+      "line": 0
+    },
+    {
+      "path": "supabase/config.toml",
+      "issue": "A minimal `supabase init` config may leave email confirmation on or the db major_version mismatched. The admin createUser flow and the Postgres version the migrations assume are not pinned. Local migration application cannot be verified in the worktree.",
+      "severity": "low",
+      "line": 0
+    },
+    {
+      "path": "db-tests/vitest.config.ts",
+      "issue": "Acceptance bullet 3 ('exits 0 with the pass count') cannot be met if Docker is missing in the worktree. The fallback 'explain how it was validated' is unverifiable, and the suite would land unrun. Nothing is said about running the files serially (fileParallelism false) or about test and hook timeouts for a cold stack.",
+      "severity": "low",
+      "line": 0
+    },
+    {
+      "path": "docs/STAGING.md",
+      "issue": "No rollback or removal path: how to undo the CI workflows, how to stop test users accumulating in staging. The doc also has to say that the staging service-role secret must never be the production key.",
+      "severity": "low",
+      "line": 0
+    }
+  ]
+}

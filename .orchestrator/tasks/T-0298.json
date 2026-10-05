@@ -1,0 +1,87 @@
+{
+  "id": "T-0298",
+  "created_at": 1791244013.749102,
+  "parent": "T-0280",
+  "role": "execute",
+  "tier": "opus",
+  "complexity": 7,
+  "title": "Real-database RLS tests on the Supabase local stack + CI (respec of T-0281 after spec review T-0282)",
+  "spec": "Respec of T-0281 (held at spec review T-0282, 2026-10-06); same why (roadmap P0-1: RLS verified only by hand). Changes from the review are folded in.\n1. supabase/config.toml (minimal) so `supabase start` applies supabase/migrations/*. Migrations untouched.\n2. db-tests/ with its own vitest config and `npm run test:db`. Table list: hard-coded in the test AND asserted against the migration SQL text (parse `create table [if not exists] public.<name>` from supabase/migrations/*.sql, no database needed) so a new table without a test fails. No information_schema read (PostgREST does not expose it); no `pg` dependency.\n3. Target guard: refuse to run unless the SUPABASE_TEST_URL host is localhost/127.0.0.1 or equals SUPABASE_TEST_ALLOWED_HOST. Users A and B are created with unique per-run emails via the admin API and deleted in afterAll (deleteUser cascades). Seeding per table is specified in the test file header: workspaces/memberships via bootstrap_workspace under each user's session; every other table via B's session (RLS-allowed insert), falling back to the service role where no client insert policy exists (say so per table). Precondition (service role): every B row exists before A's assertions. Assertions as A: select zero rows; insert/update/delete denied (RLS error or zero affected); postcondition (service role): B's rows unchanged. Positive: A reads A's own rows. Plus: A calling security-definer RPCs with B's workspace id is denied; anon is denied on every table; frames bucket upload, download, list and remove each denied for A against B's prefix and allowed for A's own.\n4. Skip vs fail: with SUPABASE_TEST_URL unset the suite prints \"SKIPPED: SUPABASE_TEST_URL unset\" and passes, unless REQUIRE_DB=1 (set in CI), then it fails. Root vitest include stays an allowlist; add `e2e/workflows.guard.test.ts` there (not under .github). eslint and tsc cover db-tests/ (add to tsconfig include if needed) or state the exclusion.\n5. `.github/workflows/ci.yml` (push, pull_request: npm ci, lint, typecheck, test) and `.github/workflows/db-tests.yml` (supabase/setup-cli pinned to a version, actions pinned, Node 22 pinned; `supabase start`; keys from `supabase status -o env`, each run through `::add-mask::` before export, step fails if any is empty; REQUIRE_DB=1; staging secrets only on push and workflow_dispatch, never on fork pull_request). Guard e2e/workflows.guard.test.ts checks both files by documented string matches (no YAML dependency): job names, test:db step, add-mask, REQUIRE_DB, pinned versions.\n6. docs/STAGING.md: human steps to create the staging Supabase project and Vercel env (no spend by agents), the secrets to set, local Docker run. README.md, docs/DEPLOY.md, .env.example untouched. No new dependencies.",
+  "inputs": [],
+  "acceptance": [
+    "db-tests/rls.test.ts: hard-coded table list equals the tables parsed from supabase/migrations/*.sql; for every table user A gets zero rows, denied writes, B's rows unchanged (service-role pre/postconditions), A reads own rows; anon denied everywhere; RPCs with B's workspace id denied; frames bucket upload/download/list/remove denied cross-tenant",
+    "Target guard refuses non-localhost hosts unless SUPABASE_TEST_ALLOWED_HOST matches; users use unique emails and are deleted in afterAll",
+    "SUPABASE_TEST_URL unset: visible SKIPPED line and pass; REQUIRE_DB=1 and unset: fail (tests for both)",
+    "Local run with Docker: `supabase start` then `npm run test:db` exits 0 (state pass count, or say why Docker was unavailable and how it was validated)",
+    "ci.yml and db-tests.yml pinned, masked, REQUIRE_DB=1, no fork secrets; e2e/workflows.guard.test.ts asserts these by string matches",
+    "docs/STAGING.md written; README.md, docs/DEPLOY.md, .env.example untouched; .claude/hooks/tests-green.sh wt/THIS-TASK exits 0"
+  ],
+  "scope": [
+    "supabase/config.toml",
+    "supabase/.gitignore",
+    "db-tests/**",
+    ".github/workflows/ci.yml",
+    ".github/workflows/db-tests.yml",
+    "e2e/workflows.guard.test.ts",
+    "vitest.config.ts",
+    "tsconfig.json",
+    "package.json",
+    "package-lock.json",
+    "docs/STAGING.md",
+    ".gitignore"
+  ],
+  "depends_on": [],
+  "constraints": {
+    "read_only": false,
+    "budget_turns": 90,
+    "timeout_s": 2700,
+    "goal_branch": "goal/T-0280",
+    "task_class": "unfamiliar",
+    "route": "full",
+    "fix_round_for": "T-0281",
+    "read_scope": [
+      "supabase/**",
+      "src/lib/supabase/**",
+      "src/lib/store/**",
+      "e2e/seed.mjs",
+      "docs/checks/launch-foundation.md"
+    ],
+    "roadmap": "P0-1"
+  },
+  "status": "queued",
+  "assigned_to": null,
+  "worktree": null,
+  "codex_thread": null,
+  "result": null,
+  "events": [
+    {
+      "ts": 1791244166.505431,
+      "pipeline": {
+        "first_ready_at": 1791244166.505388
+      }
+    },
+    {
+      "ts": 1791244166.6998541,
+      "pipeline": {
+        "first_ready_at": 1791244166.505388,
+        "spec_review_at": 1791244166.69979,
+        "spec_review_at_lease": 1791245066.69979
+      }
+    },
+    {
+      "ts": 1791244166.735874,
+      "pipeline": {
+        "first_ready_at": 1791244166.505388,
+        "spec_review_at": 1791244166.69979,
+        "spec_review_at_lease": 1791245066.69979,
+        "spec_review_at_done": 1791244166.735743
+      }
+    }
+  ],
+  "pipeline": {
+    "first_ready_at": 1791244166.505388,
+    "spec_review_at": 1791244166.69979,
+    "spec_review_at_lease": 1791245066.69979,
+    "spec_review_at_done": 1791244166.735743
+  }
+}

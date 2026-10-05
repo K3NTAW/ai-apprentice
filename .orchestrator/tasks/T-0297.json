@@ -1,0 +1,60 @@
+{
+  "id": "T-0297",
+  "created_at": 1791243826.6467872,
+  "parent": "T-0280",
+  "role": "execute",
+  "tier": "opus",
+  "complexity": 3,
+  "title": "Docs sync after Phase 0: README, docs/DEPLOY.md and .env.example reflect the merged changes",
+  "spec": "Why: every Phase 0 task was told not to touch README.md, docs/DEPLOY.md or .env.example so parallel merges do not conflict; this task brings the three files up to date once everything is merged. Human decisions 2026-10-06: general tool for any team, English-first, no niche; no legal entity yet (nothing published).\nWhat: read docs/STAGING.md, docs/OBSERVABILITY.md, docs/RELEASE.md, docs/legal/README.md, docs/checks/{capture-scope,demo-cleanup,models,cost-meter,unit-cost,workspace-switch,deferred-findings,e2e-live}.md and the merged code, then:\n1. .env.example: add every new env name with a one-line comment (Sentry DSNs, SUPABASE_TEST_*, model overrides already present, CSC_*/APPLE_API_* belong in docs/RELEASE.md not here). Names only, no values.\n2. README.md: env table rows for the new names; \"Tests and checks\" gains `npm run test:db` and the CI/nightly workflows; \"Trust, privacy and limitations\" states the new defaults (window capture preferred, only non-routine frames stored, 30-day default retention, frames still not pixel-redacted); \"Known limitations\": signing line updated to \"signed builds ship through docs/RELEASE.md once the certificate exists\"; the `[team]` placeholder is replaced by the existing Team paragraph if still present. Keep the DACH-free, general wording; remove any industry-specific example that slipped in.\n3. docs/DEPLOY.md: sections for staging (pointer to docs/STAGING.md), observability env, cost meter migration, the GitHub Actions workflows and their secrets (names), and the nightly run.\n4. A docs guard test (src/docs.guard.test.ts or similar) that every env name read via process.env under src/** and instrumentation*.ts appears in .env.example or in an allowlist in the test (VERCEL_*, NODE_ENV, CI).\nNo code changes beyond the guard test. No new dependencies.",
+  "inputs": [],
+  "acceptance": [
+    ".env.example lists every new env name introduced by the Phase 0 tasks with a comment, values empty",
+    "README env table, tests section, trust section and known limitations match the merged code (cite the sections changed)",
+    "docs/DEPLOY.md covers staging, observability, cost meter migration, CI, nightly and release workflows",
+    "docs guard test: every process.env name under src/** and instrumentation*.ts is in .env.example or the allowlist",
+    ".claude/hooks/tests-green.sh wt/THIS-TASK exits 0"
+  ],
+  "scope": [
+    "README.md",
+    "docs/DEPLOY.md",
+    ".env.example",
+    "src/docs.guard.test.ts"
+  ],
+  "depends_on": [
+    "T-0281",
+    "T-0283",
+    "T-0284",
+    "T-0287",
+    "T-0288",
+    "T-0289",
+    "T-0291",
+    "T-0292",
+    "T-0293",
+    "T-0294",
+    "T-0295",
+    "T-0296"
+  ],
+  "constraints": {
+    "read_only": false,
+    "budget_turns": 40,
+    "timeout_s": 1800,
+    "goal_branch": "goal/T-0280",
+    "task_class": "mechanical",
+    "route": "straightforward",
+    "read_scope": [
+      "docs/**",
+      "src/**",
+      "instrumentation*.ts",
+      "companion/README.md",
+      ".github/workflows/**"
+    ],
+    "roadmap": "Phase 0 close"
+  },
+  "status": "queued",
+  "assigned_to": null,
+  "worktree": null,
+  "codex_thread": null,
+  "result": null,
+  "events": []
+}

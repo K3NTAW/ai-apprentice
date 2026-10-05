@@ -1,0 +1,63 @@
+{
+  "id": "T-0295",
+  "created_at": 1791243785.2009559,
+  "parent": "T-0280",
+  "role": "execute",
+  "tier": "opus",
+  "complexity": 6,
+  "title": "Desktop release pipeline: Developer ID signing and notarytool from env, electron-updater via GitHub releases, Electron crash reporting, release doc",
+  "spec": "Why: companion/package.json `identity: null`; unsigned builds get a new code identity each build so TCC permissions reset (companion/README.md:281-297); no electron-updater, no crash reporting (roadmap 3.4, P0-8). Human decision 2026-10-06: sign with the human's PERSONAL Apple Developer account (Developer ID Application certificate; notarytool with an App Store Connect API key). Creating the certificate and key is the human's step; agents get secrets only through /Users/k3ntaw/code/orchestrator/scripts/with-tokens.sh for allowlisted ids. No company account, no organisation enrolment.\nWhat (prepare everything; nothing here needs the certificate to build unsigned):\n1. companion/package.json build.mac: remove `identity: null`; electron-builder signs when `CSC_NAME` (or CSC_LINK/CSC_KEY_PASSWORD) is set and skips signing otherwise (`CSC_IDENTITY_AUTO_DISCOVERY=false` in the unsigned local script). `notarize: true` with env APPLE_API_KEY, APPLE_API_KEY_ID, APPLE_API_ISSUER (electron-builder reads them); keep hardenedRuntime and the entitlements. `publish: {provider: \"github\", owner: \"K3NTAW\", repo: \"ai-apprentice-desktop\"}`; scripts `package:signed` (signing + notarisation, fails fast with a readable message when an env name is missing) and `package` unchanged for unsigned local builds.\n2. electron-updater (named new dependency): `companion/src/updater.mts` with `autoUpdater` checking on launch and every 6 h, `autoDownload` true, `autoInstallOnAppQuit` true, an IPC/bridge event to the page `update-available` and `update-downloaded` (extend the preload bridge types), disabled when the app is not packaged or when `app.config.json` sets `updates: false`. Unit test the schedule and the disabled paths with a mocked autoUpdater.\n3. Crash reporting: `@sentry/electron` (named new dependency) in main.mts, init only when `SENTRY_DSN_ELECTRON` is set at build time (read from app.config.json field `sentryDsn`, injected by the release script), `sendDefaultPii: false`, no breadcrumbs of window titles or key events. Test: no init without the field.\n4. `.github/workflows/desktop-release.yml`: `workflow_dispatch` with a version input; macos-latest; imports the certificate from secrets (CSC_LINK base64 .p12 + CSC_KEY_PASSWORD) and the API key (APPLE_API_KEY file written from a secret to runner temp, removed after), runs `npm --prefix companion ci` and `package:signed`, uploads dmg + latest-mac.yml to a DRAFT release in K3NTAW/ai-apprentice-desktop using a `DESKTOP_RELEASE_TOKEN` secret. Secrets never echoed. A Vitest guard checks the workflow strings.\n5. docs/RELEASE.md: human steps in order: create the Developer ID Application certificate on the personal account, export .p12, create the App Store Connect API key (role Developer), add the key id to the with-tokens.sh allowlist, add the five GitHub secrets (names), run the workflow, publish the draft, check: a fresh Mac opens the dmg without a Gatekeeper warning and the update from the previous version keeps the Screen Recording permission (same bundle id, same Developer ID). Remove the xattr/quarantine instructions once signed builds ship (leave them under \"unsigned local builds\").\nDo not touch README.md, docs/DEPLOY.md, .env.example, marketing/**, src/**. No dependencies beyond the two named.",
+  "inputs": [],
+  "acceptance": [
+    "companion/package.json: identity null removed, signing and notarisation driven by CSC_* and APPLE_API_* env, publish set to K3NTAW/ai-apprentice-desktop; `npm --prefix companion run package:dir` still builds unsigned locally (state the result)",
+    "companion/src/updater.mts: checks on launch and every 6 h, disabled when not packaged or updates:false, bridge events for available/downloaded (unit tests with a mocked autoUpdater)",
+    "@sentry/electron initialises only when app.config.json has sentryDsn, sendDefaultPii false (test)",
+    ".github/workflows/desktop-release.yml signs, notarises and uploads to a draft release; secrets only via secrets.*, never echoed (guard test)",
+    "docs/RELEASE.md lists the human's Apple steps for the personal account and the with-tokens.sh allowlist step; README.md, docs/DEPLOY.md untouched",
+    "`npm run test:companion` exits 0 and .claude/hooks/tests-green.sh wt/THIS-TASK exits 0 (state both)"
+  ],
+  "scope": [
+    "companion/package.json",
+    "companion/package-lock.json",
+    "companion/app.config.json",
+    "companion/src/main.mts",
+    "companion/src/updater.mts",
+    "companion/src/updater.test.ts",
+    "companion/src/crash.mts",
+    "companion/src/crash.test.ts",
+    "companion/src/preload.mts",
+    "companion/src/bridge.d.ts",
+    "companion/README.md",
+    "companion/scripts/**",
+    ".github/workflows/desktop-release.yml",
+    ".github/workflows/desktop-release.guard.test.ts",
+    "docs/RELEASE.md"
+  ],
+  "depends_on": [
+    "T-0293"
+  ],
+  "constraints": {
+    "read_only": false,
+    "budget_turns": 80,
+    "timeout_s": 2700,
+    "goal_branch": "goal/T-0280",
+    "task_class": "unfamiliar",
+    "route": "full",
+    "allowed_dependencies": [
+      "electron-updater",
+      "@sentry/electron"
+    ],
+    "read_scope": [
+      "companion/**",
+      "src/lib/companion/**",
+      "src/components/desktop/**"
+    ],
+    "roadmap": "P0-8"
+  },
+  "status": "queued",
+  "assigned_to": null,
+  "worktree": null,
+  "codex_thread": null,
+  "result": null,
+  "events": []
+}

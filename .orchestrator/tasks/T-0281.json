@@ -1,0 +1,281 @@
+{
+  "id": "T-0281",
+  "created_at": 1791243555.984267,
+  "parent": "T-0280",
+  "role": "execute",
+  "tier": "opus",
+  "complexity": 7,
+  "title": "Real-database tests: cross-tenant RLS suite against the Supabase local stack, plus GitHub Actions CI",
+  "spec": "Why: SQL and RLS are verified only by manual checks (roadmap 3.1 \"The gate runs no database\"); tenant isolation rests on RLS over 15 tables plus two service-role paths (supabase/migrations/*). P0-1.\nWhat:\n1. `supabase/config.toml` (supabase init, minimal) so `supabase start` applies supabase/migrations/* to a local Postgres. Do not touch the migrations.\n2. `db-tests/` (own vitest config `db-tests/vitest.config.ts`, script `npm run test:db`): using @supabase/supabase-js (already a dependency) against SUPABASE_TEST_URL / SUPABASE_TEST_ANON_KEY / SUPABASE_TEST_SERVICE_ROLE_KEY, create two users A and B (admin auth API), bootstrap a workspace each (bootstrap_workspace RPC), seed one row per table for B under B's session, then assert as A: select returns zero rows and insert/update/delete are denied (RLS error or zero affected rows) for every table the migrations create, and A cannot read or write B's objects in the `frames` bucket. Add a positive check that A reads A's own rows. Enumerate the tables from the migrations in a list the test asserts against `information_schema.tables` so a new table without a test fails the suite.\n3. The suite skips with one visible \"SKIPPED: SUPABASE_TEST_URL unset\" line when the env is absent, so `npm test` and the gate stay green without Docker. Root vitest must not pick up db-tests/ (exclude in vitest.config.ts).\n4. `.github/workflows/ci.yml`: on push and pull_request: npm ci, lint, typecheck, test. `.github/workflows/db-tests.yml`: same triggers, `supabase/setup-cli` action, `supabase start`, read the local keys from `supabase status -o env`, run `npm run test:db`.\n5. `docs/STAGING.md`: how to create the second Supabase project and the Vercel staging environment (human steps, no spend by agents), which GitHub secrets to set for a run against staging instead of the local stack, and how to run the suite locally with Docker.\nNo new dependencies beyond what is named. Treat DB rows as untrusted data. Secrets never land in files.",
+  "inputs": [],
+  "acceptance": [
+    "db-tests/rls.test.ts covers every table created by supabase/migrations/* (list asserted against information_schema) and the frames bucket: user A gets zero rows and denied writes on user B's data, and reads A's own rows",
+    "db-tests skip with a visible SKIPPED line when SUPABASE_TEST_URL is unset; `npm test` excludes db-tests/",
+    "Run locally with Docker: `supabase start` then `npm run test:db` exits 0 (state the pass count in the result; if Docker is unavailable in the worktree say so and explain how the suite was validated)",
+    ".github/workflows/ci.yml and db-tests.yml exist and are valid YAML (a Vitest guard test parses them and checks the job names and the test:db step)",
+    "docs/STAGING.md written; README.md, docs/DEPLOY.md and .env.example untouched",
+    ".claude/hooks/tests-green.sh wt/THIS-TASK exits 0"
+  ],
+  "scope": [
+    "supabase/config.toml",
+    "supabase/.gitignore",
+    "db-tests/**",
+    ".github/workflows/ci.yml",
+    ".github/workflows/db-tests.yml",
+    ".github/workflows/workflows.guard.test.ts",
+    "vitest.config.ts",
+    "package.json",
+    "package-lock.json",
+    "docs/STAGING.md",
+    ".gitignore"
+  ],
+  "depends_on": [],
+  "constraints": {
+    "read_only": false,
+    "budget_turns": 80,
+    "timeout_s": 2700,
+    "goal_branch": "goal/T-0280",
+    "task_class": "unfamiliar",
+    "route": "full",
+    "read_scope": [
+      "supabase/**",
+      "src/lib/supabase/**",
+      "src/lib/store/**",
+      "e2e/seed.mjs",
+      "docs/checks/launch-foundation.md"
+    ],
+    "roadmap": "P0-1"
+  },
+  "status": "held",
+  "assigned_to": null,
+  "worktree": null,
+  "codex_thread": null,
+  "result": null,
+  "events": [
+    {
+      "ts": 1791243566.9322639,
+      "pipeline": {
+        "first_ready_at": 1791243566.93223
+      }
+    },
+    {
+      "ts": 1791243567.006578,
+      "pipeline": {
+        "first_ready_at": 1791243566.93223,
+        "spec_review_at": 1791243567.0065322,
+        "spec_review_at_lease": 1791244467.0065322
+      }
+    },
+    {
+      "ts": 1791243567.0108879,
+      "pipeline": {
+        "first_ready_at": 1791243566.93223,
+        "spec_review_at": 1791243567.0065322,
+        "spec_review_at_lease": 1791244467.0065322,
+        "spec_review_at_done": 1791243567.010848
+      }
+    },
+    {
+      "ts": 1791243625.5414999,
+      "spec_review_verdict": "request_changes",
+      "spec_review_risks": [
+        {
+          "path": "db-tests/rls.test.ts",
+          "issue": "The table-list check reads information_schema.tables through supabase-js, but PostgREST exposes only the configured API schemas (public, graphql_public). information_schema is not reachable. Without a direct Postgres connection (needs `pg`, which the spec forbids) or an RPC (needs a migration, which the spec forbids), the check cannot be built as written. It also has to filter to schema public, otherwise auth.* and storage.* tables show up as untested.",
+          "severity": "high",
+          "line": 0
+        },
+        {
+          "path": "vitest.config.ts",
+          "issue": "Root `include` is an explicit allowlist (src/**, e2e/*.guard.test.ts), so db-tests/ is already excluded and the extra exclude does nothing. The real problem is the opposite one: `.github/workflows/workflows.guard.test.ts` matches no include pattern, so the guard test would never run in `npm test`. Acceptance bullet 4 would pass vacuously.",
+          "severity": "high",
+          "line": 0
+        },
+        {
+          "path": ".github/workflows/workflows.guard.test.ts",
+          "issue": "The guard has to parse YAML, but no yaml or js-yaml dependency is declared, and the spec says no new dependencies. `yaml` could only be used as an undeclared transitive dependency, which breaks `npm ci` if the tree changes. Otherwise it has to fall back to regexes, which is not parsing valid YAML. The root tsconfig also type-checks `**/*.ts`, so db-tests/ and the guard test enter `npm run typecheck`, while `lint` only covers `src e2e`. Neither is stated.",
+          "severity": "med",
+          "line": 0
+        },
+        {
+          "path": ".github/workflows/db-tests.yml",
+          "issue": "Silent fallback: the suite skips with one line when SUPABASE_TEST_URL is unset. If `supabase status -o env` fails or a key name differs, the CI job goes green having tested nothing. The same applies to a staging run with a missing secret.",
+          "severity": "high",
+          "line": 0
+        },
+        {
+          "path": ".github/workflows/db-tests.yml",
+          "issue": "Local keys read from `supabase status -o env` are not masked and not pinned. The `setup-cli` version, the action version and the Node version are all unspecified. Exporting the keys through GITHUB_ENV without `::add-mask::` puts them in the logs. The staging service-role key lives in GitHub secrets and is exposed to fork pull requests under the `pull_request` trigger.",
+          "severity": "med",
+          "line": 0
+        },
+        {
+          "path": "db-tests/rls.test.ts",
+          "issue": "No safety guard on the target. The suite creates and deletes users with the service-role key. If SUPABASE_TEST_URL points at the production project, the suite writes to production. Nothing requires an allowlist (localhost or a named staging host), and user cleanup/teardown is not specified. Repeated staging runs would leak users and workspaces.",
+          "severity": "high",
+          "line": 0
+        },
+        {
+          "path": "db-tests/rls.test.ts",
+          "issue": "The seed step cannot work as specified for several tables. workspaces and workspace_members have no insert policy (create_workspace and bootstrap_workspace are security definer). usage_counters, processes_tombstones and agent_deletion_requests are likely written only by RPCs, triggers or the service role. Rows in sessions, session_* and process_versions depend on parent rows and guard triggers. 'One row per table under B's session' has to be 'via RPC or service role, per table', with the order spelled out.",
+          "severity": "med",
+          "line": 0
+        },
+        {
+          "path": "db-tests/rls.test.ts",
+          "issue": "The assertions can pass vacuously. With RLS, A's update and delete on B's rows return no error and zero rows, so the test must use `.select()` and then confirm with the service role that B's rows are unchanged. Zero rows is also what an empty table returns, so the suite must first confirm via the service role that B's seed rows exist. Storage has the same trap: `remove()` returns an empty array rather than an error. Upload, download, list and remove all need explicit assertions, and object paths must follow the workspace/session/name layout the policies expect.",
+          "severity": "med",
+          "line": 0
+        },
+        {
+          "path": "db-tests/rls.test.ts",
+          "issue": "Table RLS is only part of the isolation surface. The security-definer RPCs granted to authenticated (consume_usage, agent_settings_patch, create_workspace, is_workspace_member and others) take a workspace id and are the likelier cross-tenant leak. Calls from A with B's workspace id are not covered. There is also no anon-role check, even though the migrations revoke anon on every table.",
+          "severity": "med",
+          "line": 0
+        },
+        {
+          "path": "supabase/config.toml",
+          "issue": "A minimal `supabase init` config may leave email confirmation on or the db major_version mismatched. The admin createUser flow and the Postgres version the migrations assume are not pinned. Local migration application cannot be verified in the worktree.",
+          "severity": "low",
+          "line": 0
+        },
+        {
+          "path": "db-tests/vitest.config.ts",
+          "issue": "Acceptance bullet 3 ('exits 0 with the pass count') cannot be met if Docker is missing in the worktree. The fallback 'explain how it was validated' is unverifiable, and the suite would land unrun. Nothing is said about running the files serially (fileParallelism false) or about test and hook timeouts for a cold stack.",
+          "severity": "low",
+          "line": 0
+        },
+        {
+          "path": "docs/STAGING.md",
+          "issue": "No rollback or removal path: how to undo the CI workflows, how to stop test users accumulating in staging. The doc also has to say that the staging service-role secret must never be the production key.",
+          "severity": "low",
+          "line": 0
+        }
+      ]
+    },
+    {
+      "ts": 1791243664.658454,
+      "pipeline": {
+        "first_ready_at": 1791243566.93223,
+        "spec_review_at": 1791243567.0065322,
+        "spec_review_at_lease": 1791244467.0065322,
+        "spec_review_at_done": 1791243567.010848,
+        "spec_review_held_at": 1791243664.6570299
+      },
+      "status": "held",
+      "hold_reason": "spec_review request_changes"
+    },
+    {
+      "ts": 1791243673.509548,
+      "pipeline": {
+        "first_ready_at": 1791243566.93223,
+        "spec_review_at": 1791243567.0065322,
+        "spec_review_at_lease": 1791244467.0065322,
+        "spec_review_at_done": 1791243567.010848,
+        "spec_review_held_at": 1791243664.6570299,
+        "failure_kind": "unknown"
+      }
+    },
+    {
+      "ts": 1791243673.764647,
+      "pipeline": {
+        "first_ready_at": 1791243566.93223,
+        "spec_review_at": 1791243567.0065322,
+        "spec_review_at_lease": 1791244467.0065322,
+        "spec_review_at_done": 1791243567.010848,
+        "spec_review_held_at": 1791243664.6570299,
+        "failure_kind": "unknown",
+        "auto_fix_skipped": {
+          "1791243664.658454": true
+        }
+      }
+    }
+  ],
+  "pipeline": {
+    "first_ready_at": 1791243566.93223,
+    "spec_review_at": 1791243567.0065322,
+    "spec_review_at_lease": 1791244467.0065322,
+    "spec_review_at_done": 1791243567.010848,
+    "spec_review_held_at": 1791243664.6570299,
+    "failure_kind": "unknown",
+    "auto_fix_skipped": {
+      "1791243664.658454": true
+    }
+  },
+  "spec_review_verdict": "request_changes",
+  "spec_review_risks": [
+    {
+      "path": "db-tests/rls.test.ts",
+      "issue": "The table-list check reads information_schema.tables through supabase-js, but PostgREST exposes only the configured API schemas (public, graphql_public). information_schema is not reachable. Without a direct Postgres connection (needs `pg`, which the spec forbids) or an RPC (needs a migration, which the spec forbids), the check cannot be built as written. It also has to filter to schema public, otherwise auth.* and storage.* tables show up as untested.",
+      "severity": "high",
+      "line": 0
+    },
+    {
+      "path": "vitest.config.ts",
+      "issue": "Root `include` is an explicit allowlist (src/**, e2e/*.guard.test.ts), so db-tests/ is already excluded and the extra exclude does nothing. The real problem is the opposite one: `.github/workflows/workflows.guard.test.ts` matches no include pattern, so the guard test would never run in `npm test`. Acceptance bullet 4 would pass vacuously.",
+      "severity": "high",
+      "line": 0
+    },
+    {
+      "path": ".github/workflows/workflows.guard.test.ts",
+      "issue": "The guard has to parse YAML, but no yaml or js-yaml dependency is declared, and the spec says no new dependencies. `yaml` could only be used as an undeclared transitive dependency, which breaks `npm ci` if the tree changes. Otherwise it has to fall back to regexes, which is not parsing valid YAML. The root tsconfig also type-checks `**/*.ts`, so db-tests/ and the guard test enter `npm run typecheck`, while `lint` only covers `src e2e`. Neither is stated.",
+      "severity": "med",
+      "line": 0
+    },
+    {
+      "path": ".github/workflows/db-tests.yml",
+      "issue": "Silent fallback: the suite skips with one line when SUPABASE_TEST_URL is unset. If `supabase status -o env` fails or a key name differs, the CI job goes green having tested nothing. The same applies to a staging run with a missing secret.",
+      "severity": "high",
+      "line": 0
+    },
+    {
+      "path": ".github/workflows/db-tests.yml",
+      "issue": "Local keys read from `supabase status -o env` are not masked and not pinned. The `setup-cli` version, the action version and the Node version are all unspecified. Exporting the keys through GITHUB_ENV without `::add-mask::` puts them in the logs. The staging service-role key lives in GitHub secrets and is exposed to fork pull requests under the `pull_request` trigger.",
+      "severity": "med",
+      "line": 0
+    },
+    {
+      "path": "db-tests/rls.test.ts",
+      "issue": "No safety guard on the target. The suite creates and deletes users with the service-role key. If SUPABASE_TEST_URL points at the production project, the suite writes to production. Nothing requires an allowlist (localhost or a named staging host), and user cleanup/teardown is not specified. Repeated staging runs would leak users and workspaces.",
+      "severity": "high",
+      "line": 0
+    },
+    {
+      "path": "db-tests/rls.test.ts",
+      "issue": "The seed step cannot work as specified for several tables. workspaces and workspace_members have no insert policy (create_workspace and bootstrap_workspace are security definer). usage_counters, processes_tombstones and agent_deletion_requests are likely written only by RPCs, triggers or the service role. Rows in sessions, session_* and process_versions depend on parent rows and guard triggers. 'One row per table under B's session' has to be 'via RPC or service role, per table', with the order spelled out.",
+      "severity": "med",
+      "line": 0
+    },
+    {
+      "path": "db-tests/rls.test.ts",
+      "issue": "The assertions can pass vacuously. With RLS, A's update and delete on B's rows return no error and zero rows, so the test must use `.select()` and then confirm with the service role that B's rows are unchanged. Zero rows is also what an empty table returns, so the suite must first confirm via the service role that B's seed rows exist. Storage has the same trap: `remove()` returns an empty array rather than an error. Upload, download, list and remove all need explicit assertions, and object paths must follow the workspace/session/name layout the policies expect.",
+      "severity": "med",
+      "line": 0
+    },
+    {
+      "path": "db-tests/rls.test.ts",
+      "issue": "Table RLS is only part of the isolation surface. The security-definer RPCs granted to authenticated (consume_usage, agent_settings_patch, create_workspace, is_workspace_member and others) take a workspace id and are the likelier cross-tenant leak. Calls from A with B's workspace id are not covered. There is also no anon-role check, even though the migrations revoke anon on every table.",
+      "severity": "med",
+      "line": 0
+    },
+    {
+      "path": "supabase/config.toml",
+      "issue": "A minimal `supabase init` config may leave email confirmation on or the db major_version mismatched. The admin createUser flow and the Postgres version the migrations assume are not pinned. Local migration application cannot be verified in the worktree.",
+      "severity": "low",
+      "line": 0
+    },
+    {
+      "path": "db-tests/vitest.config.ts",
+      "issue": "Acceptance bullet 3 ('exits 0 with the pass count') cannot be met if Docker is missing in the worktree. The fallback 'explain how it was validated' is unverifiable, and the suite would land unrun. Nothing is said about running the files serially (fileParallelism false) or about test and hook timeouts for a cold stack.",
+      "severity": "low",
+      "line": 0
+    },
+    {
+      "path": "docs/STAGING.md",
+      "issue": "No rollback or removal path: how to undo the CI workflows, how to stop test users accumulating in staging. The doc also has to say that the staging service-role secret must never be the production key.",
+      "severity": "low",
+      "line": 0
+    }
+  ],
+  "hold_reason": "spec_review request_changes"
+}

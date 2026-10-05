@@ -1,0 +1,659 @@
+{
+  "id": "T-0289",
+  "created_at": 1791243655.36722,
+  "parent": "T-0280",
+  "role": "execute",
+  "tier": "opus",
+  "complexity": 5,
+  "title": "Demo residue cleanup: no default expert name, preview/fixture/__audit routes 404 in production, caps documented",
+  "spec": "Why: roadmap 1.2 and P0-12. The expert name defaults to \"Sabine\" (src/components/capture/CaptureApp.tsx:116,223), so the demo persona leaks into real sessions; the fixture, preview and __audit routes (src/app/*/preview, src/app/(app)/preview, src/app/__audit, src/lib/fixtures) are local-mode only but still part of the production bundle; production usage caps were raised for the demo (code defaults in src/lib/usage/index.ts are the intended values).\nWhat:\n1. CaptureApp: initial expert state \"\" ; starting a capture without a non-empty expert name is blocked with an inline \"Who is the expert?\" prompt (field focused, start disabled), no fallback name anywhere in the capture start path. Agents' expert_name prefills the field when present. Tests.\n2. Preview, fixture and __audit routes: one helper `src/lib/fixtures/enabled.ts` `fixturesEnabled()` = appMode is local AND NODE_ENV !== \"production\"; every preview/__audit page and the (app)/preview shell call `notFound()` when it is false (import at module top so tree-shaking keeps the bundle small; do not delete the routes). Add a guard test that enumerates src/app/**/preview/** and src/app/__audit/** pages and asserts each imports fixturesEnabled and calls notFound.\n3. e2e/ specs that visit preview routes keep working in local mode (they run with appMode local); if any e2e asserts a preview route in production mode, update it.\n4. docs/checks/demo-cleanup.md: the production checks (every /preview and /__audit URL answers 404 in production; capture without a name asks for one) and the USAGE_CAP_* defaults (vision 3000, decide 2000, workmap 50, voice 60 per workspace per day as in DEFAULT_CAPS) with the note that the Vercel env still carries the demo values and the human resets them (P0-6).\nKeep the general positioning: no industry-specific example text added. Do not touch README.md, docs/DEPLOY.md, .env.example, src/lib/perception/**, src/app/api/vision/** (capture task owns them).",
+  "inputs": [],
+  "acceptance": [
+    "CaptureApp has no 'Sabine' default: starting without an expert name is blocked with an inline prompt (component test), expert_name from the agent prefills (test)",
+    "fixturesEnabled() is false when NODE_ENV is production or appMode is not local; every page under src/app/**/preview/** and src/app/__audit/** returns notFound() when it is false (guard test enumerates the files)",
+    "npm run e2e specs still pass in local mode for the preview routes they visit (state the run or why not run)",
+    "docs/checks/demo-cleanup.md written with the 404 checks and the DEFAULT_CAPS values; README.md, docs/DEPLOY.md, .env.example untouched",
+    ".claude/hooks/tests-green.sh wt/THIS-TASK exits 0"
+  ],
+  "scope": [
+    "src/components/capture/**",
+    "src/app/**/preview/**",
+    "src/app/__audit/**",
+    "src/app/(app)/preview/**",
+    "src/lib/fixtures/**",
+    "src/app/fixtures.guard.test.ts",
+    "e2e/*.spec.ts",
+    "e2e/fixtures.ts",
+    "docs/checks/demo-cleanup.md"
+  ],
+  "depends_on": [],
+  "constraints": {
+    "read_only": false,
+    "budget_turns": 60,
+    "timeout_s": 2400,
+    "goal_branch": "goal/T-0280",
+    "task_class": "mechanical",
+    "route": "straightforward",
+    "read_scope": [
+      "src/lib/supabase/**",
+      "src/lib/usage/**",
+      "src/lib/agents/**",
+      "src/app/capture/**"
+    ],
+    "roadmap": "P0-12"
+  },
+  "status": "running",
+  "assigned_to": "claude:B",
+  "worktree": "/Users/k3ntaw/code/ai-apprentice/wt/T-0289",
+  "codex_thread": null,
+  "result": null,
+  "events": [
+    {
+      "ts": 1791243661.303767,
+      "pipeline": {
+        "first_ready_at": 1791243661.3037179
+      }
+    },
+    {
+      "ts": 1791243661.3050082,
+      "pipeline": {
+        "first_ready_at": 1791243661.3037179,
+        "dispatched_at": 1791243661.304956,
+        "dispatched_at_lease": 1791244561.304956
+      }
+    },
+    {
+      "ts": 1791243661.305855,
+      "pipeline": {
+        "first_ready_at": 1791243661.3037179,
+        "dispatched_at": 1791243661.304956,
+        "dispatched_at_lease": 1791244561.304956
+      }
+    },
+    {
+      "ts": 1791243662.215177,
+      "packet_meta": {
+        "prefix_sha": "47d8a2fdfe08",
+        "prefix_chars": 764,
+        "suffix_chars": 4073,
+        "dynamic_sections": [
+          "objective",
+          "acceptance",
+          "base",
+          "write_scope",
+          "read_scope",
+          "constraints",
+          "relevant_tests",
+          "symbols",
+          "gotchas",
+          "decisions",
+          "verify",
+          "evidence",
+          "conditional instructions"
+        ]
+      }
+    },
+    {
+      "ts": 1791243662.216754,
+      "pipeline": {
+        "first_ready_at": 1791243661.3037179,
+        "dispatched_at": 1791243661.304956,
+        "dispatched_at_lease": 1791244561.304956,
+        "dispatched_at_done": 1791243662.216693
+      }
+    },
+    {
+      "ts": 1791243695.0480509,
+      "pipeline": {
+        "first_ready_at": 1791243661.3037179,
+        "dispatched_at": 1791243661.304956,
+        "dispatched_at_lease": 1791244561.304956,
+        "dispatched_at_done": 1791243662.216693,
+        "handoff": {
+          "baseline": "claude:opus",
+          "selected": "claude:opus",
+          "switched": false,
+          "gain": 0.0,
+          "reason": "allocation_active",
+          "ts": 1791243695.046153
+        }
+      }
+    },
+    {
+      "ts": 1791243695.557356,
+      "tier": "opus",
+      "fallback": "claude",
+      "review_rule": "same-family-review: other account, different model"
+    },
+    {
+      "ts": 1791243695.569988,
+      "pipeline": {
+        "first_ready_at": 1791243661.3037179,
+        "dispatched_at": 1791243661.304956,
+        "dispatched_at_lease": 1791244561.304956,
+        "dispatched_at_done": 1791243662.216693,
+        "handoff": {
+          "baseline": "claude:opus",
+          "selected": "claude:opus",
+          "switched": false,
+          "gain": 0.0,
+          "reason": "allocation_active",
+          "ts": 1791243695.046153
+        },
+        "jev_route": {
+          "baseline": "opus",
+          "hypothetical": "claude:opus",
+          "key": "fa1aae947e477463df15589907c4fc3f239c4ee1",
+          "adjustment": {
+            "claude:opus": 1.0
+          },
+          "mode": "active"
+        }
+      }
+    },
+    {
+      "ts": 1791243701.4976408,
+      "executor": "claude:opus"
+    },
+    {
+      "ts": 1791243702.041554,
+      "packet_meta": {
+        "prefix_sha": "47d8a2fdfe08",
+        "prefix_chars": 764,
+        "suffix_chars": 5151,
+        "dynamic_sections": [
+          "skills",
+          "Trigger",
+          "Objective",
+          "Procedure",
+          "Tools",
+          "Evidence requirements",
+          "Output contract",
+          "Stop conditions",
+          "Failure/recovery",
+          "objective",
+          "acceptance",
+          "base",
+          "write_scope",
+          "read_scope",
+          "constraints",
+          "relevant_tests",
+          "symbols",
+          "gotchas",
+          "decisions",
+          "verify",
+          "evidence",
+          "conditional instructions"
+        ]
+      }
+    },
+    {
+      "ts": 1791243702.058238,
+      "packet_meta": {
+        "chars": 4981,
+        "est_tokens": 1245,
+        "presented_tokens": 1245,
+        "sections": {
+          "_preamble": {
+            "chars": 202,
+            "est_tokens": 50,
+            "sha256": "35364edabad7153bb44ad3ea588a21ba810e0efe73f774eed7eaa891996ce409"
+          },
+          "skills": {
+            "chars": 54,
+            "est_tokens": 13,
+            "sha256": "838bd3c68843c4ae23465b45fe524bc6494df170043de05781a01051e5bc300f"
+          },
+          "Trigger": {
+            "chars": 52,
+            "est_tokens": 13,
+            "sha256": "0ea37148175078772f282ed7c36d48cca318e17c54fee750766ece36c13a6673"
+          },
+          "Objective": {
+            "chars": 80,
+            "est_tokens": 20,
+            "sha256": "440f7e6f18bb93673075eb83a6eee00e7a349b2883ed943b025f3be203e60bf9"
+          },
+          "Procedure": {
+            "chars": 176,
+            "est_tokens": 44,
+            "sha256": "9fd7041c54a1bdb037dfc82d152704e1a4d2337ae2c90c0ef10ef70244869768"
+          },
+          "Tools": {
+            "chars": 56,
+            "est_tokens": 14,
+            "sha256": "8d72764fd7832c5a454ee8b85fca70c3757aea1305987d93da924318181d4e58"
+          },
+          "Evidence requirements": {
+            "chars": 68,
+            "est_tokens": 17,
+            "sha256": "66b75fdc1469a08f54ab4a93060d919fcf85bcae13d1ed2b513472d4fe6d247a"
+          },
+          "Output contract": {
+            "chars": 109,
+            "est_tokens": 27,
+            "sha256": "d8724ee2f0aa4e5907629d54f99ba39965003a54550674886e4113d7691eb907"
+          },
+          "Stop conditions": {
+            "chars": 64,
+            "est_tokens": 16,
+            "sha256": "854ee38ff4593ded68986348d72c8eaa25af70dbbace29f321bb02b5d923e2d8"
+          },
+          "Failure/recovery": {
+            "chars": 141,
+            "est_tokens": 35,
+            "sha256": "1e3a058ad4a0189419a3ff63128e9c3de972ef4f83580c3f19dc7e6064a3f714"
+          },
+          "objective": {
+            "chars": 2092,
+            "est_tokens": 523,
+            "sha256": "b5852b1b9ac048da6ccf99e28325240be767de39485379f99858287a02922826"
+          },
+          "acceptance": {
+            "chars": 691,
+            "est_tokens": 172,
+            "sha256": "1d5e16a5d79f36f1b5b09ed2d0f6ebfe4efe20e225f37933aedbfe8170caffba"
+          },
+          "base": {
+            "chars": 105,
+            "est_tokens": 26,
+            "sha256": "80f81d2b87ea3f5c7c7d30eb29d5a2bd563777eba2b7798eb4eae0a6bf5eae16"
+          },
+          "write_scope": {
+            "chars": 234,
+            "est_tokens": 58,
+            "sha256": "d5883c7adea4e7fcabc94da2f964c6876e6dcd44b2d6410e2f78679a6b40dfd1"
+          },
+          "read_scope": {
+            "chars": 168,
+            "est_tokens": 42,
+            "sha256": "25874e7459149009e1966102058cb8ebbf9af3134f7cbad657c515aad26417cc"
+          },
+          "constraints": {
+            "chars": 274,
+            "est_tokens": 68,
+            "sha256": "53a126d360b0de2980333466a10c0123b44e503d8df1d0717bebe33e6f71e43e"
+          },
+          "relevant_tests": {
+            "chars": 33,
+            "est_tokens": 8,
+            "sha256": "6748020a3148b37650bdf63e6912368d1207475cacc71095b5d045a8366b1776"
+          },
+          "symbols": {
+            "chars": 20,
+            "est_tokens": 5,
+            "sha256": "3d44487559d25204da9256ebe9490acbe905d30e6f267b2eba18e34aacd19263"
+          },
+          "gotchas": {
+            "chars": 20,
+            "est_tokens": 5,
+            "sha256": "93ed828d934a610b03a762025e581ecdebd706b67c9f92c3502061276c762c75"
+          },
+          "decisions": {
+            "chars": 22,
+            "est_tokens": 5,
+            "sha256": "74306e4359e242c1851ed425aa1bde3fcd64efdf7a16917df67f54da3d9b3427"
+          },
+          "verify": {
+            "chars": 102,
+            "est_tokens": 25,
+            "sha256": "67b8c5735d9f1bb7d89849f69178de377441bca5491fea17c21a0ab934e75c8a"
+          },
+          "evidence": {
+            "chars": 218,
+            "est_tokens": 54,
+            "sha256": "657e78ad9bc40f0a59015e25cf0b8b76d6571eb9955f14e53f68f373432445e9"
+          }
+        },
+        "hash": "3000f621f8f4",
+        "version": "3000f621f8f4",
+        "candidate_known": true,
+        "base": "ec2d4f4f21ef",
+        "sources": "pool.toml@4b59f10be1e5 gotchas@e3b0c44298fc memory@notes,bus specialist: execute+implement-spec over cap by 181 chars: acceptance kept whole routed=shadow",
+        "policy_version": "4b59f10be1e5",
+        "gotchas": "e3b0c44298fc",
+        "candidate_tokens": 1718,
+        "skill_tokens_presented_l2": 186,
+        "routed_mode": "shadow",
+        "routed_tokens": 1089,
+        "routed_reduction_ratio": 0.6866330390920555,
+        "routed_hidden": 0,
+        "routed_ambiguous": 11,
+        "routed_rules_version": "v1",
+        "evidence_ids": [
+          "e511fc623aeb",
+          "7c28bf3582f0",
+          "cd1b8c56aaa8",
+          "4cdc5323eded",
+          "c1db2ed02707",
+          "52494c303d12",
+          "36a0b4d94708",
+          "197d38bfff91",
+          "39d3acc72c05",
+          "448234bad0f5",
+          "18f7cb21cd69",
+          "e41197a64e7e",
+          "b0395d701403",
+          "3dc0defa1fc0",
+          "9ea39468a2ec",
+          "108cc7ebe0c3",
+          "186bc5f65d5a",
+          "5ea3e86c63f6",
+          "a0c3ad4f4a37",
+          "c672979a9c2c",
+          "c9f9c6e0d196",
+          "f2f37526592a"
+        ],
+        "prefix_sha": "47d8a2fdfe08",
+        "prefix_chars": 764,
+        "suffix_chars": 5151,
+        "dynamic_sections": [
+          "skills",
+          "Trigger",
+          "Objective",
+          "Procedure",
+          "Tools",
+          "Evidence requirements",
+          "Output contract",
+          "Stop conditions",
+          "Failure/recovery",
+          "objective",
+          "acceptance",
+          "base",
+          "write_scope",
+          "read_scope",
+          "constraints",
+          "relevant_tests",
+          "symbols",
+          "gotchas",
+          "decisions",
+          "verify",
+          "evidence",
+          "conditional instructions"
+        ],
+        "instruction_tokens": 294,
+        "instruction_tokens_modular": 233,
+        "role": "execute",
+        "tool_tokens_disclosed": 5995,
+        "tool_tokens_minimal": 5995,
+        "tool_allowlist_source": "specialist",
+        "skills_exposed": [
+          "executor/implement-spec",
+          "planner/memory",
+          "planner/orchestrate",
+          "planner/resume",
+          "planner/write-spec",
+          "review/adversarial-review",
+          "review/challenge",
+          "scout/repo-map",
+          "scout/test-gap",
+          "scout/trace-callers",
+          "triage/classify",
+          "triage/compact-memory"
+        ],
+        "skill_tokens_l0": 219,
+        "skills_selected": [
+          "executor/implement-spec"
+        ],
+        "skill_tokens_selected_l0": 25,
+        "skill_tokens_selected_l2": 62,
+        "skill_routing_mode": "active"
+      }
+    },
+    {
+      "ts": 1791243703.015049,
+      "status": "running",
+      "assigned_to": "claude:B",
+      "worktree": "/Users/k3ntaw/code/ai-apprentice/wt/T-0289",
+      "claimed_at": 1791243703.013792
+    },
+    {
+      "ts": 1791243703.021505,
+      "account": "B"
+    },
+    {
+      "ts": 1791243704.7656379,
+      "pid": 13945,
+      "account": "B"
+    }
+  ],
+  "pipeline": {
+    "first_ready_at": 1791243661.3037179,
+    "dispatched_at": 1791243661.304956,
+    "dispatched_at_lease": 1791244561.304956,
+    "dispatched_at_done": 1791243662.216693,
+    "handoff": {
+      "baseline": "claude:opus",
+      "selected": "claude:opus",
+      "switched": false,
+      "gain": 0.0,
+      "reason": "allocation_active",
+      "ts": 1791243695.046153
+    },
+    "jev_route": {
+      "baseline": "opus",
+      "hypothetical": "claude:opus",
+      "key": "fa1aae947e477463df15589907c4fc3f239c4ee1",
+      "adjustment": {
+        "claude:opus": 1.0
+      },
+      "mode": "active"
+    }
+  },
+  "packet_meta": {
+    "chars": 4981,
+    "est_tokens": 1245,
+    "presented_tokens": 1245,
+    "sections": {
+      "_preamble": {
+        "chars": 202,
+        "est_tokens": 50,
+        "sha256": "35364edabad7153bb44ad3ea588a21ba810e0efe73f774eed7eaa891996ce409"
+      },
+      "skills": {
+        "chars": 54,
+        "est_tokens": 13,
+        "sha256": "838bd3c68843c4ae23465b45fe524bc6494df170043de05781a01051e5bc300f"
+      },
+      "Trigger": {
+        "chars": 52,
+        "est_tokens": 13,
+        "sha256": "0ea37148175078772f282ed7c36d48cca318e17c54fee750766ece36c13a6673"
+      },
+      "Objective": {
+        "chars": 80,
+        "est_tokens": 20,
+        "sha256": "440f7e6f18bb93673075eb83a6eee00e7a349b2883ed943b025f3be203e60bf9"
+      },
+      "Procedure": {
+        "chars": 176,
+        "est_tokens": 44,
+        "sha256": "9fd7041c54a1bdb037dfc82d152704e1a4d2337ae2c90c0ef10ef70244869768"
+      },
+      "Tools": {
+        "chars": 56,
+        "est_tokens": 14,
+        "sha256": "8d72764fd7832c5a454ee8b85fca70c3757aea1305987d93da924318181d4e58"
+      },
+      "Evidence requirements": {
+        "chars": 68,
+        "est_tokens": 17,
+        "sha256": "66b75fdc1469a08f54ab4a93060d919fcf85bcae13d1ed2b513472d4fe6d247a"
+      },
+      "Output contract": {
+        "chars": 109,
+        "est_tokens": 27,
+        "sha256": "d8724ee2f0aa4e5907629d54f99ba39965003a54550674886e4113d7691eb907"
+      },
+      "Stop conditions": {
+        "chars": 64,
+        "est_tokens": 16,
+        "sha256": "854ee38ff4593ded68986348d72c8eaa25af70dbbace29f321bb02b5d923e2d8"
+      },
+      "Failure/recovery": {
+        "chars": 141,
+        "est_tokens": 35,
+        "sha256": "1e3a058ad4a0189419a3ff63128e9c3de972ef4f83580c3f19dc7e6064a3f714"
+      },
+      "objective": {
+        "chars": 2092,
+        "est_tokens": 523,
+        "sha256": "b5852b1b9ac048da6ccf99e28325240be767de39485379f99858287a02922826"
+      },
+      "acceptance": {
+        "chars": 691,
+        "est_tokens": 172,
+        "sha256": "1d5e16a5d79f36f1b5b09ed2d0f6ebfe4efe20e225f37933aedbfe8170caffba"
+      },
+      "base": {
+        "chars": 105,
+        "est_tokens": 26,
+        "sha256": "80f81d2b87ea3f5c7c7d30eb29d5a2bd563777eba2b7798eb4eae0a6bf5eae16"
+      },
+      "write_scope": {
+        "chars": 234,
+        "est_tokens": 58,
+        "sha256": "d5883c7adea4e7fcabc94da2f964c6876e6dcd44b2d6410e2f78679a6b40dfd1"
+      },
+      "read_scope": {
+        "chars": 168,
+        "est_tokens": 42,
+        "sha256": "25874e7459149009e1966102058cb8ebbf9af3134f7cbad657c515aad26417cc"
+      },
+      "constraints": {
+        "chars": 274,
+        "est_tokens": 68,
+        "sha256": "53a126d360b0de2980333466a10c0123b44e503d8df1d0717bebe33e6f71e43e"
+      },
+      "relevant_tests": {
+        "chars": 33,
+        "est_tokens": 8,
+        "sha256": "6748020a3148b37650bdf63e6912368d1207475cacc71095b5d045a8366b1776"
+      },
+      "symbols": {
+        "chars": 20,
+        "est_tokens": 5,
+        "sha256": "3d44487559d25204da9256ebe9490acbe905d30e6f267b2eba18e34aacd19263"
+      },
+      "gotchas": {
+        "chars": 20,
+        "est_tokens": 5,
+        "sha256": "93ed828d934a610b03a762025e581ecdebd706b67c9f92c3502061276c762c75"
+      },
+      "decisions": {
+        "chars": 22,
+        "est_tokens": 5,
+        "sha256": "74306e4359e242c1851ed425aa1bde3fcd64efdf7a16917df67f54da3d9b3427"
+      },
+      "verify": {
+        "chars": 102,
+        "est_tokens": 25,
+        "sha256": "67b8c5735d9f1bb7d89849f69178de377441bca5491fea17c21a0ab934e75c8a"
+      },
+      "evidence": {
+        "chars": 218,
+        "est_tokens": 54,
+        "sha256": "657e78ad9bc40f0a59015e25cf0b8b76d6571eb9955f14e53f68f373432445e9"
+      }
+    },
+    "hash": "3000f621f8f4",
+    "version": "3000f621f8f4",
+    "candidate_known": true,
+    "base": "ec2d4f4f21ef",
+    "sources": "pool.toml@4b59f10be1e5 gotchas@e3b0c44298fc memory@notes,bus specialist: execute+implement-spec over cap by 181 chars: acceptance kept whole routed=shadow",
+    "policy_version": "4b59f10be1e5",
+    "gotchas": "e3b0c44298fc",
+    "candidate_tokens": 1718,
+    "skill_tokens_presented_l2": 186,
+    "routed_mode": "shadow",
+    "routed_tokens": 1089,
+    "routed_reduction_ratio": 0.6866330390920555,
+    "routed_hidden": 0,
+    "routed_ambiguous": 11,
+    "routed_rules_version": "v1",
+    "evidence_ids": [
+      "e511fc623aeb",
+      "7c28bf3582f0",
+      "cd1b8c56aaa8",
+      "4cdc5323eded",
+      "c1db2ed02707",
+      "52494c303d12",
+      "36a0b4d94708",
+      "197d38bfff91",
+      "39d3acc72c05",
+      "448234bad0f5",
+      "18f7cb21cd69",
+      "e41197a64e7e",
+      "b0395d701403",
+      "3dc0defa1fc0",
+      "9ea39468a2ec",
+      "108cc7ebe0c3",
+      "186bc5f65d5a",
+      "5ea3e86c63f6",
+      "a0c3ad4f4a37",
+      "c672979a9c2c",
+      "c9f9c6e0d196",
+      "f2f37526592a"
+    ],
+    "prefix_sha": "47d8a2fdfe08",
+    "prefix_chars": 764,
+    "suffix_chars": 5151,
+    "dynamic_sections": [
+      "skills",
+      "Trigger",
+      "Objective",
+      "Procedure",
+      "Tools",
+      "Evidence requirements",
+      "Output contract",
+      "Stop conditions",
+      "Failure/recovery",
+      "objective",
+      "acceptance",
+      "base",
+      "write_scope",
+      "read_scope",
+      "constraints",
+      "relevant_tests",
+      "symbols",
+      "gotchas",
+      "decisions",
+      "verify",
+      "evidence",
+      "conditional instructions"
+    ],
+    "instruction_tokens": 294,
+    "instruction_tokens_modular": 233,
+    "role": "execute",
+    "tool_tokens_disclosed": 5995,
+    "tool_tokens_minimal": 5995,
+    "tool_allowlist_source": "specialist",
+    "skills_exposed": [
+      "executor/implement-spec",
+      "planner/memory",
+      "planner/orchestrate",
+      "planner/resume",
+      "planner/write-spec",
+      "review/adversarial-review",
+      "review/challenge",
+      "scout/repo-map",
+      "scout/test-gap",
+      "scout/trace-callers",
+      "triage/classify",
+      "triage/compact-memory"
+    ],
+    "skill_tokens_l0": 219,
+    "skills_selected": [
+      "executor/implement-spec"
+    ],
+    "skill_tokens_selected_l0": 25,
+    "skill_tokens_selected_l2": 62,
+    "skill_routing_mode": "active"
+  },
+  "fallback": "claude",
+  "review_rule": "same-family-review: other account, different model",
+  "executor": "claude:opus",
+  "claimed_at": 1791243703.013792,
+  "account": "B",
+  "pid": 13945
+}

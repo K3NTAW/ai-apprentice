@@ -1,0 +1,46 @@
+{
+  "id": "T-0305",
+  "created_at": 1791244168.434198,
+  "parent": "T-0280",
+  "role": "spec_review",
+  "tier": "sonnet",
+  "complexity": 6,
+  "title": "spec review: Observability: Sentry behind SENTRY_DSN and structured JSON server logs (respec of T-0287 after spec review T-0290)",
+  "spec": "Respec of T-0287 (held at spec review T-0290); same why (roadmap 3.6, P0-5 web/API part). Corrections folded in.\n1. @sentry/nextjs (named dependency). Node runtime only: instrumentation.ts `register()` loads sentry.server.config.ts when `process.env.NEXT_RUNTIME === \"nodejs\"` and a DSN is set; no edge config; instrumentation-client.ts inits only when NEXT_PUBLIC_SENTRY_DSN is set. `onRequestError` is the single capture owner for thrown errors; withApi captures only handled 5xx responses from handle() (explicit captureException with the route tag); test that one failure yields exactly one event.\n2. next.config.ts: `withSentryConfig` applied only when SENTRY_DSN is set; `telemetry: false`, no tunnelRoute; source-map upload only when SENTRY_AUTH_TOKEN, SENTRY_ORG and SENTRY_PROJECT are all set. Test: next.config exports the unwrapped config when the DSN is unset.\n3. beforeSend (src/lib/observability/beforeSend.ts): strips request.cookies, request.data, headers authorization/cookie/set-cookie and the forwarded-user header (FORWARDED_USER_HEADER), request.url query string, user, breadcrumb data, extra and contexts; runs the sync redact over message, exception values and breadcrumb messages; returns null when redaction throws. sendDefaultPii false. Tests per field.\n4. src/lib/log: one JSON line per call {ts, level, event, ...fields, requestId?}; string field values pass through redact; safe for circular and Error values; reserved keys (ts, level, event) cannot be overridden; x-request-id accepted only when it matches /^[A-Za-z0-9_-]{1,64}$/ else random. Workspace id logged as a truncated salted sha256 (salt from FORWARDED_USER_SECRET or SUPABASE_SERVICE_ROLE_KEY, fixed test fixture). Routes outside withApi (cron/retention, redact, vision, auth/onboarding, health) get a request log line through a shared `withRequestLog` helper; withApi logs the requireContext early-return branch too. Convert console.warn/error under src/app/api/** to log.*; guard test greps.\n5. src/app/api/health/route.ts: exports `runtime = \"nodejs\"`, GET answers 200 {ok, sentry, mode} with Cache-Control: no-store, no auth (the proxy skips /api); update runtime.test.ts, routes.auth.test.ts and routes.scope.test.ts allowlists so the public route passes.\n6. docs/OBSERVABILITY.md: env names, what the human sets up (EU org), how to force a test error on web and API without a production backdoor, rollback (DSN unset kill switch, redeploy for NEXT_PUBLIC_ changes, revert of package.json/lock), and the Sentry ingest host note for a future CSP (vercel.json has none today; confirm).\nREADME.md, docs/DEPLOY.md, .env.example untouched. No other new dependencies.",
+  "inputs": [
+    "T-0301"
+  ],
+  "acceptance": [
+    "DSN unset: no server, client or next.config Sentry wiring (tests mock @sentry/nextjs and assert no init; next.config exports the unwrapped config); nodejs only, no edge config file",
+    "One failure yields exactly one Sentry event: thrown errors via onRequestError, handled 5xx via withApi (test)",
+    "beforeSend strips cookies, body, authorization/cookie/set-cookie/forwarded-user headers, url query, user, breadcrumb data, extra, contexts and redacts message, exception values, breadcrumb messages; returns null if redaction throws (tests)",
+    "log.* JSON lines: redacted string fields, safe for circular/Error, reserved keys protected, sanitised request id, hashed workspace id; every route under src/app/api/** logs one request line (withApi or withRequestLog); no console.warn/error remain (guard test)",
+    "GET /api/health: runtime nodejs, 200, no-store, no auth; runtime/auth/scope suites updated and green",
+    "docs/OBSERVABILITY.md written; README.md, docs/DEPLOY.md, .env.example untouched; .claude/hooks/tests-green.sh wt/THIS-TASK exits 0"
+  ],
+  "scope": [
+    "instrumentation.ts",
+    "instrumentation-client.ts",
+    "sentry.server.config.ts",
+    "next.config.ts",
+    "next.config.test.ts",
+    "package.json",
+    "package-lock.json",
+    "src/lib/log/**",
+    "src/lib/observability/**",
+    "src/app/api/**",
+    "docs/OBSERVABILITY.md"
+  ],
+  "depends_on": [],
+  "constraints": {
+    "read_only": true,
+    "budget_turns": 20,
+    "timeout_s": 900
+  },
+  "status": "queued",
+  "assigned_to": null,
+  "worktree": null,
+  "codex_thread": null,
+  "result": null,
+  "events": []
+}

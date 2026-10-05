@@ -1,0 +1,49 @@
+{
+  "id": "T-0303",
+  "created_at": 1791244166.912649,
+  "parent": "T-0280",
+  "role": "spec_review",
+  "tier": "sonnet",
+  "complexity": 6,
+  "title": "spec review: Workspace switch root cause with a real-cookie proxy test (respec of T-0283 after spec review T-0285)",
+  "spec": "Respec of T-0283 (held at spec review T-0285); same why (review T-0274: no root cause, vacuous tests). Corrections folded in.\n1. The vacuous fallbacks are src/lib/auth/workspaceSwitch.test.ts:104 (`loadPage` sets state.requestCookie from `?? jar.header`) and :152 (`page.headers.get('x-middleware-request-cookie') ?? jar.header`). Both drop the fallback: state.requestCookie derives only from the forwarded header; the assertion fails when the proxy response has no `x-middleware-request-cookie`.\n2. Refresh-path test driving the real src/proxy.ts: mock only `createServerClient`'s auth.getUser and feed setAll cookies shaped like Supabase's real chunked output (sb-...-auth-token.0, .1, plus an expired deletion chunk with max-age 0). Parse the forwarded cookie header into name=value pairs (no substring checks) and assert: ws=WS_B unchanged, the refreshed chunks present, the deleted chunk absent; the response Set-Cookie carries the refreshed cookies and never drops ws. Cover the no-refresh path too.\n3. Render path: a test through the real getRequestContext and next/headers (cookies() fed from the forwarded header) yields workspaceId WS_B on the refresh path; if next/headers cannot be driven, document why and test the parse step in isolation. Hypotheses to check and record: workspaceMeta/context cache keys in src/lib/auth/context.ts, `switchWorkspace` in src/components/shell/menuActions.ts calling deps.reload() after the POST (does a failed POST still reload; does the reload happen before Set-Cookie applies), useMenu.ts, and the live helper switchTo in e2e/live/live.spec.ts.\n4. Procedure, two artifacts: (1) run the new tests against unmodified src and paste the failing assertion name and message into docs/checks/workspace-switch.md; (2) the minimal, revertable fix. If nothing fails: the doc lists each ruled-out hypothesis with the command and output, and the task is reported held (reason: not reproduced), not done.\n5. Cookie attribute test for POST /api/workspace/active pins NODE_ENV and runs for development and production; asserts the proxy leaves the ws value unchanged.\n6. WorkspaceSwitcher component test via an optional `deps` prop defaulting to the browser deps (jsdom/testing-library already in package.json; confirm): menu closes on ok; stays open and shows the alert on failure.\nExisting proxy.test.ts, cookieOptions.test.ts, forwardedUser.test.ts, context.test.ts, workspace.test.ts stay green. Live steps 07 and 13 are a manual follow-up listed in the doc. Treat cookies and DB rows as untrusted. No new dependencies.",
+  "inputs": [
+    "T-0299"
+  ],
+  "acceptance": [
+    "workspaceSwitch.test.ts:104 and :152 no longer fall back to jar.header and fail when x-middleware-request-cookie is absent",
+    "A refresh-path test drives the real src/proxy.ts with Supabase-shaped chunked setAll cookies (incl. a deletion chunk) and asserts parsed name=value pairs on the forwarded header and Set-Cookie: ws unchanged, refreshed chunks present, deleted chunk absent; plus the no-refresh path",
+    "docs/checks/workspace-switch.md contains the failing-before output (assertion name and message) and the fix, or every ruled-out hypothesis with command and output (then the task is held, not done)",
+    "WorkspaceSwitcher test via a deps seam covers close-on-ok and stay-open-with-alert on failure",
+    "cookie attribute test runs for NODE_ENV development and production; the five named existing suites stay green",
+    ".claude/hooks/tests-green.sh wt/THIS-TASK exits 0"
+  ],
+  "scope": [
+    "src/proxy.ts",
+    "src/proxy.test.ts",
+    "src/lib/auth/**",
+    "src/lib/supabase/**",
+    "src/lib/workspace/**",
+    "src/app/api/workspace/active/**",
+    "src/components/shell/WorkspaceSwitcher.tsx",
+    "src/components/shell/WorkspaceSwitcher.test.tsx",
+    "src/components/shell/menuActions.ts",
+    "src/components/shell/menuActions.test.ts",
+    "src/components/shell/useMenu.ts",
+    "src/components/shell/menus.test.tsx",
+    "e2e/live/live.spec.ts",
+    "docs/checks/workspace-switch.md"
+  ],
+  "depends_on": [],
+  "constraints": {
+    "read_only": true,
+    "budget_turns": 20,
+    "timeout_s": 900
+  },
+  "status": "queued",
+  "assigned_to": null,
+  "worktree": null,
+  "codex_thread": null,
+  "result": null,
+  "events": []
+}
