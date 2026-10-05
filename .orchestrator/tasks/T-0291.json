@@ -417,6 +417,11 @@
     {
       "ts": 1791243885.4578838,
       "account": "B"
+    },
+    {
+      "ts": 1791243904.938085,
+      "pid": 23117,
+      "account": "B"
     }
   ],
   "pipeline": {
@@ -666,5 +671,6 @@
   "review_rule": "same-family-review: other account, different model",
   "executor": "claude:opus",
   "claimed_at": 1791243885.4556742,
-  "account": "B"
+  "account": "B",
+  "pid": 23117
 }

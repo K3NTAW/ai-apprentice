@@ -49,9 +49,80 @@
       "pipeline": {
         "first_ready_at": 1791243724.727943
       }
+    },
+    {
+      "ts": 1791243905.890608,
+      "pipeline": {
+        "first_ready_at": 1791243724.727943,
+        "dispatched_at": 1791243905.890561,
+        "dispatched_at_lease": 1791244805.890561
+      }
+    },
+    {
+      "ts": 1791243905.892155,
+      "pipeline": {
+        "first_ready_at": 1791243724.727943,
+        "dispatched_at": 1791243905.890561,
+        "dispatched_at_lease": 1791244805.890561
+      }
+    },
+    {
+      "ts": 1791243906.906612,
+      "packet_meta": {
+        "prefix_sha": "47d8a2fdfe08",
+        "prefix_chars": 764,
+        "suffix_chars": 4105,
+        "dynamic_sections": [
+          "objective",
+          "acceptance",
+          "base",
+          "write_scope",
+          "read_scope",
+          "constraints",
+          "relevant_tests",
+          "symbols",
+          "gotchas",
+          "decisions",
+          "verify",
+          "evidence",
+          "conditional instructions"
+        ]
+      }
+    },
+    {
+      "ts": 1791243906.908042,
+      "pipeline": {
+        "first_ready_at": 1791243724.727943,
+        "dispatched_at": 1791243905.890561,
+        "dispatched_at_lease": 1791244805.890561,
+        "dispatched_at_done": 1791243906.907983
+      }
     }
   ],
   "pipeline": {
-    "first_ready_at": 1791243724.727943
+    "first_ready_at": 1791243724.727943,
+    "dispatched_at": 1791243905.890561,
+    "dispatched_at_lease": 1791244805.890561,
+    "dispatched_at_done": 1791243906.907983
+  },
+  "packet_meta": {
+    "prefix_sha": "47d8a2fdfe08",
+    "prefix_chars": 764,
+    "suffix_chars": 4105,
+    "dynamic_sections": [
+      "objective",
+      "acceptance",
+      "base",
+      "write_scope",
+      "read_scope",
+      "constraints",
+      "relevant_tests",
+      "symbols",
+      "gotchas",
+      "decisions",
+      "verify",
+      "evidence",
+      "conditional instructions"
+    ]
   }
 }
