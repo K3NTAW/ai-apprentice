@@ -218,7 +218,7 @@ describe("fallthrough chain", () => {
 describe("llm model", () => {
   const notFound = () => json({ type: "error", error: { type: "not_found_error", message: "model: x" } }, 404);
   const modelsSent = (calls: Call[]) => calls.map((c) => JSON.parse(c.init.body as string).model);
-  const answer = llmReply({ event_class: { answer: "routine", confidence: 0.9 } });
+  const answer = () => llmReply({ event_class: { answer: "routine", confidence: 0.9 } });
 
   beforeEach(() => vi.stubEnv("ANTHROPIC_API_KEY", "ant-test"));
 
@@ -228,14 +228,14 @@ describe("llm model", () => {
     ["claude-sonnet-5-5", "claude-sonnet-5-5"],
   ])("sends the model from DECIDE_MODEL=%s as %s", async (env, expected) => {
     if (env) vi.stubEnv("DECIDE_MODEL", env);
-    const { fetchImpl, calls } = mockFetch(answer);
+    const { fetchImpl, calls } = mockFetch(answer());
     const res = await decide("event_class", {}, { fetchImpl });
     expect(res).toMatchObject({ provider: "llm", answer: "routine" });
     expect(modelsSent(calls)).toEqual([expected]);
   });
 
   it("retries once with FALLBACK_MODEL on a model not_found_error", async () => {
-    const { fetchImpl, calls } = mockFetch(notFound(), answer);
+    const { fetchImpl, calls } = mockFetch(notFound(), answer());
     const res = await decide("event_class", {}, { fetchImpl });
     expect(res).toMatchObject({ provider: "llm", answer: "routine" });
     expect(modelsSent(calls)).toEqual([DECIDE_MODEL_DEFAULT, FALLBACK_MODEL]);
