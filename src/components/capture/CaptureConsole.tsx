@@ -11,6 +11,7 @@ import { eventText } from "@/lib/capture/eventText";
 import type { TransportHost } from "@/lib/companion/transport";
 import type { CompanionCardProps } from "./CompanionCard";
 import CompanionSlot from "./DesktopPanel";
+import { EXPERT_PROMPT, startExpert } from "./sessionControls";
 import { Badge, buttonClass, Card, Chord, FeedRow, type BadgeKind } from "@/components/ui";
 
 export type LastAnswer = { expert: string; text: string; seconds?: number };
@@ -142,6 +143,7 @@ const tile = (n: number, label: string) => (
 
 export default function CaptureConsole(p: CaptureConsoleProps) {
   const host = p.host ?? "bridge";
+  const needsExpert = !p.running && !startExpert(p.expert);
   const stepsSeen = p.feed.filter((e) => e.source !== "os").length;
   const shortcuts = p.feed.filter((e) => e.type === "shortcut_used").length;
   const crumb = p.agentName ? `Agents / ${p.agentName} / Train` : "Agents / Train";
@@ -182,12 +184,25 @@ export default function CaptureConsole(p: CaptureConsoleProps) {
           ) : (
             <label className="flex items-center" style={{ gap: 8, color: "var(--mu)" }}>
               {p.task ? `Task: ${p.task} · Expert` : "Expert"}
-              <input className="ui-inp" style={{ width: 220, height: 32 }} value={p.expert} onChange={(e) => p.onExpertChange(e.target.value)} />
+              <input
+                className="ui-inp"
+                style={{ width: 220, height: 32 }}
+                value={p.expert}
+                onChange={(e) => p.onExpertChange(e.target.value)}
+                autoFocus={needsExpert}
+                aria-invalid={needsExpert || undefined}
+                aria-describedby={needsExpert ? "expert-prompt" : undefined}
+              />
+              {needsExpert && (
+                <span id="expert-prompt" data-testid="expert-prompt" style={{ color: "var(--am)" }}>
+                  {EXPERT_PROMPT}
+                </span>
+              )}
             </label>
           )}
         </div>
         <div className="flex flex-wrap" style={{ gap: 8 }} role="group" aria-label="Capture controls">
-          <button type="button" disabled={p.running || p.starting} onClick={p.onStart} className={buttonClass(p.running ? "secondary" : "primary")}>
+          <button type="button" disabled={p.running || p.starting || needsExpert} onClick={p.onStart} className={buttonClass(p.running ? "secondary" : "primary")}>
             <Icon d="M8 5v14l11-7z" />
             {p.starting ? "Starting..." : "Start"}
           </button>

@@ -43,7 +43,9 @@ import {
   captureShortcuts,
   holdableGate,
   loadAgentSettings,
+  prefillExpert,
   sessionClock,
+  startExpert,
   ttsOverrideAllowed,
 } from "./sessionControls";
 
@@ -113,13 +115,13 @@ export default function CaptureApp({ agentParam = null, transport, intent = null
 function CaptureInner({ agentParam, transport, intent }: { agentParam: string | null; transport?: CompanionTransport; intent: TrainIntent | null }) {
   const router = useRouter();
   const agentLoad = useAgent(agentParam);
-  const [expert, setExpert] = useState("Sabine");
+  const [expert, setExpert] = useState("");
   const agentExpert = agentLoad.status === "ok" ? agentLoad.agent.expert_name?.trim() : undefined;
   // Adopt the agent's expert name when it loads or changes (state adjusted during render, not in an effect).
   const [seenAgentExpert, setSeenAgentExpert] = useState<string | undefined>(undefined);
   if (agentExpert !== seenAgentExpert) {
     setSeenAgentExpert(agentExpert);
-    if (agentExpert) setExpert(agentExpert);
+    setExpert((current) => prefillExpert(current, agentExpert));
   }
   const [running, setRunning] = useState(false);
   const [starting, setStarting] = useState(false);
@@ -212,6 +214,9 @@ function CaptureInner({ agentParam, transport, intent }: { agentParam: string | 
 
   async function start() {
     if (starting || loopRef.current) return;
+    // No fallback name: an empty expert field blocks Start (the console asks "Who is the expert?").
+    const name = startExpert(expert);
+    if (!name) return;
     setStarting(true);
     setNotice(null);
     const blocked = agentBlocker(agentLoad);
@@ -220,7 +225,6 @@ function CaptureInner({ agentParam, transport, intent }: { agentParam: string | 
       setStarting(false);
       return;
     }
-    const name = expert.trim() || "Sabine";
     // The agent this capture trains: ?agent=<id>, linked on the session and shown in the companion dock.
     const agentId = SHORTCUT_LEARNING ? new URLSearchParams(window.location.search).get("agent") : null;
     let sessionId: string;

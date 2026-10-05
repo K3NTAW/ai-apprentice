@@ -4,14 +4,14 @@ import { expertOption } from "@/components/agents/model";
 import NewAgentFlow from "@/components/agents/NewAgentFlow";
 import AppShell from "@/components/shell/AppShell";
 import { previewWorkspace } from "@/lib/fixtures/workspace";
-import { appMode } from "@/lib/supabase/env";
+import { fixturesEnabled } from "@/lib/fixtures/enabled";
 
 export const dynamic = "force-dynamic";
 
 // Local mode only: the new agent flow with fixture data, for the side-by-side with NewAgent*.dc.html.
 // ?step=2 shows steps 2 and 3 (avatar studio, install and train) for the fixture agent Pip.
 export default async function NewAgentPreviewPage({ searchParams }: { searchParams: Promise<{ step?: string }> }) {
-  if (appMode() !== "local") notFound();
+  if (!fixturesEnabled()) notFound();
   const later = (await searchParams).step === "2";
   const experts = previewWorkspace.members.filter((m) => m.role !== "learner").map(expertOption);
   return (

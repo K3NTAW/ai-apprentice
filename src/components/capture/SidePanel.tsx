@@ -4,6 +4,7 @@
 import { useState, type FormEvent } from "react";
 import type { ScreenEvent } from "@/lib/types";
 import { eventText } from "@/lib/capture/eventText";
+import { EXPERT_PROMPT, startExpert } from "./sessionControls";
 
 export type PresenceStatus = "idle" | "listening" | "thinking" | "speaking" | "paused";
 
@@ -95,11 +96,14 @@ export default function SidePanel(p: SidePanelProps) {
               className="ui-inp"
               value={p.expert}
               onChange={(e) => p.onExpertChange(e.target.value)}
+              autoFocus={!startExpert(p.expert)}
+              aria-invalid={!startExpert(p.expert) || undefined}
             />
+            {!startExpert(p.expert) && <span className="text-[var(--am)]">{EXPERT_PROMPT}</span>}
           </label>
           <button
             type="button"
-            disabled={p.starting}
+            disabled={p.starting || !startExpert(p.expert)}
             onClick={p.onStart}
             className="ui-btn ui-bp"
           >

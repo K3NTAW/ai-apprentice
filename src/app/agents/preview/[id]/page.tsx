@@ -7,7 +7,7 @@ import { previewAgents, previewCreatedBy, previewMembers } from "@/lib/fixtures/
 import { previewSessionsFull as previewSessions } from "@/lib/fixtures/preview";
 import { previewProcess } from "@/lib/fixtures/processes";
 import type { Process } from "@/lib/store/types";
-import { appMode } from "@/lib/supabase/env";
+import { fixturesEnabled } from "@/lib/fixtures/enabled";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +15,7 @@ type Props = { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: st
 
 // Local mode only: one fixture agent page, for the side-by-side with Agent*.dc.html.
 export default async function AgentPreviewPage({ params, searchParams }: Props) {
-  if (appMode() !== "local") notFound();
+  if (!fixturesEnabled()) notFound();
   const { id } = await params;
   const agent = previewAgents.find((a) => a.id === id);
   if (!agent) notFound();

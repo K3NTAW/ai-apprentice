@@ -100,3 +100,18 @@ export function captureSettings(settings: AgentSettings, ttsAllowed: boolean) {
     voice: { overrides, notice: voice.notice },
   };
 }
+
+/** The inline prompt while the expert field is empty: Start stays disabled and the field is focused. */
+export const EXPERT_PROMPT = "Who is the expert?";
+
+/** The expert a capture starts with: the trimmed name, or null when empty (Start is blocked). No fallback name. */
+export function startExpert(expert: string): string | null {
+  const name = expert.trim();
+  return name === "" ? null : name;
+}
+
+/** The expert field after the agent loads: the agent's expert_name prefills it; without one the field keeps its value. */
+export function prefillExpert(current: string, agentExpert: string | null | undefined): string {
+  const name = agentExpert?.trim();
+  return name ? name : current;
+}

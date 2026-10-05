@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import ShellHeader, { type ShellUser } from "@/components/shell/ShellHeader";
 import { Card } from "@/components/ui";
-import { appMode } from "@/lib/supabase/env";
+import { fixturesEnabled } from "@/lib/fixtures/enabled";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +20,7 @@ const user: ShellUser = {
 };
 
 export default function ShellPreviewPage() {
-  if (appMode() !== "local") notFound();
+  if (!fixturesEnabled()) notFound();
   return (
     <div className="flex min-h-screen flex-col md:flex-row" style={{ background: "var(--bg)", color: "var(--tx)" }}>
       <ShellHeader user={user} />
