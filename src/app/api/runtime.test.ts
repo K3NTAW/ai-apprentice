@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 
 const API_DIR = path.join(process.cwd(), "src/app/api");
 const LONG_RUNNING = ["vision", "workmap", "decide", "workmap/confirm"];
+// Routes that answer without a session. Exactly one; growing it needs a spec, not a quiet edit.
+const PUBLIC_ROUTES = ["health/route.ts"];
 
 async function routeFiles(dir: string): Promise<string[]> {
   const out: string[] = [];
@@ -23,6 +25,12 @@ describe("API route segment config", () => {
       const src = await readFile(file, "utf8");
       expect(src, path.relative(API_DIR, file)).toMatch(/^export const runtime = "nodejs";$/m);
     }
+  });
+
+  it("the public allowlist holds only the health route, and it exists", async () => {
+    expect(PUBLIC_ROUTES).toEqual(["health/route.ts"]);
+    const files = (await routeFiles(API_DIR)).map((f) => path.relative(API_DIR, f));
+    expect(files).toContain("health/route.ts");
   });
 
   it.each(LONG_RUNNING)("%s exports maxDuration within 60 s", async (route) => {

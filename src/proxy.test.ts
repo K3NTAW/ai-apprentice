@@ -114,6 +114,14 @@ describe("supabase mode, signed out", () => {
     expect(createServerClient).not.toHaveBeenCalled();
   });
 
+  it("passes a signed-out GET /api/health through: no redirect, no 401 from the proxy", async () => {
+    const res = await proxy(req("/api/health"));
+    expect(passes(res)).toBe(true);
+    expect(res.status).not.toBe(401);
+    expect(res.headers.get("location")).toBeNull();
+    expect(state.getUserCalls).toBe(0);
+  });
+
   it("passes '/', /login and /auth/callback", async () => {
     for (const p of ["/", "/login", "/login?next=%2Fcapture", "/auth/callback?code=x"]) {
       expect(passes(await proxy(req(p)))).toBe(true);

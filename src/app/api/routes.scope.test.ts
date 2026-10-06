@@ -93,10 +93,24 @@ const ROUTES: { name: string; call: (id: string) => Promise<Response> }[] = [
   { name: "vision", call: (id) => visionPost(req({ session_id: id, t: 2, frame: "aGVsbG8=" })) },
 ];
 
+// Routes outside workspace scoping (no session, no store). Exactly one; asserted below so it cannot grow unnoticed.
+const PUBLIC_ROUTES = ["./health/route.ts"];
+
 beforeEach(() => {
   state.fake = new FakeSupabase({ uid: USER, workspaces: [WS_A] });
   state.role = "expert";
   describeFrame.mockClear();
+});
+
+describe("public allowlist", () => {
+  it("holds only the health route, which touches no store", async () => {
+    expect(PUBLIC_ROUTES).toEqual(["./health/route.ts"]);
+    const { GET } = await import("./health/route");
+    const before = JSON.stringify(state.fake.tables);
+    const res = await GET(req());
+    expect(res.status).toBe(200);
+    expect(JSON.stringify(state.fake.tables)).toBe(before);
+  });
 });
 
 describe("cross-workspace session ids answer 404 like missing ones", () => {

@@ -42,7 +42,12 @@ vi.mock("@/lib/perception/vision", () => ({ describeFrame }));
 const modules = import.meta.glob("./**/route.ts", { eager: true }) as Record<string, Record<string, unknown>>;
 const METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
 
-const handlers = Object.entries(modules).flatMap(([file, mod]) =>
+// Routes that answer without a session (uptime checks). Exactly one; asserted below so it cannot grow unnoticed.
+const PUBLIC_ROUTES = ["./health/route.ts"];
+
+const handlers = Object.entries(modules)
+  .filter(([file]) => !PUBLIC_ROUTES.includes(file))
+  .flatMap(([file, mod]) =>
   METHODS.filter((m) => typeof mod[m] === "function").map((m) => ({
     name: `${m} ${file}`,
     method: m,
@@ -88,6 +93,12 @@ describe("every API route requires a context", () => {
     ]) {
       expect(files).toContain(f);
     }
+  });
+
+  it("the public allowlist holds only the health route, and every other route is covered", () => {
+    expect(PUBLIC_ROUTES).toEqual(["./health/route.ts"]);
+    expect(Object.keys(modules)).toContain("./health/route.ts");
+    expect(handlers.some((h) => h.name.includes("./health/"))).toBe(false);
   });
 
   it.each(handlers)("$name answers 401 when signed out", async (h) => {
