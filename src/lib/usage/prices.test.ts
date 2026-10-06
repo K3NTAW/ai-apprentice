@@ -27,7 +27,7 @@ describe("model_prices seed", () => {
   });
 
   it("prices every string model id exported by src/lib/models.ts", () => {
-    const ids = Object.values(models).filter((v): v is string => typeof v === "string");
+    const ids = (Object.values(models) as unknown[]).filter((v): v is string => typeof v === "string");
     expect(ids.length).toBeGreaterThanOrEqual(4);
     expect(ids.filter((id) => !seeded.has(id))).toEqual([]);
   });
