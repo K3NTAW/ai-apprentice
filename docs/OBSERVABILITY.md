@@ -76,4 +76,42 @@ paste the salt into tickets or chats.
 
 ## Sentry
 
-Follow-up task. It builds on `withRequestLog` and `withApi`.
+Server only, nodejs runtime only, thrown errors only. Off unless `SENTRY_DSN` is set.
+
+### Setup
+
+- Set `SENTRY_DSN` in the Vercel project. Empty or unset means Sentry is off: `src/instrumentation.ts` imports nothing.
+- `environment` comes from `VERCEL_ENV` (`development` when unset). `release` comes from `VERCEL_GIT_COMMIT_SHA` (unset when missing).
+- A human creates the Sentry org in the EU region (ingest host `*.ingest.de.sentry.io`) and copies the DSN.
+- Init is in `src/lib/observability/sentryServer.ts`: `sendDefaultPii: false`, `tracesSampleRate: 0`, `enableLogs: false`, `sendClientReports: false`, transactions dropped, no replay, no profiling. Server sessions are off: the `ProcessSession` integration is filtered out and `Http` is re-created with `sessions: false`.
+
+### What is sent
+
+- Every event goes through the `beforeSend` allowlist in `src/lib/observability/beforeSend.ts`: `event_id`, `timestamp`, `level`, `platform`, `environment`, `release`, `message`, `exception` (type, value, mechanism, frames), tags `route` and `runtime`, and `request.method`. Everything else is dropped: user, extra, contexts, breadcrumbs, other tags.
+- The request url, headers, cookies, query string and body are never sent.
+- Redaction of `message` and exception values is regex-based and best effort. Personal data in an unusual format can get through.
+- The SDK adds an `sdk` block after `beforeSend` (SDK name, version, integration names, package versions). The envelope header still carries the SDK name and the DSN.
+
+### What is captured
+
+- Errors thrown from routes, through `onRequestError` in `src/instrumentation.ts`, tagged with the route pattern and `runtime: nodejs`. After each capture it flushes for at most 2 s so the event leaves before a serverless function freezes. The hook never rejects and never logs the error.
+- NOT captured: handled 500s (until T-0322), errors in `src/proxy.ts` and any edge runtime, React render errors.
+- Delivery on Vercel is unverified until the org exists.
+
+### Browser
+
+Not wired yet.
+
+### Smoke check
+
+Not wired yet.
+
+### Stack traces
+
+Minified. `next.config.ts` has no `withSentryConfig`, so there is no source-map upload yet.
+
+### Rollback
+
+- Fast: unset `SENTRY_DSN` in Vercel and redeploy.
+- Full removal: `git revert` this task's merge commit. That also reverts `package-lock.json`.
+- `vercel.json` has only crons and no CSP today. If a CSP is added, allow the ingest host `o<org>.ingest.de.sentry.io` in `connect-src`.
