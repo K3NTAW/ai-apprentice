@@ -104,13 +104,12 @@ export function useVoiceAgent({ role, clientTools, onTranscript, onModeChange, o
   }, [clientTools]);
   const humanSpeaker: VoiceSpeaker = role === "tutor" ? "learner" : "expert";
   // Voice seconds for the cost meter: reported once per session on end or pagehide.
-  const usageRef = useRef<ReturnType<typeof createVoiceUsageReporter> | null>(null);
-  if (!usageRef.current) usageRef.current = createVoiceUsageReporter();
+  const [usage] = useState(() => createVoiceUsageReporter());
   useEffect(() => {
-    const onPageHide = () => usageRef.current?.report();
+    const onPageHide = () => usage.report();
     window.addEventListener("pagehide", onPageHide);
     return () => window.removeEventListener("pagehide", onPageHide);
-  }, []);
+  }, [usage]);
 
   const conversation = useConversation({
     micMuted: muted,
@@ -120,7 +119,7 @@ export function useVoiceAgent({ role, clientTools, onTranscript, onModeChange, o
       if (!text) return;
       onTranscript({ speaker: msg.role === "agent" ? "agent" : humanSpeaker, text });
     },
-    onDisconnect: () => usageRef.current?.report(),
+    onDisconnect: () => usage.report(),
     onModeChange: ({ mode }) => onModeChange?.(mode),
     onError: (message) => onError?.(message),
     // @elevenlabs/react 1.16 / client 1.26: onVadScore({ vadScore }) for every VAD frame of the user's mic.
@@ -139,7 +138,7 @@ export function useVoiceAgent({ role, clientTools, onTranscript, onModeChange, o
         // Ask for the microphone up front so a denial surfaces here, then release it; the SDK opens its own stream.
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         stream.getTracks().forEach((t) => t.stop());
-        usageRef.current?.begin(body.usage_token);
+        usage.begin(body.usage_token);
         conversation.startSession({
           signedUrl: body.signed_url,
           connectionType: "websocket",
@@ -154,7 +153,7 @@ export function useVoiceAgent({ role, clientTools, onTranscript, onModeChange, o
         throw err;
       }
     },
-    [conversation, role, onError],
+    [conversation, role, onError, usage],
   );
 
   const setMuted = useCallback(
@@ -167,9 +166,9 @@ export function useVoiceAgent({ role, clientTools, onTranscript, onModeChange, o
   );
 
   const stop = useCallback(() => {
-    usageRef.current?.report();
+    usage.report();
     return conversation.endSession();
-  }, [conversation]);
+  }, [conversation, usage]);
 
   return {
     start,
