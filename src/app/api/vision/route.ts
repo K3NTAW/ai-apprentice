@@ -1,5 +1,6 @@
-// POST /api/vision: store one frame, then ask the vision model for new events.
+// POST /api/vision: ask the vision model for new events, then store the frame only for key moments.
 // Frames inside an off-record range are neither stored nor sent to the model.
+// STORE_ALL_FRAMES=1 (read per request) restores the old order: store every frame, then call the model.
 import { ScreenEventSchema, type VisionEvent } from "@/lib/types";
 import { MAX_FRAME_BODY_BYTES } from "@/lib/perception/frame";
 import { redactScreenEvent } from "@/lib/perception/redactEvent";
@@ -58,16 +59,89 @@ async function visionFor(api: Api, req: Request): Promise<Response> {
   const denied = await requireCreatorOrOwner(api, session_id);
   if (denied) return denied;
   const jpegBase64 = frame.replace(/^data:image\/\w+;base64,/, "");
-  const saved = await api.store.saveFrame(session_id, t, Buffer.from(jpegBase64, "base64"));
-  if (!saved.stored) return Response.json({ events: [], skipped: saved.reason });
+  const data = () => Buffer.from(jpegBase64, "base64");
+  const skipped = (reason: "off_record") => Response.json({ events: [], skipped: reason });
+  const describe = () => describeFrame({ jpegBase64, previousEvents: prev.data });
 
-  const result = process.env.ANTHROPIC_API_KEY ? await describeFrame({ jpegBase64, previousEvents: prev.data }) : { events: [] };
-  // Upstream model errors answer 502, never 429: a 429 means our daily cap and makes the client stop vision for the day.
-  if (result.error) {
-    log.warn("vision: upstream failed", { error: result.error });
-    return Response.json({ error: "vision_upstream", detail: result.error }, { status: 502 });
+  if (process.env.STORE_ALL_FRAMES === "1") {
+    const saved = await guarded(() => api.store.saveFrame(session_id, t, data()), NO_COUNTS, "not_called", "save_failed");
+    if (!saved.stored) {
+      frameLine(NO_COUNTS, false, "not_called");
+      return skipped(saved.reason);
+    }
+    const hasKey = Boolean(process.env.ANTHROPIC_API_KEY);
+    const result = hasKey ? await describe() : { events: [] };
+    if (result.error) return upstreamFailed(result.error);
+    const events: VisionEvent[] = result.events;
+    frameLine(countImportance(events), true, hasKey ? "called" : "not_called");
+    return Response.json({ events: events.map(redactScreenEvent), frame_ref: `frames/${saved.name}` });
   }
+
+  const allowed = await guarded(() => api.store.frameAllowed(session_id, t), NO_COUNTS, "not_called", "check_failed");
+  if (!allowed.ok) return skipped(allowed.reason);
+
+  if (!process.env.ANTHROPIC_API_KEY) {
+    frameLine(NO_COUNTS, false, "no_api_key");
+    return Response.json({ events: [] });
+  }
+
+  const result = await describe();
+  if (result.error) return upstreamFailed(result.error);
   const events: VisionEvent[] = result.events;
-  // Redact app, window, from and to before the client stores them (off-record frames never get here).
-  return Response.json({ events: events.map(redactScreenEvent), frame_ref: `frames/${saved.name}` });
+  const counts = countImportance(events);
+
+  if (counts.key >= 1) {
+    const saved = await guarded(() => api.store.saveFrame(session_id, t, data()), counts, "called", "save_failed");
+    frameLine(counts, saved.stored, "called");
+    if (!saved.stored) return skipped(saved.reason);
+    // Redact app, window, from and to before the client stores them (off-record frames never get here).
+    return Response.json({ events: events.map(redactScreenEvent), frame_ref: `frames/${saved.name}` });
+  }
+
+  // No key event: nothing is stored. Recheck off-record (best effort) for a range opened during the model call.
+  const still = await guarded(() => api.store.frameAllowed(session_id, t), counts, "called", "check_failed");
+  frameLine(counts, false, "called");
+  if (!still.ok) return skipped(still.reason);
+  return Response.json({ events: events.map(redactScreenEvent) });
+}
+
+// Upstream model errors answer 502, never 429: a 429 means our daily cap and makes the client stop vision for the day.
+function upstreamFailed(error: string): Response {
+  log.warn("vision: upstream failed", { error });
+  return Response.json({ error: "vision_upstream", detail: error }, { status: 502 });
+}
+
+type Counts = { key: number; routine: number; unrated: number };
+type Model = "called" | "no_api_key" | "not_called";
+type FrameError = "check_failed" | "save_failed";
+
+const NO_COUNTS: Counts = { key: 0, routine: 0, unrated: 0 };
+
+function countImportance(events: VisionEvent[]): Counts {
+  const counts = { ...NO_COUNTS };
+  for (const e of events) {
+    if (e.importance === "key") counts.key++;
+    else if (e.importance === "routine") counts.routine++;
+    else counts.unrated++;
+  }
+  return counts;
+}
+
+// One vision.frame line per decided frame: counts and flags only, never event text.
+// Warn when there is no API key, on a store error, or when every event lacks importance (prompt or schema regression).
+function frameLine(counts: Counts, stored: boolean, model: Model, error?: FrameError): void {
+  const allUnrated = counts.unrated > 0 && counts.key === 0 && counts.routine === 0;
+  const fields = { ...counts, stored, model, ...(error ? { error } : {}) };
+  if (model === "no_api_key" || error || allUnrated) log.warn("vision.frame", fields);
+  else log.info("vision.frame", fields);
+}
+
+// A store throw writes the warn line, then rethrows so withApi answers as before (500, or 404 via handle()).
+async function guarded<T>(op: () => Promise<T>, counts: Counts, model: Model, error: FrameError): Promise<T> {
+  try {
+    return await op();
+  } catch (err) {
+    frameLine(counts, false, model, error);
+    throw err;
+  }
 }
