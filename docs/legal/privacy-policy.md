@@ -50,13 +50,13 @@ Under the Swiss Federal Act on Data Protection (nFADP) we process data in line w
 
 - Off the record: a speaker can say the workspace's off-the-record phrase (default "off the record", configurable per agent in `src/lib/agents/settings.ts`). The speech that follows is not kept in the transcript.
 - Text redaction: names, email addresses, IBANs, phone numbers and card numbers are replaced with placeholders in transcripts and screen events before they are stored (`src/lib/redact/index.ts`, `src/lib/perception/redactEvent.ts`, `src/app/api/redact/route.ts`). Names/emails and IBAN/phone groups can be turned off per agent; card numbers are always redacted.
-- Frames are not redacted yet. Screen frames are stored and sent to the vision model as captured. Do not share a window that shows data you do not want recorded.
+- Frames are not redacted yet. Screen frames are sent to the vision model as captured. A frame is kept only when the model marks a key moment in it; other frames are discarded after the model answers. Frames inside an off-the-record range are neither sent nor kept. The operator can temporarily keep every frame for debugging (`STORE_ALL_FRAMES`); this is logged in `docs/checks/capture-scope.md`. Do not share a window that shows data you do not want recorded.
 
 Redaction is automatic and pattern based. It can miss things.
 
 ## 6. Retention
 
-- Screen frames: deleted after the workspace's retention setting (7, 30, 90 or 365 days; default 30 days). A daily job deletes older frames (`src/app/api/cron/retention/route.ts`, `src/lib/agents/admin.ts`).
+- Screen frames: deleted after the workspace's retention setting (7, 30, 90 or 365 days; default 90 days, `src/lib/agents/settings.ts`). A daily job deletes older frames (`src/app/api/cron/retention/route.ts`, `src/lib/agents/admin.ts`).
 - Transcripts, screen events and Work Maps: kept until the workspace deletes them.
 - Account data: kept while the account exists, then deleted within [number] days.
 - Usage counters: kept for [period] for billing and limits.
