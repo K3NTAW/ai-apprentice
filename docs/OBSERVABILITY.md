@@ -76,7 +76,7 @@ paste the salt into tickets or chats.
 
 ## Sentry
 
-Server only, nodejs runtime only, thrown errors only. Off unless `SENTRY_DSN` is set.
+Server only, nodejs runtime only, thrown errors and handled 500s only. Off unless `SENTRY_DSN` is set.
 
 ### Setup
 
@@ -96,7 +96,8 @@ Server only, nodejs runtime only, thrown errors only. Off unless `SENTRY_DSN` is
 ### What is captured
 
 - Errors thrown from routes, through `onRequestError` in `src/instrumentation.ts`, tagged with the route pattern and `runtime: nodejs`. After each capture it flushes for at most 2 s so the event leaves before a serverless function freezes. The hook never rejects and never logs the error.
-- NOT captured: handled 500s (until T-0322), errors in `src/proxy.ts` and any edge runtime, React render errors.
+- Handled 500s: a route that returns status 500 (for example `store_context_required` from `handle()` in `src/app/api/session/_http.ts`). The outermost request line in `src/lib/log` calls `captureHandled500` (`src/lib/observability/capture.ts`) right after the line is written: one `captureMessage("handled 500")` at level `error`, tagged with the route, then a flush of at most 2 s. A nested `logRequest` (`withApi` under `withRequestLog`) never captures, so each request is captured once. A throw is never captured here; `onRequestError` owns it. The SDK is imported only when `SENTRY_DSN` is set, and a failed import, SDK throw or flush timeout is swallowed: the response and the request line are the same either way.
+- NOT captured: 4xx responses (400, 401, 403, 404, 409), 502 and 503 (expected states such as an unapplied migration or `supabase_not_configured`), errors in `src/proxy.ts` and any edge runtime, React render errors.
 - Delivery on Vercel is unverified until the org exists.
 
 ### Browser

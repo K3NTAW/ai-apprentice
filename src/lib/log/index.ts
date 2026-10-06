@@ -2,6 +2,7 @@
 // one "request" line per API request via withRequestLog or withApi.
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash, randomUUID } from "node:crypto";
+import { captureHandled500 } from "@/lib/observability/capture";
 import { redactText } from "@/lib/redact";
 
 export type Level = "info" | "warn" | "error";
@@ -113,7 +114,8 @@ export type RequestLine = { status: number; thrown?: boolean; workspaceId?: stri
  * Runs fn inside a request scope (log.* lines carry its requestId) and writes one request line:
  * {event: "request", route, method, status, ms, requestId}. A throw logs status 500 and thrown: true, then rethrows.
  * fn reports the workspace id through setWorkspace once it is known. Nested inside another request scope
- * (withApi under withRequestLog) only the outer call writes the line.
+ * (withApi under withRequestLog) only the outer call writes the line. A returned status 500 is then sent to Sentry
+ * once (captureHandled500, off without SENTRY_DSN); a throw never is.
  */
 export async function logRequest(
   scope: RequestLogScope,
@@ -146,7 +148,10 @@ export async function logRequest(
       line(500, true);
       throw err;
     }
-    line(typeof res?.status === "number" ? res.status : 500, false);
+    const status = typeof res?.status === "number" ? res.status : 500;
+    line(status, false);
+    // Handled 500s only; thrown errors reach Sentry through onRequestError. Never rejects.
+    if (status === 500) await captureHandled500({ route: scope.route, requestId });
     return res;
   });
 }
