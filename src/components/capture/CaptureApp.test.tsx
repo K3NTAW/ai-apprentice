@@ -75,13 +75,13 @@ describe("CaptureApp in the desktop app: step aside and restore", () => {
   });
   afterEach(() => d.uninstall());
 
-  it("Start: the voice agent first, then getDisplayMedia (monitor), then step-aside; End restores", async () => {
+  it("Start: the voice agent first, then getDisplayMedia (window first), then step-aside; End restores", async () => {
     const app = captureApp(d);
     expect(app.transport.kind).toBe("bridge");
     d.paired();
     await app.start();
     expect(d.log).toEqual(["agent.start", "getDisplayMedia", "window:step-aside"]);
-    expect(d.getDisplayMediaCalls[0]).toMatchObject({ video: { displaySurface: "monitor" } });
+    expect(d.getDisplayMediaCalls[0]).toMatchObject({ video: { displaySurface: "window" }, selfBrowserSurface: "exclude", surfaceSwitching: "include" });
     expect(app.state.sharing).toBe(true);
     app.end();
     expect(d.log.at(-1)).toBe("window:restore");
