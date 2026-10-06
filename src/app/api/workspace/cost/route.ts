@@ -2,7 +2,7 @@
 // Any member role. Reads through the user client (the view is security_invoker, so RLS applies) and still filters by the
 // active workspace in the query, and drops any row of another workspace that still comes back.
 import { requireContext } from "@/lib/auth/context";
-import { withRequestLog } from "@/lib/log";
+import { log, withRequestLog } from "@/lib/log";
 import { COST_ROW_LIMIT, mapCostRow, parseDays, zurichCutoff, type CostResponse, type CostRow } from "./cost";
 
 export const runtime = "nodejs";
@@ -23,7 +23,7 @@ async function handleGET(req: Request): Promise<Response> {
     .order("day", { ascending: false })
     .limit(COST_ROW_LIMIT);
   if (error) {
-    console.error("workspace cost:", error.message);
+    log.error("workspace cost", { error: error.message });
     return Response.json({ error: "cost unavailable" }, { status: 500 });
   }
   const list = Array.isArray(data) ? (data as unknown[]) : [];
