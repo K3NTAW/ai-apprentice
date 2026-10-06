@@ -166,14 +166,16 @@ export function runStoreContract(name: string, makeStore: () => SessionStore | P
       const s = await store.createSession({ kind: "capture" });
       const jpg = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
       const frames = async () => (await store.getSession(s.id))?.frames ?? [];
+      const saved = new Set<number>();
       // Checks t without a write, then asserts saveFrame agrees.
       const agrees = async (t: number, want: boolean) => {
         const before = await frames();
         const got = await store.frameAllowed(s.id, t);
         expect(got).toEqual(want ? { ok: true } : { ok: false, reason: "off_record" });
         expect(await frames()).toEqual(before);
-        expect(await store.readFrame(s.id, frameName(t))).toBeNull();
+        if (!saved.has(t)) expect(await store.readFrame(s.id, frameName(t))).toBeNull();
         expect((await store.saveFrame(s.id, t, jpg)).stored).toBe(got.ok);
+        if (got.ok) saved.add(t);
       };
 
       await agrees(5, true);
