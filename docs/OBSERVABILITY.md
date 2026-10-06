@@ -102,11 +102,16 @@ Server only, nodejs runtime only, thrown errors and handled 500s only. Off unles
 
 ### Browser
 
-Not wired yet.
+- Set `NEXT_PUBLIC_SENTRY_DSN` in the Vercel project. Empty or unset means the browser loads no Sentry code: `src/instrumentation-client.ts` checks the literal `process.env.NEXT_PUBLIC_SENTRY_DSN`, which Next inlines at build time, and only then imports `src/lib/observability/sentryClient.ts`. A failed import is swallowed.
+- Init uses the same `beforeSend` allowlist as the server, `dataCollection` fully off (11.4.0 has no `sendDefaultPii` or `enableLogs`), `tracesSampleRate: 0`, `sendClientReports: false` and a `beforeSendTransaction` that drops every transaction. `environment` comes from `NEXT_PUBLIC_VERCEL_ENV`, `release` from `NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA`. The default `BrowserSession` and `BrowserTracing` integrations are removed through `integrations`. No replay, no profiling.
+- Captured: uncaught window errors and unhandled promise rejections, from the moment the import resolves.
+- NOT captured: React render errors (needs `src/app/global-error.tsx`, a known gap), errors thrown before the import resolves.
+- Manual check: on a deployed preview, run `setTimeout(() => { throw new Error("sentry browser check") })` in the browser console and look for the event in Sentry.
+- Rollback: the client DSN is baked into the bundle at build time. Unset `NEXT_PUBLIC_SENTRY_DSN` AND rebuild (redeploy without build cache); unsetting alone changes nothing.
 
 ### Smoke check
 
-Not wired yet.
+- `npm run sentry:smoke` sends one real event: it inits the server SDK, captures one exception and expects `flush(5000)` to resolve `true`. It needs `SENTRY_DSN` in the shell; without it, or without `SENTRY_SMOKE=1` (set by the script), `src/lib/observability/smoke.live.test.ts` is skipped, so a plain `npm test` never sends anything.
 
 ### Stack traces
 
