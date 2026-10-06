@@ -71,3 +71,43 @@ The price tables are readable by any signed-in user (`using (auth.uid() is not n
 ## Rollback
 
 The rollback destroys billing history (all events and prices). Order: view, policies, price tables, indexes, `usage_events`.
+
+## Voice
+
+Part 3. Route `src/app/api/voice/usage/route.ts`, helper `src/lib/usage/voice.ts`, client `src/lib/voice/useVoiceAgent.ts`.
+
+The server never sees the ElevenLabs session length, so voice seconds come from the client. Each report is bound to a token the server issued and stored, so an invented token cannot add cost.
+
+### Token flow
+
+1. `GET /api/voice/signed-url` gets the ElevenLabs signed URL, then (supabase mode, `USAGE_EVENTS` not `0`) inserts a `usage_events` row `kind = 'voice'`, `session_id = v_<uuid>`, `voice_seconds` null through `insertUsageEvent`, and adds `usage_token` to the response. If the insert fails (error, conflict, missing table, timeout) the response has no `usage_token`, the signed URL still works, and one `usage.events` warn is logged. Metering never blocks voice. Local mode and `USAGE_EVENTS=0` issue no token.
+2. `useVoiceAgent` keeps the token and the session start time. On session end (`stop()` or the SDK `onDisconnect`) or on window `pagehide` it posts `{ usage_token, seconds }` once to `POST /api/voice/usage` with `navigator.sendBeacon` (JSON Blob), or `fetch` with `keepalive: true` when sendBeacon is missing or refuses. A sent flag stops a second post. No token, no post. The post never throws into the hook.
+3. `POST /api/voice/usage` (any member role) checks the body: `usage_token` must match `^v_[0-9a-f-]{36}$` and `seconds` must be a finite number, else 400 `{ error: "invalid body" }`. Seconds are clamped to 0..7200. One UPDATE with the service role client sets `voice_seconds` where `kind = 'voice'`, `session_id` is the token, `workspace_id` is the active workspace, `user_id` is the caller and `voice_seconds is null`. 200 `{ ok: true, seconds }`. Local mode answers 200 `{ ok: true, local: true }` without touching the DB.
+
+### 404 and 409
+
+When no row was updated, one select scoped to the caller's workspace and user tells the cases apart:
+
+- 404 `{ error: "unknown token" }`: no such row for this workspace and user. Invented tokens, tokens of another workspace and tokens of another user look the same, so the route never confirms that a row exists elsewhere.
+- 409 `{ error: "already recorded" }`: the caller's row exists and already has seconds. The first report wins.
+
+A DB error answers 503 with one `usage.events` warn.
+
+### No extra cap
+
+There is no daily cap on this route. `usage_counters` already caps signed-url calls per workspace per day, and each signed URL yields at most one token and one report.
+
+### Trust gap
+
+A member can under-report their own session (send 0, or never post). They cannot inflate cost beyond 7200 s per issued token, and cannot touch tokens of other users or workspaces.
+
+### Rows with null seconds
+
+A voice row with `voice_seconds` null is a session that never reported: tab killed before pagehide fired, beacon dropped, or the microphone was denied after the token was issued. `usage_cost_daily` leaves these rows out. Count them to see how many sessions went unmetered:
+
+```sql
+select workspace_id, count(*) as unreported
+from public.usage_events
+where kind = 'voice' and voice_seconds is null and created_at >= '2026-10-01'
+group by workspace_id;
+```

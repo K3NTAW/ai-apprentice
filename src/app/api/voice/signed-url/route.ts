@@ -1,6 +1,8 @@
-import { requireContext } from "@/lib/auth/context";
+import { requireContext, type RequestContext } from "@/lib/auth/context";
 import { consumeUsage } from "@/lib/usage";
-import { withRequestLog } from "@/lib/log";
+import { log, withRequestLog } from "@/lib/log";
+import { insertUsageEvent, isTableMissing, usageEventsEnabled } from "@/lib/usage/events";
+import { newVoiceToken } from "@/lib/usage/voice";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -51,7 +53,35 @@ async function handleGET(req: Request): Promise<Response> {
   if (!body || typeof body.signed_url !== "string") {
     return Response.json({ error: "upstream_bad_response" }, { status: 502 });
   }
-  return Response.json({ signed_url: body.signed_url });
+  const usageToken = await issueUsageToken(ctx);
+  return Response.json({ signed_url: body.signed_url, ...(usageToken ? { usage_token: usageToken } : {}) });
+}
+
+/**
+ * Inserts the voice usage row (voice_seconds null) and returns its token; POST /api/voice/usage sets the seconds.
+ * Metering never blocks voice: any failure returns null with one usage.events warn. Local mode, USAGE_EVENTS=0: null.
+ */
+async function issueUsageToken(ctx: RequestContext): Promise<string | null> {
+  try {
+    if (!usageEventsEnabled(ctx)) return null;
+    // insertUsageEvent already warns on errors and on a newly missing table; warn here for the silent outcomes.
+    const skipped = isTableMissing();
+    const token = newVoiceToken();
+    const res = await insertUsageEvent(ctx, { kind: "voice", session_id: token });
+    if (res.ok) return token;
+    if (res.reason === "conflict") warn({ reason: "voice_token_conflict", kind: "voice" });
+    else if (skipped) warn({ reason: "table_missing", kind: "voice" });
+    return null;
+  } catch (err) {
+    warn({ reason: "voice_token_threw", kind: "voice", error: err });
+    return null;
+  }
+}
+
+function warn(fields: Record<string, unknown>): void {
+  try {
+    log.warn("usage.events", fields);
+  } catch {}
 }
 
 export const GET = withRequestLog("/api/voice/signed-url", handleGET);

@@ -13,6 +13,7 @@ import {
   TUTOR_PROMPT,
 } from "./prompts";
 import { GET } from "@/app/api/voice/signed-url/route";
+import { createVoiceUsageReporter, VOICE_USAGE_URL } from "./useVoiceAgent";
 
 const event: ScreenEvent = {
   id: "e1",
@@ -273,5 +274,123 @@ describe("GET /api/voice/signed-url", () => {
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toContain("agent_id=agent_123");
     expect((init.headers as Record<string, string>)["xi-api-key"]).toBe(KEY);
+  });
+});
+
+describe("voice usage reporter (useVoiceAgent)", () => {
+  const TOKEN = "v_0f8fad5b-d9cb-469f-a165-70867728950e";
+
+  async function beaconBody(beacon: ReturnType<typeof vi.fn>, i = 0) {
+    const [url, blob] = beacon.mock.calls[i] as [string, Blob];
+    expect(url).toBe(VOICE_USAGE_URL);
+    expect(blob.type).toBe("application/json");
+    return JSON.parse(await blob.text());
+  }
+
+  it("keeps the token and start time and posts the elapsed seconds once on end", async () => {
+    const c = clock(1_000);
+    const sendBeacon = vi.fn(() => true);
+    const fetchMock = vi.fn();
+    const r = createVoiceUsageReporter({ now: c.now, sendBeacon, fetch: fetchMock as unknown as typeof fetch });
+    r.begin(TOKEN);
+    expect(r.token).toBe(TOKEN);
+    expect(r.startedAt).toBe(1_000);
+    c.advance(42_500);
+    r.report();
+    r.report();
+    expect(sendBeacon).toHaveBeenCalledTimes(1);
+    expect(await beaconBody(sendBeacon)).toEqual({ usage_token: TOKEN, seconds: 42.5 });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("pagehide posts once and the later session end does not post again", async () => {
+    const c = clock(0);
+    const sendBeacon = vi.fn(() => true);
+    const r = createVoiceUsageReporter({ now: c.now, sendBeacon });
+    r.begin(TOKEN);
+    c.advance(10_000);
+    const pagehide = () => r.report();
+    const end = () => r.report();
+    pagehide();
+    c.advance(5_000);
+    end();
+    expect(sendBeacon).toHaveBeenCalledTimes(1);
+    expect(await beaconBody(sendBeacon)).toEqual({ usage_token: TOKEN, seconds: 10 });
+  });
+
+  it("sends nothing without a token", () => {
+    const sendBeacon = vi.fn(() => true);
+    const fetchMock = vi.fn();
+    const r = createVoiceUsageReporter({ sendBeacon, fetch: fetchMock as unknown as typeof fetch });
+    r.report();
+    r.begin(undefined);
+    r.report();
+    r.begin(null);
+    r.report();
+    expect(sendBeacon).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("falls back to fetch with keepalive when sendBeacon is absent or refuses", async () => {
+    const c = clock(0);
+    const fetchMock = vi.fn(async () => new Response(null));
+    const r = createVoiceUsageReporter({ now: c.now, sendBeacon: null, fetch: fetchMock as unknown as typeof fetch });
+    r.begin(TOKEN);
+    c.advance(3_000);
+    r.report();
+    r.report();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe(VOICE_USAGE_URL);
+    expect(init).toMatchObject({ method: "POST", keepalive: true });
+    expect(JSON.parse(init.body as string)).toEqual({ usage_token: TOKEN, seconds: 3 });
+
+    const refused = vi.fn(async () => new Response(null));
+    const r2 = createVoiceUsageReporter({ sendBeacon: () => false, fetch: refused as unknown as typeof fetch });
+    r2.begin(TOKEN);
+    r2.report();
+    expect(refused).toHaveBeenCalledTimes(1);
+  });
+
+  it("a new session reports the unreported previous one and posts its own once", async () => {
+    const c = clock(0);
+    const sendBeacon = vi.fn(() => true);
+    const r = createVoiceUsageReporter({ now: c.now, sendBeacon });
+    r.begin(TOKEN);
+    c.advance(2_000);
+    r.begin("v_11111111-1111-4111-8111-111111111111");
+    c.advance(1_000);
+    r.report();
+    expect(sendBeacon).toHaveBeenCalledTimes(2);
+    expect(await beaconBody(sendBeacon, 0)).toEqual({ usage_token: TOKEN, seconds: 2 });
+    expect((await beaconBody(sendBeacon, 1)).seconds).toBe(1);
+  });
+
+  it("never throws: a throwing beacon, a rejecting fetch, a throwing clock", async () => {
+    const rejecting = vi.fn(async () => {
+      throw new Error("offline");
+    });
+    const r = createVoiceUsageReporter({
+      sendBeacon: () => {
+        throw new Error("beacon");
+      },
+      fetch: rejecting as unknown as typeof fetch,
+    });
+    r.begin(TOKEN);
+    expect(() => r.report()).not.toThrow();
+    const r2 = createVoiceUsageReporter({ sendBeacon: null, fetch: rejecting as unknown as typeof fetch });
+    r2.begin(TOKEN);
+    expect(() => r2.report()).not.toThrow();
+    await Promise.resolve();
+    let calls = 0;
+    const r3 = createVoiceUsageReporter({
+      now: () => {
+        if (calls++ > 0) throw new Error("clock");
+        return 0;
+      },
+      sendBeacon: vi.fn(() => true),
+    });
+    r3.begin(TOKEN);
+    expect(() => r3.report()).not.toThrow();
   });
 });

@@ -37,6 +37,63 @@ export type StartOptions = {
   };
 };
 
+export type UsageReporterDeps = {
+  now?: () => number;
+  /** navigator.sendBeacon when available; fetch with keepalive otherwise. */
+  sendBeacon?: ((url: string, data: Blob) => boolean) | null;
+  fetch?: typeof fetch;
+};
+
+export const VOICE_USAGE_URL = "/api/voice/usage";
+
+/**
+ * Holds the server-issued usage_token of one voice session and its start time, and posts the elapsed seconds
+ * exactly once (session end or pagehide). No token: nothing is sent. Never throws.
+ */
+export function createVoiceUsageReporter(deps: UsageReporterDeps = {}) {
+  let token: string | null = null;
+  let startedAt = 0;
+  let sent = false;
+  const now = deps.now ?? (() => Date.now());
+
+  const report = () => {
+    try {
+      if (!token || sent) return;
+      sent = true;
+      const json = JSON.stringify({ usage_token: token, seconds: Math.max(0, (now() - startedAt) / 1000) });
+      const beacon =
+        deps.sendBeacon !== undefined
+          ? deps.sendBeacon
+          : typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function"
+            ? navigator.sendBeacon.bind(navigator)
+            : null;
+      if (beacon && beacon(VOICE_USAGE_URL, new Blob([json], { type: "application/json" }))) return;
+      const f = deps.fetch ?? (typeof fetch === "function" ? fetch : null);
+      if (!f) return;
+      f(VOICE_USAGE_URL, { method: "POST", headers: { "content-type": "application/json" }, body: json, keepalive: true }).catch(
+        () => {},
+      );
+    } catch {}
+  };
+
+  return {
+    /** Starts a new session; an unreported previous session is reported first. */
+    begin(usageToken: string | null | undefined) {
+      report();
+      token = typeof usageToken === "string" && usageToken ? usageToken : null;
+      startedAt = now();
+      sent = false;
+    },
+    report,
+    get token() {
+      return token;
+    },
+    get startedAt() {
+      return startedAt;
+    },
+  };
+}
+
 export function useVoiceAgent({ role, clientTools, onTranscript, onModeChange, onError, onVadScore }: UseVoiceAgentOptions) {
   const mutedRef = useRef(false);
   const [muted, setMutedState] = useState(false);
@@ -46,6 +103,14 @@ export function useVoiceAgent({ role, clientTools, onTranscript, onModeChange, o
     toolsRef.current = clientTools;
   }, [clientTools]);
   const humanSpeaker: VoiceSpeaker = role === "tutor" ? "learner" : "expert";
+  // Voice seconds for the cost meter: reported once per session on end or pagehide.
+  const usageRef = useRef<ReturnType<typeof createVoiceUsageReporter> | null>(null);
+  if (!usageRef.current) usageRef.current = createVoiceUsageReporter();
+  useEffect(() => {
+    const onPageHide = () => usageRef.current?.report();
+    window.addEventListener("pagehide", onPageHide);
+    return () => window.removeEventListener("pagehide", onPageHide);
+  }, []);
 
   const conversation = useConversation({
     micMuted: muted,
@@ -55,6 +120,7 @@ export function useVoiceAgent({ role, clientTools, onTranscript, onModeChange, o
       if (!text) return;
       onTranscript({ speaker: msg.role === "agent" ? "agent" : humanSpeaker, text });
     },
+    onDisconnect: () => usageRef.current?.report(),
     onModeChange: ({ mode }) => onModeChange?.(mode),
     onError: (message) => onError?.(message),
     // @elevenlabs/react 1.16 / client 1.26: onVadScore({ vadScore }) for every VAD frame of the user's mic.
@@ -68,11 +134,12 @@ export function useVoiceAgent({ role, clientTools, onTranscript, onModeChange, o
       setStartError(null);
       try {
         const res = await fetch(`/api/voice/signed-url?role=${role}`, { cache: "no-store" });
-        const body = (await res.json().catch(() => ({}))) as { signed_url?: string; error?: string };
+        const body = (await res.json().catch(() => ({}))) as { signed_url?: string; usage_token?: string; error?: string };
         if (!res.ok || !body.signed_url) throw new Error(body.error ?? `signed_url_${res.status}`);
         // Ask for the microphone up front so a denial surfaces here, then release it; the SDK opens its own stream.
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         stream.getTracks().forEach((t) => t.stop());
+        usageRef.current?.begin(body.usage_token);
         conversation.startSession({
           signedUrl: body.signed_url,
           connectionType: "websocket",
@@ -99,9 +166,14 @@ export function useVoiceAgent({ role, clientTools, onTranscript, onModeChange, o
     [conversation],
   );
 
+  const stop = useCallback(() => {
+    usageRef.current?.report();
+    return conversation.endSession();
+  }, [conversation]);
+
   return {
     start,
-    stop: conversation.endSession,
+    stop,
     status: conversation.status,
     isSpeaking: conversation.isSpeaking,
     muted,
