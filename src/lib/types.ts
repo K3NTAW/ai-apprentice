@@ -56,6 +56,8 @@ const ScreenEventBase = z.object({
   // shortcut_used only: the chord, and the ids of the vision events it caused (linked in the browser).
   chord: ChordSchema.optional(),
   effect_ids: z.array(z.string()).max(20).optional(),
+  // Vision rates each event: "key" moments get a stored frame (later task). Invalid values parse as absent.
+  importance: z.enum(["routine", "key"]).optional().catch(undefined),
 });
 
 export const ScreenEventSchema = ScreenEventBase.superRefine((e, ctx) => {

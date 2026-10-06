@@ -190,3 +190,14 @@ describe("shortcut_used (agents wave A5)", async () => {
     expect(WM.safeParse({ ...base, shortcuts: [{ chord: "Cmd+Enter", app: "Outlook", effect: "sent", first_t: 1, count: 0 }] }).success).toBe(false);
   });
 });
+
+describe("ScreenEvent importance", () => {
+  it("parses key, absent and invalid (absent in the result)", () => {
+    expect(ScreenEventSchema.parse({ ...screenEventExample, importance: "key" }).importance).toBe("key");
+    const absent = ScreenEventSchema.parse(screenEventExample);
+    expect("importance" in absent).toBe(false);
+    const invalid = ScreenEventSchema.safeParse({ ...screenEventExample, importance: "urgent" });
+    expect(invalid.success).toBe(true);
+    expect(invalid.data?.importance).toBeUndefined();
+  });
+});

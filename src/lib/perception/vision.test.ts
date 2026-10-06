@@ -3,7 +3,7 @@ import type { ScreenEvent } from "@/lib/types";
 import { encodeWithinLimit, FRAME_QUALITY, FRAME_RETRY_QUALITY, MAX_FRAME_BASE64_CHARS, MAX_FRAME_BODY_BYTES, scaledSize } from "./frame";
 import { redactScreenEvent } from "./redactEvent";
 import { FALLBACK_MODEL, VISION_MODEL_DEFAULT } from "@/lib/models";
-import { describeFrame, droppedVisionEvents, VISION_CONTEXT_EVENTS, VISION_SYSTEM_PROMPT } from "./vision";
+import { describeFrame, droppedVisionEvents, parseVisionEvents, VISION_CONTEXT_EVENTS, VISION_JSON_SCHEMA, VISION_SYSTEM_PROMPT } from "./vision";
 
 function reply(body: unknown, status = 200) {
   return vi.fn(async () => new Response(JSON.stringify(body), { status }));
@@ -199,5 +199,37 @@ describe("redactScreenEvent", () => {
     const r = redactScreenEvent(ev);
     expect(r).toMatchObject({ app: "Microsoft Outlook", window: "Mail to <EMAIL_ADDRESS>", from: "call <PHONE_NUMBER>", to: "<EMAIL_ADDRESS>" });
     expect(r.entity).toEqual(ev.entity);
+  });
+});
+
+describe("importance", () => {
+  const ev = { type: "field_changed", entity: { kind: "cell", id: "B4" } };
+
+  it("is a required routine|key enum in the event item schema", () => {
+    const items = VISION_JSON_SCHEMA.properties.events.items;
+    expect(items.properties.importance).toEqual({ type: "string", enum: ["routine", "key"] });
+    expect(items.required).toContain("importance");
+  });
+
+  it("is defined in the prompt", () => {
+    expect(VISION_SYSTEM_PROMPT).toMatch(/importance/);
+    expect(VISION_SYSTEM_PROMPT).toMatch(/"key"/);
+    expect(VISION_SYSTEM_PROMPT).toMatch(/"routine"/);
+  });
+
+  it("keeps key and routine, keeps events with a missing or invalid value with importance absent", () => {
+    const out = parseVisionEvents({
+      events: [
+        { ...ev, importance: "key" },
+        { ...ev, importance: "routine" },
+        ev,
+        { ...ev, importance: "critical" },
+        { ...ev, importance: 3 },
+      ],
+    });
+    expect(out).toHaveLength(5);
+    expect(out[0].importance).toBe("key");
+    expect(out[1].importance).toBe("routine");
+    for (const e of out.slice(2)) expect("importance" in e).toBe(false);
   });
 });
