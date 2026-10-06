@@ -83,14 +83,15 @@ Server only, nodejs runtime only, thrown errors only. Off unless `SENTRY_DSN` is
 - Set `SENTRY_DSN` in the Vercel project. Empty or unset means Sentry is off: `src/instrumentation.ts` imports nothing.
 - `environment` comes from `VERCEL_ENV` (`development` when unset). `release` comes from `VERCEL_GIT_COMMIT_SHA` (unset when missing).
 - A human creates the Sentry org in the EU region (ingest host `*.ingest.de.sentry.io`) and copies the DSN.
-- Init is in `src/lib/observability/sentryServer.ts`: `sendDefaultPii: false`, `tracesSampleRate: 0`, `enableLogs: false`, `sendClientReports: false`, transactions dropped, no replay, no profiling. Server sessions are off: the `ProcessSession` integration is filtered out and `Http` is re-created with `sessions: false`.
+- Init is in `src/lib/observability/sentryServer.ts`: `dataCollection` fully off, `tracesSampleRate: 0`, `sendClientReports: false`, no logs integration, no replay, no profiling. Server sessions are off: the `ProcessSession` integration is filtered out and `Http` is re-created with `sessions: false`.
 
 ### What is sent
 
 - Every event goes through the `beforeSend` allowlist in `src/lib/observability/beforeSend.ts`: `event_id`, `timestamp`, `level`, `platform`, `environment`, `release`, `message`, `exception` (type, value, mechanism, frames), tags `route` and `runtime`, and `request.method`. Everything else is dropped: user, extra, contexts, breadcrumbs, other tags.
 - The request url, headers, cookies, query string and body are never sent.
 - Redaction of `message` and exception values is regex-based and best effort. Personal data in an unusual format can get through.
-- The SDK adds an `sdk` block after `beforeSend` (SDK name, version, integration names, package versions). The envelope header still carries the SDK name and the DSN.
+- `dataCollection` is fully off: every field (user info, cookies, headers, bodies, query params, GraphQL, gen AI, database query data, queues, stack frame variables, context lines) is set to its most restrictive value. In 11.4.0 each of these collects by default.
+- The SDK appends an `sdk` block after `beforeSend` (SDK name, version, integration names, package versions). The scrubber cannot remove it. With `dataCollection` off, `sdk.settings.infer_ip` is absent or `never`. The envelope header still carries the SDK name and the DSN.
 
 ### What is captured
 

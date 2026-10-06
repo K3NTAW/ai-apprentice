@@ -77,17 +77,17 @@ describe("instrumentation guards", () => {
     await m.register();
     expect(h.sdk.init).toHaveBeenCalledTimes(1);
     const opts = h.sdk.init.mock.calls[0][0];
+    const { DATA_COLLECTION_OFF } = await import("./lib/observability/sentryServer");
     expect(opts).toMatchObject({
       dsn: "https://k@o0.ingest.de.sentry.io/0",
-      sendDefaultPii: false,
       tracesSampleRate: 0,
-      enableLogs: false,
       sendClientReports: false,
       environment: "development",
       release: undefined,
     });
+    expect(opts.dataCollection).toEqual(DATA_COLLECTION_OFF);
     expect(typeof opts.beforeSend).toBe("function");
-    expect(opts.beforeSendTransaction()).toBeNull();
+    for (const key of ["sendDefaultPii", "enableLogs", "beforeSendTransaction"]) expect(opts).not.toHaveProperty(key);
   });
 });
 
@@ -126,11 +126,11 @@ describe("onRequestError on nodejs", () => {
 describe("initServer", () => {
   it("callers cannot override fixed options but can add a transport", async () => {
     env("https://k@o0.ingest.de.sentry.io/0", "nodejs");
-    const { initServer } = await import("./lib/observability/sentryServer");
+    const { initServer, DATA_COLLECTION_OFF } = await import("./lib/observability/sentryServer");
     const x = () => ({ send: async () => ({}), flush: async () => true });
-    initServer({ sendDefaultPii: true, beforeSend: undefined, transport: x });
+    initServer({ dataCollection: { userInfo: true }, beforeSend: undefined, transport: x });
     const opts = h.sdk.init.mock.calls[0][0];
-    expect(opts.sendDefaultPii).toBe(false);
+    expect(opts.dataCollection).toEqual(DATA_COLLECTION_OFF);
     expect(typeof opts.beforeSend).toBe("function");
     expect(opts.transport).toBe(x);
   });

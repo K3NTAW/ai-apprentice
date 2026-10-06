@@ -22,6 +22,14 @@ const SDK_KEYS = ["name", "version", "integrations", "packages", "settings"];
 type TransportFactory = NonNullable<NodeOptions["transport"]>;
 type Envelope = Parameters<ReturnType<TransportFactory>["send"]>[0];
 
+// Narrow local views of an envelope item: header carries the type, payload is the event JSON.
+type ItemHeader = { type: string };
+type EventPayload = { sdk?: { settings?: { infer_ip?: unknown } } & Record<string, unknown>; tags?: Record<string, unknown> } & Record<
+  string,
+  unknown
+>;
+type Item = [ItemHeader, EventPayload];
+
 const recorded: Envelope[] = [];
 const transport: TransportFactory = () => ({
   send: async (envelope) => {
@@ -41,7 +49,14 @@ describe("initServer with the real SDK", () => {
     vi.stubEnv("SENTRY_DSN", "https://k@o0.ingest.de.sentry.io/0");
     vi.stubEnv("VERCEL_ENV", "");
     vi.stubEnv("VERCEL_GIT_COMMIT_SHA", "");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
     initServer({ transport });
+    const consoleText = [...warn.mock.calls, ...error.mock.calls].map((args) => args.map(String).join(" ")).join("\n");
+    warn.mockRestore();
+    error.mockRestore();
+    expect(consoleText.includes("beforeSendTransaction")).toBe(false);
+    expect(consoleText.toLowerCase().includes("deprecated")).toBe(false);
 
     Sentry.withScope((scope) => {
       scope.setUser({ id: "user-id-77", email: "user-mail@example.org" });
@@ -53,16 +68,17 @@ describe("initServer with the real SDK", () => {
     await Sentry.flush(2000);
 
     expect(recorded.length).toBeGreaterThan(0);
-    const items = recorded.flatMap((env) => env[1]);
-    const types = items.map(([header]) => (header as { type: string }).type);
+    const items = recorded.flatMap((env) => env[1] as unknown as Item[]);
+    const types = items.map(([header]) => header.type);
     expect(types.length).toBeGreaterThan(0);
     expect(types.every((t) => t === "event")).toBe(true);
 
-    for (const [, payload] of items) {
-      const event = payload as Record<string, unknown>;
+    for (const [, event] of items) {
       for (const key of Object.keys(event)) expect([...ALLOWED_KEYS, "sdk"]).toContain(key);
-      for (const key of Object.keys((event.sdk as Record<string, unknown>) ?? {})) expect(SDK_KEYS).toContain(key);
-      const tagKeys = Object.keys((event.tags as Record<string, unknown>) ?? {});
+      for (const key of Object.keys(event.sdk ?? {})) expect(SDK_KEYS).toContain(key);
+      const inferIp = event.sdk?.settings?.infer_ip;
+      if (inferIp !== undefined) expect(inferIp).toBe("never");
+      const tagKeys = Object.keys(event.tags ?? {});
       for (const key of tagKeys) expect(["route", "runtime"]).toContain(key);
     }
 
