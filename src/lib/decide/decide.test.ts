@@ -401,3 +401,57 @@ describe("shortcuts as judgment-call candidates (A9)", async () => {
     expect(cap.canAsk("a")).toBe(false);
   });
 });
+
+describe("decide usage", () => {
+  const billed = (model: string) =>
+    json({
+      stop_reason: "end_turn",
+      model,
+      usage: { input_tokens: 300, output_tokens: 20, cache_read_input_tokens: 100 },
+      content: [{ type: "text", text: JSON.stringify({ event_class: { answer: "routine", confidence: 0.9 } }) }],
+    });
+  const notFound = () => json({ type: "error", error: { type: "not_found_error", message: "model: x" } }, 404);
+
+  beforeEach(() => vi.stubEnv("ANTHROPIC_API_KEY", "ant-test"));
+
+  it("the llm path calls onUsage once with the response usage", async () => {
+    const onUsage = vi.fn();
+    const { fetchImpl } = mockFetch(billed(DECIDE_MODEL_DEFAULT));
+    const res = await decide("event_class", {}, { fetchImpl, onUsage });
+    expect(res.provider).toBe("llm");
+    expect(onUsage).toHaveBeenCalledTimes(1);
+    expect(onUsage).toHaveBeenCalledWith({ model: DECIDE_MODEL_DEFAULT, input_tokens: 300, output_tokens: 20, cache_read_tokens: 100 });
+  });
+
+  it("records the fallback model from the response JSON, not resolveModel", async () => {
+    const onUsage = vi.fn();
+    const { fetchImpl } = mockFetch(notFound(), billed(FALLBACK_MODEL));
+    await decide("event_class", {}, { fetchImpl, onUsage });
+    expect(onUsage.mock.calls.map((c) => c[0].model)).toEqual([FALLBACK_MODEL]);
+  });
+
+  it("the heuristic-only path records nothing", async () => {
+    const onUsage = vi.fn();
+    vi.stubEnv("ANTHROPIC_API_KEY", "");
+    const res = await decide("event_class", {}, { onUsage, fetchImpl: mockFetch().fetchImpl });
+    expect(res.provider).toBe("heuristic");
+    expect(onUsage).not.toHaveBeenCalled();
+  });
+
+  it("a failed llm call records nothing and falls through to the heuristic", async () => {
+    const onUsage = vi.fn();
+    const { fetchImpl } = mockFetch(json({}, 500));
+    expect((await decide("event_class", {}, { fetchImpl, onUsage })).provider).toBe("heuristic");
+    expect(onUsage).not.toHaveBeenCalled();
+  });
+
+  it("a throwing onUsage never changes the llm answer", async () => {
+    const onUsage = vi.fn(() => {
+      throw new Error("meter down");
+    });
+    const { fetchImpl } = mockFetch(billed(DECIDE_MODEL_DEFAULT));
+    const res = await decide("event_class", {}, { fetchImpl, onUsage });
+    expect(onUsage).toHaveBeenCalledTimes(1);
+    expect(res).toMatchObject({ provider: "llm", answer: "routine", confidence: 0.9 });
+  });
+});

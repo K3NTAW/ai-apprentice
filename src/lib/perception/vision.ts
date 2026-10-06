@@ -132,7 +132,24 @@ export function parseVisionEvents(raw: unknown): VisionEvent[] {
  * events: what changed (may be empty). error: set when the upstream call failed (HTTP status, timeout, network,
  * unreadable reply), so the route answers 502 and the client counts a failure. A refusal or an empty list is no error.
  */
-export type DescribeFrameResult = { events: VisionEvent[]; error?: string };
+export type DescribeFrameResult = { events: VisionEvent[]; error?: string; usage?: ModelUsage | null };
+
+/** Tokens billed for one model call, read from the response JSON (the model there may be the fallback). */
+export type ModelUsage = { model: string; input_tokens: number; output_tokens: number; cache_read_tokens: number };
+
+const tokens = (v: unknown) => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : 0);
+
+/** The usage block of an Anthropic Messages response; null when there is none. */
+export function readModelUsage(json: unknown): ModelUsage | null {
+  const j = json as { model?: unknown; usage?: Record<string, unknown> } | null;
+  if (!j || typeof j !== "object" || !j.usage || typeof j.usage !== "object") return null;
+  return {
+    model: typeof j.model === "string" ? j.model : "unknown",
+    input_tokens: tokens(j.usage.input_tokens),
+    output_tokens: tokens(j.usage.output_tokens),
+    cache_read_tokens: tokens(j.usage.cache_read_input_tokens),
+  };
+}
 
 export async function describeFrame({
   jpegBase64,
@@ -178,16 +195,18 @@ export async function describeFrame({
       stop_reason?: string;
       content?: { type: string; text?: string }[];
     };
-    if (data.stop_reason === "refusal") return { events: [] };
+    // The call was billed once it answered: usage rides along on every reply, including refusals and bad JSON.
+    const usage = readModelUsage(data);
+    if (data.stop_reason === "refusal") return { events: [], usage };
     const text = data.content?.find((b) => b.type === "text")?.text;
-    if (!text) return { events: [] };
+    if (!text) return { events: [], usage };
     let parsed: unknown;
     try {
       parsed = JSON.parse(text);
     } catch {
-      return { events: [], error: "upstream_bad_json" };
+      return { events: [], error: "upstream_bad_json", usage };
     }
-    return { events: parseVisionEvents(parsed) };
+    return { events: parseVisionEvents(parsed), usage };
   } catch (err) {
     return { events: [], error: controller.signal.aborted ? "upstream_timeout" : `upstream_unreachable: ${err instanceof Error ? err.message : String(err)}` };
   } finally {

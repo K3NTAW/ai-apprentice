@@ -88,7 +88,7 @@ describe("describeFrame", () => {
       { type: "item_sent", ...outlook, entity: { kind: "email", id: "Offer Q3" }, field: "forward", to: "controller", rect: { x: 0.1, y: 0.1, w: 0.05, h: 0.03 } },
     ];
     const out = await describeFrame({ jpegBase64: "AAAA", fetchImpl: reply(textReply(events)) });
-    expect(out).toEqual({ events: [{ ...events[0], type: "record_opened" }, events[1]] });
+    expect(out).toEqual({ events: [{ ...events[0], type: "record_opened" }, events[1]], usage: null });
   });
 
   it("carries the record amount with its currency on record_opened", async () => {
@@ -111,17 +111,17 @@ describe("describeFrame", () => {
       { type: "button_clicked", app: "AI Apprentice Companion", entity: { kind: "button", id: "Pair" } },
     ];
     const out = await describeFrame({ jpegBase64: "AAAA", fetchImpl: reply(textReply(events)) });
-    expect(out).toEqual({ events: [ok] });
+    expect(out).toEqual({ events: [ok], usage: null });
     expect(droppedVisionEvents() - before).toBe(4);
   });
 
   it("reports upstream failures as errors (HTTP error, invalid JSON, thrown fetch); a refusal or no events array is an empty answer", async () => {
-    expect(await describeFrame({ jpegBase64: "A", fetchImpl: reply({ stop_reason: "refusal", content: [] }) })).toEqual({ events: [] });
+    expect(await describeFrame({ jpegBase64: "A", fetchImpl: reply({ stop_reason: "refusal", content: [] }) })).toEqual({ events: [], usage: null });
     expect(await describeFrame({ jpegBase64: "A", fetchImpl: reply({ error: "boom" }, 500) })).toEqual({ events: [], error: "upstream_500" });
     expect(await describeFrame({ jpegBase64: "A", fetchImpl: reply({ error: "busy" }, 429) })).toEqual({ events: [], error: "upstream_429" });
-    expect(await describeFrame({ jpegBase64: "A", fetchImpl: reply({ content: [{ type: "text", text: "not json" }] }) })).toEqual({ events: [], error: "upstream_bad_json" });
-    expect(await describeFrame({ jpegBase64: "A", fetchImpl: reply({ content: [{ type: "text", text: "{\"items\":[]}" }] }) })).toEqual({ events: [] });
-    expect(await describeFrame({ jpegBase64: "A", fetchImpl: reply(textReply([{ type: "bogus" }])) })).toEqual({ events: [] });
+    expect(await describeFrame({ jpegBase64: "A", fetchImpl: reply({ content: [{ type: "text", text: "not json" }] }) })).toEqual({ events: [], error: "upstream_bad_json", usage: null });
+    expect(await describeFrame({ jpegBase64: "A", fetchImpl: reply({ content: [{ type: "text", text: "{\"items\":[]}" }] }) })).toEqual({ events: [], usage: null });
+    expect(await describeFrame({ jpegBase64: "A", fetchImpl: reply(textReply([{ type: "bogus" }])) })).toEqual({ events: [], usage: null });
     const thrower = vi.fn(async () => {
       throw new Error("aborted");
     });
@@ -140,20 +140,60 @@ describe("vision model", () => {
   ])("sends the model from VISION_MODEL=%s as %s", async (env, expected) => {
     if (env) vi.stubEnv("VISION_MODEL", env);
     const fetchImpl = reply(textReply([]));
-    expect(await describeFrame({ jpegBase64: "AAAA", fetchImpl })).toEqual({ events: [] });
+    expect(await describeFrame({ jpegBase64: "AAAA", fetchImpl })).toEqual({ events: [], usage: null });
     expect(sentBody(fetchImpl).model).toBe(expected);
   });
 
   it("retries once with FALLBACK_MODEL on a model not_found_error and returns a second failure", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const ok = vi.fn().mockResolvedValueOnce(notFound()).mockResolvedValueOnce(new Response(JSON.stringify(textReply([])), { status: 200 }));
-    expect(await describeFrame({ jpegBase64: "A", fetchImpl: ok })).toEqual({ events: [] });
+    expect(await describeFrame({ jpegBase64: "A", fetchImpl: ok })).toEqual({ events: [], usage: null });
     expect(modelsSent(ok)).toEqual([VISION_MODEL_DEFAULT, FALLBACK_MODEL]);
     expect(warn).toHaveBeenCalledWith(expect.stringContaining(FALLBACK_MODEL));
     const bad = vi.fn().mockImplementation(async () => notFound());
     expect(await describeFrame({ jpegBase64: "A", fetchImpl: bad })).toEqual({ events: [], error: "upstream_404" });
     expect(modelsSent(bad)).toEqual([VISION_MODEL_DEFAULT, FALLBACK_MODEL]);
     warn.mockRestore();
+  });
+});
+
+describe("vision usage", () => {
+  const notFound = () => new Response(JSON.stringify({ type: "error", error: { type: "not_found_error", message: "model: x" } }), { status: 404 });
+  const billed = (model: string) => ({
+    ...textReply([]),
+    model,
+    usage: { input_tokens: 1500, output_tokens: 40, cache_read_input_tokens: 300 },
+  });
+
+  it("returns the usage block of the response", async () => {
+    const out = await describeFrame({ jpegBase64: "A", fetchImpl: reply(billed(VISION_MODEL_DEFAULT)) });
+    expect(out.usage).toEqual({ model: VISION_MODEL_DEFAULT, input_tokens: 1500, output_tokens: 40, cache_read_tokens: 300 });
+  });
+
+  it("defaults a missing cache_read_input_tokens to 0", async () => {
+    const body = { ...textReply([]), model: VISION_MODEL_DEFAULT, usage: { input_tokens: 10, output_tokens: 2 } };
+    const out = await describeFrame({ jpegBase64: "A", fetchImpl: reply(body) });
+    expect(out.usage).toEqual({ model: VISION_MODEL_DEFAULT, input_tokens: 10, output_tokens: 2, cache_read_tokens: 0 });
+  });
+
+  it("records the model from the response JSON: the fallback after a 404 while resolveModel gives the default", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(notFound())
+      .mockResolvedValueOnce(new Response(JSON.stringify(billed(FALLBACK_MODEL)), { status: 200 }));
+    const out = await describeFrame({ jpegBase64: "A", fetchImpl });
+    expect(out.usage?.model).toBe(FALLBACK_MODEL);
+    expect(VISION_MODEL_DEFAULT).not.toBe(FALLBACK_MODEL);
+    warn.mockRestore();
+  });
+
+  it("has no usage when the call fails", async () => {
+    expect((await describeFrame({ jpegBase64: "A", fetchImpl: reply({ error: "boom" }, 500) })).usage).toBeUndefined();
+    const thrown = vi.fn(async () => {
+      throw new Error("down");
+    });
+    expect((await describeFrame({ jpegBase64: "A", fetchImpl: thrown as unknown as typeof fetch })).usage).toBeUndefined();
   });
 });
 

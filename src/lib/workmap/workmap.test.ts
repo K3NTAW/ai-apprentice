@@ -81,6 +81,50 @@ describe("synthesizeWorkMap with the model", () => {
   });
 });
 
+describe("synthesizeWorkMap usage", () => {
+  const billed = (model: string) =>
+    vi.fn(async () =>
+      Response.json({
+        stop_reason: "end_turn",
+        model,
+        usage: { input_tokens: 9000, output_tokens: 1200, cache_read_input_tokens: 0 },
+        content: [{ type: "text", text: JSON.stringify(modelOutput) }],
+      }),
+    ) as unknown as typeof fetch;
+
+  it("calls onUsage once per successful response with the model from the response JSON", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "test-key");
+    const onUsage = vi.fn();
+    await synthesizeWorkMap(emailFlowSession(), { fetchImpl: billed("claude-sonnet-5-5"), onUsage });
+    expect(onUsage).toHaveBeenCalledTimes(1);
+    expect(onUsage).toHaveBeenCalledWith({ model: "claude-sonnet-5-5", input_tokens: 9000, output_tokens: 1200, cache_read_tokens: 0 });
+  });
+
+  it("records nothing when the call fails or there is no key", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const onUsage = vi.fn();
+    vi.stubEnv("ANTHROPIC_API_KEY", "test-key");
+    const fetchImpl = vi.fn(async () => new Response("boom", { status: 500 })) as unknown as typeof fetch;
+    await synthesizeWorkMap(slideFlowSession(), { fetchImpl, onUsage });
+    vi.stubEnv("ANTHROPIC_API_KEY", "");
+    await synthesizeWorkMap(slideFlowSession(), { fetchImpl: billed("claude-opus-5-5"), onUsage });
+    expect(onUsage).not.toHaveBeenCalled();
+  });
+
+  it("a throwing onUsage still returns the model map, never the fallback", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "test-key");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const plain = await synthesizeWorkMap(emailFlowSession(), { fetchImpl: billed("claude-opus-5-5") });
+    const onUsage = vi.fn(() => {
+      throw new Error("meter down");
+    });
+    const wm = await synthesizeWorkMap(emailFlowSession(), { fetchImpl: billed("claude-opus-5-5"), onUsage });
+    expect(onUsage).toHaveBeenCalledTimes(1);
+    expect(wm).toEqual(plain);
+    expect(warn).not.toHaveBeenCalled();
+  });
+});
+
 describe("fallback synthesis without an API key", () => {
   const fallback = async (session = emailFlowSession()) => {
     vi.stubEnv("ANTHROPIC_API_KEY", "");

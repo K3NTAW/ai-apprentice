@@ -1,6 +1,7 @@
 // Anthropic Messages API fallback with structured JSON output.
 import { DECISION_QUESTIONS, type DecisionQuestionName } from "../types";
 import { resolveModel, sendWithModelFallback } from "../models";
+import { readModelUsage, type ModelUsage } from "../perception/vision";
 import { OPTION_DESCRIPTIONS, SYSTEM_PROMPT, clamp01, serializeState, type RawAnswer } from "./prompts";
 
 export const LLM_URL = "https://api.anthropic.com/v1/messages";
@@ -60,11 +61,14 @@ function normalise(name: DecisionQuestionName, raw: unknown): RawAnswer {
   return { answer: clamp01(r.answer), confidence };
 }
 
+export type LlmDecideResult = { answers: Partial<Record<DecisionQuestionName, RawAnswer>>; usage: ModelUsage | null };
+
+/** usage is read from the response JSON (model, usage.*), so a fallback model after a 404 is the one recorded. */
 export async function llmDecide(
   questions: DecisionQuestionName[],
   state: unknown,
   fetchImpl: typeof fetch,
-): Promise<Partial<Record<DecisionQuestionName, RawAnswer>>> {
+): Promise<LlmDecideResult> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error("llm: ANTHROPIC_API_KEY not set");
   const ctrl = new AbortController();
@@ -94,5 +98,5 @@ export async function llmDecide(
   const parsed = JSON.parse(text) as Record<string, unknown>;
   const out: Partial<Record<DecisionQuestionName, RawAnswer>> = {};
   for (const q of questions) out[q] = normalise(q, parsed[q]);
-  return out;
+  return { answers: out, usage: readModelUsage(json) };
 }

@@ -5,9 +5,11 @@ import { heuristicDecide } from "./heuristic";
 import { jevDecide } from "./jev";
 import { llmDecide } from "./llm";
 import type { RawAnswer } from "./prompts";
+import type { ModelUsage } from "../perception/vision";
 
 export type Provider = DecisionResult["provider"];
-export type DecideOptions = { fetchImpl?: typeof fetch; provider?: Provider };
+/** onUsage: called once when the LLM answered (never on the jev or heuristic paths); a throw in it is swallowed. */
+export type DecideOptions = { fetchImpl?: typeof fetch; provider?: Provider; onUsage?: (u: ModelUsage) => void };
 type Answers = Partial<Record<DecisionQuestionName, RawAnswer>>;
 
 const PROVIDERS: readonly Provider[] = ["jev", "llm", "heuristic"];
@@ -23,9 +25,19 @@ function chain(forced?: Provider): Provider[] {
   return out;
 }
 
-async function run(p: Provider, qs: DecisionQuestionName[], state: unknown, f: typeof fetch): Promise<Answers> {
+async function run(p: Provider, qs: DecisionQuestionName[], state: unknown, f: typeof fetch, onUsage?: DecideOptions["onUsage"]): Promise<Answers> {
   if (p === "jev") return jevDecide(qs, state, f);
-  if (p === "llm") return llmDecide(qs, state, f);
+  if (p === "llm") {
+    const { answers, usage } = await llmDecide(qs, state, f);
+    if (usage && onUsage) {
+      try {
+        onUsage(usage);
+      } catch {
+        // Metering never changes the answer.
+      }
+    }
+    return answers;
+  }
   return heuristicDecide(qs, state);
 }
 
@@ -40,7 +52,7 @@ export async function decideMany(
     const start = Date.now();
     let answers: Answers;
     try {
-      answers = await run(provider, qs, state, fetchImpl);
+      answers = await run(provider, qs, state, fetchImpl, opts.onUsage);
     } catch (err) {
       console.warn(`decide: ${provider} failed, falling through`, err instanceof Error ? err.message : err);
       continue;

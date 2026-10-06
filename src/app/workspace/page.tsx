@@ -8,6 +8,7 @@ import {
   type MemberRowInput,
 } from "@/lib/auth/context";
 import AppShell from "@/components/shell/AppShell";
+import CostCard from "@/components/workspace/CostCard";
 import { lookupEmails } from "./emails";
 import WorkspaceClient from "./WorkspaceClient";
 
@@ -63,5 +64,13 @@ async function workspaceBody() {
   const memberRows = (members.data ?? []) as MemberRowInput[];
   const emails = await lookupEmails(emailLookupIds(ctx, memberRows));
   const view = buildWorkspaceView(ctx, memberRows, (invites?.data ?? []) as InviteRowInput[], emails);
-  return <WorkspaceClient view={view} />;
+  return (
+    <>
+      <WorkspaceClient view={view} />
+      {/* Supabase mode only: local mode returned above. */}
+      <div className="px-4 pb-14 sm:px-10">
+        <CostCard />
+      </div>
+    </>
+  );
 }

@@ -1,8 +1,34 @@
-# Cost meter (part 1 of 3: schema, prices, recorder)
+# Cost meter (parts 1 and 2 of 3: schema, prices, recorder, model callers, cost route, CostCard)
 
 Migration `supabase/migrations/20261006000000_usage_events.sql`, rollback `supabase/rollbacks/20261006000000_usage_events.down.sql`, recorder `src/lib/usage/events.ts`.
 
-`usage_counters` (daily caps) counts calls. `usage_events` records tokens, voice seconds and frame bytes per call, and `usage_cost_daily` prices them in CHF. Part 1 adds no callers: part 2 wires vision, decide and workmap plus the cost route and CostCard, part 3 wires voice.
+`usage_counters` (daily caps) counts calls. `usage_events` records tokens, voice seconds and frame bytes per call, and `usage_cost_daily` prices them in CHF. Part 1 added the schema and recorder, part 2 wires vision, decide and workmap plus the cost route and CostCard, part 3 wires voice.
+
+## Model callers (part 2, wired)
+
+One usage event per answered model call. The model is read from the Anthropic response JSON (`model`), never from `resolveModel`, so a fallback after a 404 (`sendWithModelFallback`) is recorded as the fallback. Tokens come from `usage.input_tokens`, `usage.output_tokens` and `usage.cache_read_input_tokens` (0 when absent). A response without a `usage` block records nothing.
+
+| kind | caller | when |
+| --- | --- | --- |
+| `vision` | `POST /api/vision` via `describeFrame` (`src/lib/perception/vision.ts`) | right after the model answered, before any off-record, skipped or error return |
+| `frame` | `POST /api/vision` | only after `saveFrame` succeeded; `bytes` is the decoded JPEG size |
+| `decide` | `POST /api/decide` via `decideMany({ onUsage })` (`src/lib/decide/llm.ts`) | only when the LLM answered, never on the jev or heuristic paths |
+| `workmap` | `POST /api/workmap` via `rebuildWorkMap({ onUsage })` (`src/lib/workmap/synthesize.ts`) | once per successful response; a rebuild that lost the race to its budget records nothing |
+
+`onUsage` callbacks are wrapped in try/catch inside the library: a throwing callback never changes a model-call outcome. `src/lib/usage/callers.test.ts` fails when a non-test file under `src/` calls `api.anthropic.com` and is not one of the three metered files.
+
+## Cost route
+
+`GET /api/workspace/cost?days=N`, any member role:
+
+- `days` is an integer 1..90, default 30; anything else answers 400 `{ "error": "invalid days" }`.
+- The cut-off is today's Europe/Zurich date minus `days - 1`, the same bucket as the view's `day`.
+- Reads `usage_cost_daily` through the user client (never the service role), `.eq("workspace_id", <active workspace>)`, `.gte("day", cutoff)`, newest day first, `.limit(500)`. Rows of another workspace that still come back are dropped.
+- At most 500 rows: when 500 come back the answer has `truncated: true` and the card says "showing the latest 500 rows".
+- Rows are untrusted: numeric strings go through `Number()` (NaN -> null), `chf` null stays null, `unpriced_events` defaults to 0, unknown kinds become `other`, a `day` that is not `YYYY-MM-DD` drops the row.
+- Answer: `{ days, truncated, rows: [{ day, kind, events, input_tokens, output_tokens, cache_read_tokens, voice_seconds, bytes, chf, unpriced_events }] }`. Local mode: `{ days, truncated: false, rows: [], local: true }`.
+
+`CostCard` (`src/components/workspace/CostCard.tsx`) on `/workspace` (supabase mode only) shows one line per day: CHF (sum of priced rows), tokens, voice minutes, frame MB, and each kind with its CHF or "not priced". Any `unpriced_events > 0` labels the total "partial".
 
 ## Query one day's cost per workspace
 
@@ -29,7 +55,7 @@ group by workspace_id;
 1. Apply the migration (`supabase db push`).
 2. Then deploy parts 2 and 3.
 
-Part 1 alone is safe in any order: nothing calls `recordUsage` yet.
+Part 1 alone is safe in any order. Part 2 without the migration is safe too: the recorder backs off on the missing table and the cost route answers 500 until the view exists.
 
 ## Kill switch
 
@@ -45,7 +71,7 @@ If the table is missing (Postgres 42P01 or PostgREST PGRST205), the recorder log
 
 ## Known gaps
 
-- Partial spend: model calls that fail, time out or are aborted are not recorded here. Filled by part 2.
+- Partial spend: model calls that fail (non-2xx), time out or are aborted record nothing, although Anthropic may bill part of them. A workmap rebuild that loses the race to its 40 s budget records nothing either. The recorded cost is a lower bound.
 - Voice trust: voice seconds are reported by the client. Part 3 binds each report to a server-issued token (`session_id`); the partial unique index `usage_events_voice_token` on `(workspace_id, session_id) where kind = 'voice'` allows one row per token per workspace. Voice rows without `voice_seconds` are not summed.
 
 ## Frames are not priced

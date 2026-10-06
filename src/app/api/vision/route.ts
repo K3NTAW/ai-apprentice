@@ -4,8 +4,9 @@
 import { ScreenEventSchema, type VisionEvent } from "@/lib/types";
 import { MAX_FRAME_BODY_BYTES } from "@/lib/perception/frame";
 import { redactScreenEvent } from "@/lib/perception/redactEvent";
-import { describeFrame } from "@/lib/perception/vision";
+import { describeFrame, type DescribeFrameResult } from "@/lib/perception/vision";
 import { consumeUsage } from "@/lib/usage";
+import { recordUsage } from "@/lib/usage/events";
 import { type Api, requireCreatorOrOwner, withApi } from "../session/_http";
 import { log } from "@/lib/log";
 
@@ -61,7 +62,14 @@ async function visionFor(api: Api, req: Request): Promise<Response> {
   const jpegBase64 = frame.replace(/^data:image\/\w+;base64,/, "");
   const data = () => Buffer.from(jpegBase64, "base64");
   const skipped = (reason: "off_record") => Response.json({ events: [], skipped: reason });
-  const describe = () => describeFrame({ jpegBase64, previousEvents: prev.data });
+  // One vision usage event per answered model call, recorded before any early return; none when describe rejects.
+  const describe = async (): Promise<DescribeFrameResult> => {
+    const result = await describeFrame({ jpegBase64, previousEvents: prev.data });
+    if (result.usage) recordUsage(api.ctx, { kind: "vision", ...result.usage, session_id });
+    return result;
+  };
+  // One frame event per stored frame, only after saveFrame succeeded.
+  const frameStored = () => recordUsage(api.ctx, { kind: "frame", bytes: Buffer.byteLength(jpegBase64, "base64"), session_id });
 
   if (process.env.STORE_ALL_FRAMES === "1") {
     const saved = await guarded(() => api.store.saveFrame(session_id, t, data()), NO_COUNTS, "not_called", "save_failed");
@@ -69,6 +77,7 @@ async function visionFor(api: Api, req: Request): Promise<Response> {
       frameLine(NO_COUNTS, false, "not_called");
       return skipped(saved.reason);
     }
+    frameStored();
     const hasKey = Boolean(process.env.ANTHROPIC_API_KEY);
     const result = hasKey ? await describe() : { events: [] };
     if (result.error) return upstreamFailed(result.error);
@@ -94,6 +103,7 @@ async function visionFor(api: Api, req: Request): Promise<Response> {
     const saved = await guarded(() => api.store.saveFrame(session_id, t, data()), counts, "called", "save_failed");
     frameLine(counts, saved.stored, "called");
     if (!saved.stored) return skipped(saved.reason);
+    frameStored();
     // Redact app, window, from and to before the client stores them (off-record frames never get here).
     return Response.json({ events: events.map(redactScreenEvent), frame_ref: `frames/${saved.name}` });
   }

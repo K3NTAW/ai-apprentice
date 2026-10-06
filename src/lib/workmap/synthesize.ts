@@ -3,6 +3,7 @@
 // Without ANTHROPIC_API_KEY or on any error: deterministic fallback from DOM events and Q&A pairs.
 import { SCREEN_EVENT_TYPES, type Guardrail, type QAPair, type ScreenEvent, type Session, type WorkMap, type WorkMapShortcut, type WorkMapStep } from "@/lib/types";
 import { resolveModel } from "@/lib/models";
+import { readModelUsage, type ModelUsage } from "@/lib/perception/vision";
 import { describeEvent, shortcutQuestion } from "@/lib/voice/prompts";
 import { isStateChangingEffect, shortcutKey } from "@/lib/decide/shortcut";
 import { explainedEvents, narrationsOf, type Narration } from "@/lib/capture/narration";
@@ -11,7 +12,8 @@ export const WORKMAP_URL = "https://api.anthropic.com/v1/messages";
 const TIMEOUT_MS = 60_000;
 const QA_WINDOW_S = 30;
 
-export type SynthesizeOptions = { fetchImpl?: typeof fetch };
+/** onUsage: called once per successful Anthropic response (model and tokens from the response JSON); a throw in it is swallowed. */
+export type SynthesizeOptions = { fetchImpl?: typeof fetch; onUsage?: (u: ModelUsage) => void };
 
 type ReasonSource = NonNullable<WorkMapStep["reason"]>["source"];
 export type Utterance = { text: string; t: number; source: ReasonSource };
@@ -465,7 +467,12 @@ type ModelStep = {
 };
 type ModelOutput = { task: string; steps: ModelStep[]; open_questions: string[] };
 
-async function callModel(session: Session, fetchImpl: typeof fetch, apiKey: string): Promise<ModelOutput> {
+async function callModel(
+  session: Session,
+  fetchImpl: typeof fetch,
+  apiKey: string,
+  onUsage?: SynthesizeOptions["onUsage"],
+): Promise<ModelOutput> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   let json: { stop_reason?: string; content?: { type: string; text?: string }[] };
@@ -480,6 +487,15 @@ async function callModel(session: Session, fetchImpl: typeof fetch, apiKey: stri
     json = await res.json();
   } finally {
     clearTimeout(timer);
+  }
+  // Billed once it answered, even when the reply is then refused or unusable.
+  const usage = readModelUsage(json);
+  if (usage && onUsage) {
+    try {
+      onUsage(usage);
+    } catch {
+      // Metering never changes the map.
+    }
   }
   if (json.stop_reason === "refusal") throw new Error("workmap: refusal");
   const text = json.content?.find((c) => c.type === "text")?.text;
@@ -535,7 +551,7 @@ export async function synthesizeWorkMap(session: Session, opts: SynthesizeOption
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return fallbackWorkMap(session);
   try {
-    const out = await callModel(session, opts.fetchImpl ?? fetch, apiKey);
+    const out = await callModel(session, opts.fetchImpl ?? fetch, apiKey, opts.onUsage);
     const map = verifyWorkMap(withShortcuts(fromModel(out, session), session), session);
     if (!map.steps.length && session.events.length) return fallbackWorkMap(session);
     return map;
