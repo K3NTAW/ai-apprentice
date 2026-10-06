@@ -2,6 +2,7 @@ import { decideMany } from "@/lib/decide";
 import { DECISION_QUESTIONS, type DecisionQuestionName } from "@/lib/types";
 import { requireContext } from "@/lib/auth/context";
 import { consumeUsage } from "@/lib/usage";
+import { withRequestLog } from "@/lib/log";
 
 export const runtime = "nodejs";
 // Vercel function limit: 60 s fits the plan (model calls can take tens of seconds).
@@ -11,7 +12,7 @@ function isQuestion(q: unknown): q is DecisionQuestionName {
   return typeof q === "string" && Object.prototype.hasOwnProperty.call(DECISION_QUESTIONS, q);
 }
 
-export async function POST(req: Request): Promise<Response> {
+async function handlePOST(req: Request): Promise<Response> {
   // Signed-in member of a workspace only (401 signed out, 503 misconfigured).
   const ctx = await requireContext();
   if (ctx instanceof Response) return ctx;
@@ -36,3 +37,5 @@ export async function POST(req: Request): Promise<Response> {
   const results = await decideMany(asked as DecisionQuestionName[], body.state);
   return Response.json({ results });
 }
+
+export const POST = withRequestLog("/api/decide", handlePOST);

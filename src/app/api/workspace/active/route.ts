@@ -2,12 +2,13 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { WS_COOKIE, wsCookieOptions } from "@/lib/auth/cookies";
 import { parseJsonBody, requireWorkspaceApi } from "@/lib/auth/context";
+import { withRequestLog } from "@/lib/log";
 
 export const runtime = "nodejs";
 
 const SetActive = z.object({ workspaceId: z.guid() });
 
-export async function POST(req: Request): Promise<Response> {
+async function handlePOST(req: Request): Promise<Response> {
   const ctx = await requireWorkspaceApi();
   if (ctx instanceof Response) return ctx;
   const input = await parseJsonBody(req, SetActive);
@@ -20,3 +21,5 @@ export async function POST(req: Request): Promise<Response> {
   res.cookies.set(WS_COOKIE, input.workspaceId, wsCookieOptions());
   return res;
 }
+
+export const POST = withRequestLog("/api/workspace/active", handlePOST);

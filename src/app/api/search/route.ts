@@ -7,7 +7,7 @@ import { badRequest, withApi } from "../session/_http";
 export const runtime = "nodejs";
 
 export function GET(req: Request): Promise<Response> {
-  return withApi(async ({ store }) => {
+  return withApi({ route: "/api/search", req }, async ({ store }) => {
     const q = (new URL(req.url).searchParams.get("q") ?? "").trim();
     if (q.length > SEARCH_QUERY_MAX) return badRequest("query too long");
     const [agents, digests] = await Promise.all([store.listAgents(), store.listSessionDigests()]);

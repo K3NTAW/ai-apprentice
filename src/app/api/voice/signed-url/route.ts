@@ -1,5 +1,6 @@
 import { requireContext } from "@/lib/auth/context";
 import { consumeUsage } from "@/lib/usage";
+import { withRequestLog } from "@/lib/log";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,7 +16,7 @@ function isRole(r: string | null): r is Role {
   return r !== null && Object.prototype.hasOwnProperty.call(AGENT_ENV, r);
 }
 
-export async function GET(req: Request): Promise<Response> {
+async function handleGET(req: Request): Promise<Response> {
   // Signed-in member of a workspace only (401 signed out, 503 misconfigured).
   const ctx = await requireContext();
   if (ctx instanceof Response) return ctx;
@@ -52,3 +53,5 @@ export async function GET(req: Request): Promise<Response> {
   }
   return Response.json({ signed_url: body.signed_url });
 }
+
+export const GET = withRequestLog("/api/voice/signed-url", handleGET);

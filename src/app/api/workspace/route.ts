@@ -4,6 +4,7 @@ import { internalError, parseJsonBody, requireContext, requireRole, requireWorks
 import { revalidateScopes } from "@/lib/cache/readMostly";
 import { LOCAL_WORKSPACE_ID, renameLocalWorkspace } from "@/lib/workspace/file";
 import { CreateWorkspaceInput, isMissingFunction, RenameWorkspaceInput } from "@/lib/workspace/create";
+import { withRequestLog } from "@/lib/log";
 
 export const runtime = "nodejs";
 
@@ -12,7 +13,7 @@ export const runtime = "nodejs";
  * Any role may create. Local mode has one file-backed workspace: 400 local_mode, like the other workspace routes.
  * 503 until migration 20261004020000_workspace_create is applied.
  */
-export async function POST(req: Request): Promise<Response> {
+async function handlePOST(req: Request): Promise<Response> {
   const ctx = await requireWorkspaceApi();
   if (ctx instanceof Response) return ctx;
   const input = await parseJsonBody(req, CreateWorkspaceInput);
@@ -40,7 +41,7 @@ export async function POST(req: Request): Promise<Response> {
  * allows owners too, so a row that does not update means the policy refused it. Local mode renames the one
  * file-backed workspace (<DATA_DIR>/workspace.json) with the same input and response.
  */
-export async function PATCH(req: Request): Promise<Response> {
+async function handlePATCH(req: Request): Promise<Response> {
   const ctx = await requireContext();
   if (ctx instanceof Response) return ctx;
   const denied = requireRole(ctx, ["owner"]);
@@ -68,3 +69,6 @@ export async function PATCH(req: Request): Promise<Response> {
   revalidateScopes(["memberships", "workspace"], ctx);
   return Response.json(data[0]);
 }
+
+export const POST = withRequestLog("/api/workspace", handlePOST);
+export const PATCH = withRequestLog("/api/workspace", handlePATCH);

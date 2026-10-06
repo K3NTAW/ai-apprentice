@@ -14,7 +14,7 @@ const CreateBody = z.object({
 
 // capture: owner or expert. teach: any member.
 export async function POST(req: Request) {
-  return withMutation(["sessions"], async ({ ctx, store }) => {
+  return withMutation(["sessions"], { route: "/api/session", req }, async ({ ctx, store }) => {
     const body = await parseBody(req, CreateBody);
     if (!body.ok) return body.res;
     if (body.data.kind === "capture") {
@@ -32,6 +32,6 @@ export async function POST(req: Request) {
 }
 
 // Any member lists every session of the active workspace; learners learn from capture sessions.
-export async function GET() {
-  return withApi(async ({ store }) => Response.json({ sessions: await store.listSessions() }));
+export async function GET(req?: Request) {
+  return withApi({ route: "/api/session", req }, async ({ store }) => Response.json({ sessions: await store.listSessions() }));
 }

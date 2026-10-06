@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 const Body = z.object({ from: z.number(), to: z.number().optional() });
 
 export async function POST(req: Request, ctx: IdContext) {
-  return withApi(async (api) => {
+  return withApi({ route: "/api/session/[id]/off-record", req }, async (api) => {
     const { id } = await ctx.params;
     const denied = await requireCreatorOrOwner(api, id);
     if (denied) return denied;

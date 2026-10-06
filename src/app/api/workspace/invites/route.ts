@@ -2,6 +2,7 @@
 // bootstrap_workspace accepts the invite at their next callback login.
 import { z } from "zod";
 import { internalError, parseJsonBody, requireWorkspaceApi } from "@/lib/auth/context";
+import { withRequestLog } from "@/lib/log";
 
 export const runtime = "nodejs";
 
@@ -12,7 +13,7 @@ const CreateInvite = z.object({
 
 const RevokeInvite = z.object({ id: z.guid() });
 
-export async function POST(req: Request): Promise<Response> {
+async function handlePOST(req: Request): Promise<Response> {
   const ctx = await requireWorkspaceApi(["owner"]);
   if (ctx instanceof Response) return ctx;
   const input = await parseJsonBody(req, CreateInvite);
@@ -30,7 +31,7 @@ export async function POST(req: Request): Promise<Response> {
   return Response.json(data[0], { status: 201 });
 }
 
-export async function DELETE(req: Request): Promise<Response> {
+async function handleDELETE(req: Request): Promise<Response> {
   const ctx = await requireWorkspaceApi(["owner"]);
   if (ctx instanceof Response) return ctx;
   const input = await parseJsonBody(req, RevokeInvite);
@@ -47,3 +48,6 @@ export async function DELETE(req: Request): Promise<Response> {
   if (!data || data.length === 0) return Response.json({ error: "not_found" }, { status: 404 });
   return Response.json({ ok: true });
 }
+
+export const POST = withRequestLog("/api/workspace/invites", handlePOST);
+export const DELETE = withRequestLog("/api/workspace/invites", handleDELETE);

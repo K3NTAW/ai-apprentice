@@ -13,10 +13,11 @@ import { safeNext } from "@/lib/auth/redirect";
 import { bootstrapAfterSignIn } from "@/lib/auth/signIn";
 import { bootstrapThrottle, clientIp } from "@/lib/auth/throttle";
 import { onboardingEnabled, onboardingHref } from "@/lib/onboarding/state";
+import { withRequestLog } from "@/lib/log";
 
 export const runtime = "nodejs";
 
-export async function POST(request: Request): Promise<Response> {
+async function handlePOST(request: Request): Promise<Response> {
   const fail = (error: string, status: number) => NextResponse.json({ error }, { status });
 
   const ctx = await requireContext();
@@ -51,3 +52,5 @@ export async function POST(request: Request): Promise<Response> {
   if (boot.wsCookie) res.cookies.set(WS_COOKIE, boot.wsCookie, wsCookieOptions());
   return res;
 }
+
+export const POST = withRequestLog("/api/auth/bootstrap", handlePOST);

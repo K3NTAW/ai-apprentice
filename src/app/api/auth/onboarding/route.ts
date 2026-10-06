@@ -6,6 +6,7 @@ import { z } from "zod";
 import { requireContext } from "@/lib/auth/context";
 import { readLocalOnboarding, writeLocalOnboarding } from "@/lib/onboarding/file";
 import { emptyState, markStep, ONBOARDING_STEPS, toMetadata, type OnboardingState } from "@/lib/onboarding/state";
+import { log, withRequestLog } from "@/lib/log";
 
 export const runtime = "nodejs";
 
@@ -15,14 +16,14 @@ const Body = z.object({
   agentId: z.string().min(1).max(64).nullish(),
 });
 
-export async function GET(): Promise<Response> {
+async function handleGET(): Promise<Response> {
   const ctx = await requireContext();
   if (ctx instanceof Response) return ctx;
   const state = ctx.mode === "local" ? await readLocalOnboarding() : (ctx.onboarding ?? emptyState());
   return Response.json({ state });
 }
 
-export async function POST(req: Request): Promise<Response> {
+async function handlePOST(req: Request): Promise<Response> {
   const ctx = await requireContext();
   if (ctx instanceof Response) return ctx;
   let parsed: z.infer<typeof Body>;
@@ -43,13 +44,16 @@ export async function POST(req: Request): Promise<Response> {
       state = markStep(ctx.onboarding ?? emptyState(), parsed.step, parsed.mark, now, parsed.agentId);
       const { error } = await ctx.supabase.auth.updateUser({ data: toMetadata(state) });
       if (error) {
-        console.error("onboarding updateUser:", error.message);
+        log.error("onboarding updateUser", { error: error.message });
         return Response.json({ error: "save_failed" }, { status: 500 });
       }
     }
     return Response.json({ state });
   } catch (e) {
-    console.error("onboarding save:", e instanceof Error ? e.message : String(e));
+    log.error("onboarding save", { error: e instanceof Error ? e.message : String(e) });
     return Response.json({ error: "save_failed" }, { status: 500 });
   }
 }
+
+export const GET = withRequestLog("/api/auth/onboarding", handleGET);
+export const POST = withRequestLog("/api/auth/onboarding", handlePOST);

@@ -9,7 +9,7 @@ export const maxDuration = 60;
 const Body = z.object({ session_id: z.string(), confirmed: z.boolean(), correction: z.string().optional() });
 
 export function POST(req: Request): Promise<Response> {
-  return withMutation(["sessions"], async (api) => {
+  return withMutation(["sessions"], { route: "/api/workmap/confirm", req }, async (api) => {
     const body = await parseBody(req, Body);
     if (!body.ok) return body.res;
     const { session_id, confirmed } = body.data;

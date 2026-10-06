@@ -24,10 +24,11 @@ import { requireContext } from "@/lib/auth/context";
 import { fileEmptyPurgePort, purgeEmptySessions, supabaseEmptyPurgePort } from "@/lib/capture/emptyPurge";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { appMode } from "@/lib/supabase/env";
+import { log, withRequestLog } from "@/lib/log";
 
 export const runtime = "nodejs";
 
-export async function GET(req: Request) {
+async function handleGET(req: Request) {
   if (!validCronBearer(req.headers.get("authorization"), process.env.CRON_SECRET)) {
     const ctx = await requireContext();
     if (ctx instanceof Response) return ctx;
@@ -40,7 +41,7 @@ export async function GET(req: Request) {
   try {
     db = mode === "local" ? null : createSupabaseAdminClient();
   } catch (err) {
-    console.error("cron retention:", message(err));
+    log.error("cron retention", { error: message(err) });
     return Response.json({ error: "retention_failed", empty_error: "empty_purge_failed", idle_error: "end_idle_failed" }, { status: 502 });
   }
   // Three independent jobs: a failure in one never skips the others, and the answer reports all three.
@@ -49,7 +50,7 @@ export async function GET(req: Request) {
   try {
     retention = { ...(await runRetention(db ? supabaseRetentionPort(db) : fileDataPort(), now)) };
   } catch (err) {
-    console.error("cron retention:", message(err));
+    log.error("cron retention", { error: message(err) });
     if (err instanceof SettingsUnavailableError) {
       retention = { error: err.code, message: err.message };
       status = 503;
@@ -62,7 +63,7 @@ export async function GET(req: Request) {
   try {
     empty = { empty_purged: (await purgeEmptySessions(db ? supabaseEmptyPurgePort(db) : fileEmptyPurgePort(), now)).purged };
   } catch (err) {
-    console.error("cron empty purge:", message(err));
+    log.error("cron empty purge", { error: message(err) });
     empty = { empty_error: "empty_purge_failed" };
     if (status === 200) status = 502;
   }
@@ -70,7 +71,7 @@ export async function GET(req: Request) {
   try {
     idle = { ended_captures: (await endIdleCaptures(db ? supabaseIdleCapturePort(db) : fileIdleCapturePort(), now)).ended };
   } catch (err) {
-    console.error("cron end idle captures:", message(err));
+    log.error("cron end idle captures", { error: message(err) });
     idle = { idle_error: "end_idle_failed" };
     if (status === 200) status = 502;
   }
@@ -78,3 +79,5 @@ export async function GET(req: Request) {
 }
 
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
+
+export const GET = withRequestLog("/api/cron/retention", handleGET);

@@ -5,8 +5,8 @@ import { PatchProcessBody } from "../_lib";
 export const runtime = "nodejs";
 
 // Any member reads a process of the active workspace; other workspaces answer 404.
-export async function GET(_req: Request, ctx: IdContext) {
-  return withApi(async ({ store }) => {
+export async function GET(req: Request, ctx: IdContext) {
+  return withApi({ route: "/api/processes/[id]", req }, async ({ store }) => {
     const { id } = await ctx.params;
     const process = await store.getProcess(id);
     return process ? Response.json(process) : notFound(`process not found: ${id}`);
@@ -16,7 +16,7 @@ export async function GET(_req: Request, ctx: IdContext) {
 // Owner or expert: rename or edit the Work Map (new version; 409 on a stale expected_version). Owner only: archive
 // or restore (experts 403).
 export async function PATCH(req: Request, ctx: IdContext) {
-  return withMutation(["agents", "sessions"], async ({ ctx: rc, store }) => {
+  return withMutation(["agents", "sessions"], { route: "/api/processes/[id]", req }, async ({ ctx: rc, store }) => {
     const denied = requireRole(rc, ["owner", "expert"]);
     if (denied) return denied;
     const { id } = await ctx.params;
@@ -31,8 +31,8 @@ export async function PATCH(req: Request, ctx: IdContext) {
 }
 
 // Owner only. Versions go with the process; linked sessions stay with process_id cleared.
-export async function DELETE(_req: Request, ctx: IdContext) {
-  return withMutation(["agents", "sessions"], async ({ ctx: rc, store }) => {
+export async function DELETE(req: Request, ctx: IdContext) {
+  return withMutation(["agents", "sessions"], { route: "/api/processes/[id]", req }, async ({ ctx: rc, store }) => {
     const denied = requireRole(rc, ["owner"]);
     if (denied) return denied;
     const { id } = await ctx.params;

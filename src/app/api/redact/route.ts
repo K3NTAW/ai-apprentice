@@ -1,12 +1,13 @@
 import { z } from "zod";
 import { redactTextAsync } from "@/lib/redact";
 import { requireContext } from "@/lib/auth/context";
+import { withRequestLog } from "@/lib/log";
 
 export const runtime = "nodejs";
 
 const Body = z.object({ text: z.string() });
 
-export async function POST(req: Request) {
+async function handlePOST(req: Request) {
   // Signed-in member of a workspace only (401 signed out, 503 misconfigured).
   const ctx = await requireContext();
   if (ctx instanceof Response) return ctx;
@@ -20,3 +21,5 @@ export async function POST(req: Request) {
   if (!parsed.success) return Response.json({ error: "invalid body", details: parsed.error.issues }, { status: 400 });
   return Response.json(await redactTextAsync(parsed.data.text));
 }
+
+export const POST = withRequestLog("/api/redact", handlePOST);

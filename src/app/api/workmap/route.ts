@@ -11,7 +11,7 @@ export const maxDuration = 60;
 const Body = z.object({ session_id: z.string(), rescore_only: z.boolean().optional() });
 
 export function POST(req: Request): Promise<Response> {
-  return withApi(async (api) => {
+  return withApi({ route: "/api/workmap", req }, async (api) => {
     // Daily synthesis cap per workspace (429 daily_limit). workmap/confirm is not counted.
     const usage = await consumeUsage(api.ctx, "workmap");
     if (usage instanceof Response) return usage;

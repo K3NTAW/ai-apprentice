@@ -2,6 +2,7 @@
 import type { z } from "zod";
 import { type RequestContext, requireContext } from "@/lib/auth/context";
 import { revalidateScopes, type Scope } from "@/lib/cache/readMostly";
+import { log, logRequest, type RequestLogScope } from "@/lib/log";
 import { serverTiming } from "@/lib/perf";
 import {
   EmptyProcessPatchError,
@@ -67,7 +68,7 @@ export async function handle(fn: () => Promise<Response>): Promise<Response> {
       return Response.json({ error: "supabase_not_configured" }, { status: 503 });
     }
     if (err instanceof Error && err.message === "store_context_required") {
-      console.error("getStore: store_context_required");
+      log.error("getStore: store_context_required");
       return Response.json({ error: "store_context_required" }, { status: 500 });
     }
     throw err;
@@ -86,15 +87,26 @@ export function storeFor(ctx: RequestContext): SessionStore {
 /**
  * requireContext first (401 signed out, 503 misconfigured, 403 no_workspace), then fn under handle().
  * Store calls go through api.store, which is scoped to the active workspace.
+ * Every call writes one request line (src/lib/log), the requireContext early return included; scope names the
+ * route and request for it. A throw is logged as status 500 thrown: true and rethrown.
  */
-export async function withApi(fn: (api: Api) => Promise<Response>): Promise<Response> {
-  const t0 = performance.now();
-  const ctx = await requireContext();
-  const ctxAuth = performance.now() - t0;
-  if (ctx instanceof Response) return withServerTiming(ctx, { "ctx-auth": ctxAuth, db: 0, total: ctxAuth });
-  const db = { ms: 0 };
-  const res = await handle(() => fn({ ctx, store: timedStore(storeFor(ctx), db) }));
-  return withServerTiming(res, { "ctx-auth": ctxAuth, db: db.ms, total: performance.now() - t0 });
+export function withApi(fn: (api: Api) => Promise<Response>): Promise<Response>;
+export function withApi(scope: RequestLogScope, fn: (api: Api) => Promise<Response>): Promise<Response>;
+export function withApi(
+  a: RequestLogScope | ((api: Api) => Promise<Response>),
+  b?: (api: Api) => Promise<Response>,
+): Promise<Response> {
+  const [scope, fn] = typeof a === "function" ? [{ route: "-" }, a] : [a, b as (api: Api) => Promise<Response>];
+  return logRequest(scope, async (setWorkspace) => {
+    const t0 = performance.now();
+    const ctx = await requireContext();
+    const ctxAuth = performance.now() - t0;
+    if (ctx instanceof Response) return withServerTiming(ctx, { "ctx-auth": ctxAuth, db: 0, total: ctxAuth });
+    setWorkspace(ctx.workspaceId);
+    const db = { ms: 0 };
+    const res = await handle(() => fn({ ctx, store: timedStore(storeFor(ctx), db) }));
+    return withServerTiming(res, { "ctx-auth": ctxAuth, db: db.ms, total: performance.now() - t0 });
+  });
 }
 
 /** The store with the time of every async call added to acc.ms (calls that overlap are each counted). */
@@ -122,8 +134,15 @@ export function timedStore(store: SessionStore, acc: { ms: number }): SessionSto
  * withApi for writes: after a 2xx response the scopes' read-mostly caches of the active workspace are expired
  * (sessions: sidebar recents and agent stats; agents: the agent list), so the next page render reads fresh data.
  */
-export async function withMutation(scopes: Scope[], fn: (api: Api) => Promise<Response>): Promise<Response> {
-  return withApi(async (api) => {
+export function withMutation(scopes: Scope[], fn: (api: Api) => Promise<Response>): Promise<Response>;
+export function withMutation(scopes: Scope[], scope: RequestLogScope, fn: (api: Api) => Promise<Response>): Promise<Response>;
+export function withMutation(
+  scopes: Scope[],
+  a: RequestLogScope | ((api: Api) => Promise<Response>),
+  b?: (api: Api) => Promise<Response>,
+): Promise<Response> {
+  const [scope, fn] = typeof a === "function" ? [{ route: "-" }, a] : [a, b as (api: Api) => Promise<Response>];
+  return withApi(scope, async (api) => {
     const res = await fn(api);
     if (res.ok) revalidateScopes(scopes, api.ctx);
     return res;

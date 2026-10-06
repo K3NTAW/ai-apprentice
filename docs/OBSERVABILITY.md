@@ -1,0 +1,79 @@
+# Observability
+
+Server logs are structured JSON, one object per line. The code is in `src/lib/log`.
+
+## Log line format
+
+Every call to `log.info|warn|error(event, fields?)` writes one line:
+
+```json
+{"ts":"2026-10-06T20:15:50.123Z","level":"error","event":"cron retention","error":"...","requestId":"3f0c..."}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `ts` | ISO 8601 time in UTC |
+| `level` | `info`, `warn` or `error`. `info` goes to stdout, `warn` and `error` to stderr |
+| `event` | Short, fixed name of what happened |
+| `requestId` | Present when the line was written during an API request |
+| other keys | The caller's fields |
+
+`ts`, `level`, `event` and `requestId` are set by the logger. A field with one of those names is dropped.
+
+## Request lines
+
+Every API request writes exactly one line with `event: "request"`:
+
+```json
+{"ts":"...","level":"info","event":"request","route":"/api/session/[id]","method":"GET","status":200,"ms":42,"requestId":"3f0c...","workspace":"9a1b2c3d4e5f6a7b"}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `route` | Route template, e.g. `/api/session/[id]` (never the concrete path) |
+| `method` | HTTP method |
+| `status` | Response status |
+| `ms` | Handler time in milliseconds |
+| `requestId` | See below |
+| `workspace` | Hashed workspace id, only once the request context is known |
+| `thrown` | `true` when the handler threw. The line has status 500 and level `error`; the error is rethrown unchanged |
+
+Responses with status 500 or more are logged at level `error`.
+
+Routes that use `withApi` or `withMutation` (`src/app/api/session/_http.ts`) get the line from there, including the
+early return from `requireContext` (401, 403, 503). Every other route exports its handler wrapped in
+`withRequestLog(route, handler)`. `src/app/api/console.guard.test.ts` fails when a route handler is wrapped by
+neither, or when a non-test file under `src/app/api` uses `console.warn` or `console.error`.
+
+### Request id
+
+The `x-request-id` request header is used when it matches `^[A-Za-z0-9_-]{1,64}$`. Otherwise a random UUID is used.
+Lines written with `log.*` while the request runs carry the same id, so one request can be followed across lines.
+
+## Redaction and hashing
+
+Logged values can come from untrusted input.
+
+- Every string value in the caller's fields, nested ones included, goes through the sync PII redaction in
+  `src/lib/redact` (emails, phone numbers, IBANs, card numbers, titled names become `<TYPE>` placeholders).
+- Errors are logged as `{name, message, stack}`, each redacted.
+- Circular references become `"[Circular]"`, values nested more than 6 levels deep `"[Truncated]"`. Functions are dropped.
+- The workspace id is never logged in clear. `workspace` is the first 16 hex characters of
+  `sha256(salt + ":" + workspaceId)`. The salt is `FORWARDED_USER_SECRET`, else `SUPABASE_SERVICE_ROLE_KEY`, and is
+  never logged. Without either (local mode) the field is the fixed marker `"local"`, never an unsalted hash.
+- The user id, cookies, auth headers and request bodies are not logged.
+
+## Reading logs on Vercel
+
+1. Vercel dashboard, project, **Logs** (runtime logs). Filter by the function path, e.g. `/api/session`.
+2. Search for a request id to see every line of one request, e.g. `3f0c...`.
+3. Search `"event":"request"` with `"status":5` or `"thrown":true` to find failed requests.
+4. CLI: `vercel logs <deployment-url>` streams the same lines. Pipe through `jq` to filter, e.g.
+   `vercel logs <url> --json | jq -r '.message' | jq 'select(.event=="request" and .status>=500)'`.
+
+To match a hashed `workspace` value to a workspace, compute the same hash locally with the production salt. Do not
+paste the salt into tickets or chats.
+
+## Sentry
+
+Follow-up task. It builds on `withRequestLog` and `withApi`.

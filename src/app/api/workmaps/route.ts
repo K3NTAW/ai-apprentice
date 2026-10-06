@@ -14,7 +14,7 @@ import { badRequest, notFound, withApi } from "../session/_http";
 export const runtime = "nodejs";
 
 export function GET(req: Request): Promise<Response> {
-  return withApi(async ({ store }) => {
+  return withApi({ route: "/api/workmaps", req }, async ({ store }) => {
     const params = new URL(req.url).searchParams;
     const limit = parseLimit(params.get("limit"));
     if (limit === null) return badRequest("invalid limit");

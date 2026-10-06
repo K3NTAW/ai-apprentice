@@ -12,7 +12,7 @@ const BodySchema = z.object({ teach: TeachProgressSchema }).strict();
  * migration 20261004040000_session_teach is not applied.
  */
 export async function POST(req: Request, ctx: IdContext) {
-  return withMutation(["sessions"], async (api) => {
+  return withMutation(["sessions"], { route: "/api/session/[id]/teach", req }, async (api) => {
     const { id } = await ctx.params;
     const denied = await requireCreatorOrOwner(api, id);
     if (denied) return denied;

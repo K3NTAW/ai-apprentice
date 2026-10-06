@@ -4,6 +4,7 @@ import { DeleteAgentError, RequestNotFoundError, SettingsUnavailableError } from
 import { AgentNotFoundError } from "@/lib/store";
 import { AGENT_EXPERT_NAME_MAX, AGENT_NAME_MAX, AGENT_ROLE_MAX, AvatarSchema } from "@/lib/types";
 import { notFound } from "../session/_http";
+import { log } from "@/lib/log";
 
 const Name = z.string().trim().min(1).max(AGENT_NAME_MAX);
 const Role = z.string().trim().min(1).max(AGENT_ROLE_MAX);
@@ -49,7 +50,7 @@ export async function adminErrors(fn: () => Promise<Response>): Promise<Response
       return Response.json({ error: err.code, message: err.message }, { status: 503 });
     if (err instanceof RequestNotFoundError) return notFound(err.message);
     if (err instanceof DeleteAgentError) {
-      console.error(err.message);
+      log.error("agent deletion failed", { step: err.step, error: err.message });
       return Response.json({ error: "delete_failed", step: err.step, message: "Deletion stopped part way. Nothing after that step was removed; try again." }, { status: 502 });
     }
     throw err;

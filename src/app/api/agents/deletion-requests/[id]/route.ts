@@ -12,7 +12,7 @@ const Decision = z.strictObject({ status: z.enum(["approved", "declined"]) });
 // delete stops part way the request stays pending (502 delete_failed) and Approve can be pressed again.
 // An agent that is already gone is approved without a delete.
 export async function PATCH(req: Request, ctx: IdContext) {
-  return withMutation(["agents", "sessions"], async ({ ctx: rc }) => {
+  return withMutation(["agents", "sessions"], { route: "/api/agents/deletion-requests/[id]", req }, async ({ ctx: rc }) => {
     const denied = requireRole(rc, ["owner"]);
     if (denied) return denied;
     const { id } = await ctx.params;

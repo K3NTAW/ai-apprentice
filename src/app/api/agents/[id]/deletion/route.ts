@@ -6,8 +6,8 @@ export const runtime = "nodejs";
 
 // Any member: what deleting the agent removes (processes, archived included, and training sessions of every kind)
 // and whether this user may delete it (owner or creator, the DELETE rule). Feeds the delete confirm.
-export async function GET(_req: Request, ctx: IdContext) {
-  return withApi(async ({ ctx: rc, store }) => {
+export async function GET(req: Request, ctx: IdContext) {
+  return withApi({ route: "/api/agents/[id]/deletion", req }, async ({ ctx: rc, store }) => {
     const { id } = await ctx.params;
     const agent = await store.getAgent(id);
     if (!agent) return notFound(`agent not found: ${id}`);
@@ -27,8 +27,8 @@ export async function GET(_req: Request, ctx: IdContext) {
 }
 
 // Any member asks the owner to delete the agent. One pending request per agent: a repeat answers the open one.
-export async function POST(_req: Request, ctx: IdContext) {
-  return withMutation(["agents"], async ({ ctx: rc, store }) => {
+export async function POST(req: Request, ctx: IdContext) {
+  return withMutation(["agents"], { route: "/api/agents/[id]/deletion", req }, async ({ ctx: rc, store }) => {
     const { id } = await ctx.params;
     const agent = await store.getAgent(id);
     if (!agent) return notFound(`agent not found: ${id}`);

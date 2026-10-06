@@ -7,8 +7,8 @@ import { adminErrors, agentErrors, PatchAgentBody } from "../_lib";
 export const runtime = "nodejs";
 
 // Any member reads an agent of the active workspace; other workspaces answer 404.
-export async function GET(_req: Request, ctx: IdContext) {
-  return withApi(async ({ store }) => {
+export async function GET(req: Request, ctx: IdContext) {
+  return withApi({ route: "/api/agents/[id]", req }, async ({ store }) => {
     const { id } = await ctx.params;
     const agent = await store.getAgent(id);
     return agent ? Response.json(agent) : notFound(`agent not found: ${id}`);
@@ -17,7 +17,7 @@ export async function GET(_req: Request, ctx: IdContext) {
 
 // Owner or expert.
 export async function PATCH(req: Request, ctx: IdContext) {
-  return withMutation(["agents"], async ({ ctx: rc, store }) => {
+  return withMutation(["agents"], { route: "/api/agents/[id]", req }, async ({ ctx: rc, store }) => {
     const denied = requireRole(rc, ["owner", "expert"]);
     if (denied) return denied;
     const { id } = await ctx.params;
@@ -29,8 +29,8 @@ export async function PATCH(req: Request, ctx: IdContext) {
 
 // Owner, or the user who created the agent. Everything of the agent goes: frame objects in Storage, every session
 // with its children, the agent with its settings, processes and versions (contract in src/lib/agents/admin.ts).
-export async function DELETE(_req: Request, ctx: IdContext) {
-  return withMutation(["agents", "sessions"], async ({ ctx: rc }) => {
+export async function DELETE(req: Request, ctx: IdContext) {
+  return withMutation(["agents", "sessions"], { route: "/api/agents/[id]", req }, async ({ ctx: rc }) => {
     const { id } = await ctx.params;
     if (!isValidAgentId(id)) return notFound(`agent not found: ${id}`);
     const admin = agentAdminFor(rc);

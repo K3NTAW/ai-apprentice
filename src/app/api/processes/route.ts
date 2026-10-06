@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 // Any member. ?agent_id=<id> narrows to one agent; ?archived=1 includes archived processes.
 // 503 processes_unavailable until the migration is applied; the caller falls back to sessions.
 export async function GET(req: Request) {
-  return withApi(async ({ store }) => {
+  return withApi({ route: "/api/processes", req }, async ({ store }) => {
     const params = new URL(req.url).searchParams;
     const agentId = params.get("agent_id") ?? undefined;
     const processes = await store.listProcesses({ agent_id: agentId, include_archived: params.get("archived") === "1" });
@@ -18,7 +18,7 @@ export async function GET(req: Request) {
 
 // Owner or expert.
 export async function POST(req: Request) {
-  return withMutation(["agents", "sessions"], async ({ ctx, store }) => {
+  return withMutation(["agents", "sessions"], { route: "/api/processes", req }, async ({ ctx, store }) => {
     const denied = requireRole(ctx, ["owner", "expert"]);
     if (denied) return denied;
     const body = await parseBody(req, CreateProcessBody);

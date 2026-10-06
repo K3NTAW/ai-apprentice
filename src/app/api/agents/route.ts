@@ -5,13 +5,13 @@ import { CreateAgentBody } from "./_lib";
 export const runtime = "nodejs";
 
 // Any member lists the agents of the active workspace.
-export async function GET() {
-  return withApi(async ({ store }) => Response.json({ agents: await store.listAgents() }));
+export async function GET(req?: Request) {
+  return withApi({ route: "/api/agents", req }, async ({ store }) => Response.json({ agents: await store.listAgents() }));
 }
 
 // Owner or expert.
 export async function POST(req: Request) {
-  return withMutation(["agents"], async ({ ctx, store }) => {
+  return withMutation(["agents"], { route: "/api/agents", req }, async ({ ctx, store }) => {
     const denied = requireRole(ctx, ["owner", "expert"]);
     if (denied) return denied;
     const body = await parseBody(req, CreateAgentBody);

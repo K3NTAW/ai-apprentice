@@ -11,7 +11,7 @@ const BackfillBody = z.strictObject({ agent_id: z.string().optional() });
 // Owner only. One-time backfill: a process for each confirmed capture session not linked to a process yet
 // (optionally of one agent). Idempotent: a second call creates nothing. 503 until the migration is applied.
 export async function POST(req: Request) {
-  return withMutation(["agents", "sessions"], async ({ ctx, store }) => {
+  return withMutation(["agents", "sessions"], { route: "/api/processes/backfill", req }, async ({ ctx, store }) => {
     const denied = requireRole(ctx, ["owner"]);
     if (denied) return denied;
     // An empty body backfills every agent.

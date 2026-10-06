@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { internalError, parseJsonBody, requireWorkspaceApi } from "@/lib/auth/context";
 import { revalidateScopes } from "@/lib/cache/readMostly";
+import { withRequestLog } from "@/lib/log";
 
 export const runtime = "nodejs";
 
@@ -12,7 +13,7 @@ function isLastOwnerError(error: { code?: string; message?: string }): boolean {
   return (error.code === "42501" || error.code === "P0001") && /would have no owner/i.test(error.message ?? "");
 }
 
-export async function DELETE(req: Request): Promise<Response> {
+async function handleDELETE(req: Request): Promise<Response> {
   const ctx = await requireWorkspaceApi(["owner"]);
   if (ctx instanceof Response) return ctx;
   const input = await parseJsonBody(req, RemoveMember);
@@ -34,3 +35,5 @@ export async function DELETE(req: Request): Promise<Response> {
   revalidateScopes(["members"], ctx);
   return Response.json({ ok: true });
 }
+
+export const DELETE = withRequestLog("/api/workspace/members", handleDELETE);

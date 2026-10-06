@@ -7,8 +7,8 @@ import { notFound, requireCreatorOrOwner, withApi, withMutation, type IdContext 
 export const runtime = "nodejs";
 
 // Any member reads any session of the active workspace.
-export async function GET(_req: Request, ctx: IdContext) {
-  return withApi(async ({ store }) => {
+export async function GET(req: Request, ctx: IdContext) {
+  return withApi({ route: "/api/session/[id]", req }, async ({ store }) => {
     const { id } = await ctx.params;
     const s = await store.getSession(id);
     return s ? Response.json(s) : notFound();
@@ -18,8 +18,8 @@ export async function GET(_req: Request, ctx: IdContext) {
 // Delete an empty capture run ('No work recorded', lib/capture/empty): the creator or an owner, 204.
 // Any other session answers 409 not_empty and stays. Frames go from Storage first, then the row (children cascade);
 // supabase mode deletes with the service role, scoped to the active workspace, after the checks above.
-export async function DELETE(_req: Request, ctx: IdContext) {
-  return withMutation(["sessions"], async (api) => {
+export async function DELETE(req: Request, ctx: IdContext) {
+  return withMutation(["sessions"], { route: "/api/session/[id]", req }, async (api) => {
     const { id } = await ctx.params;
     const denied = await requireCreatorOrOwner(api, id);
     if (denied) return denied;

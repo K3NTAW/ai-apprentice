@@ -6,6 +6,7 @@ import { redactScreenEvent } from "@/lib/perception/redactEvent";
 import { describeFrame } from "@/lib/perception/vision";
 import { consumeUsage } from "@/lib/usage";
 import { type Api, requireCreatorOrOwner, withApi } from "../session/_http";
+import { log } from "@/lib/log";
 
 export const runtime = "nodejs";
 // Vercel function limit: 60 s fits the plan (model calls can take tens of seconds).
@@ -26,7 +27,7 @@ function bad(error: string) {
 // Order: requireContext, the daily vision cap (one per frame, 429 daily_limit), validate the body, creator-or-owner, then saveFrame through the workspace store
 // (Storage in supabase mode, no local disk). SessionNotFoundError answers 404 via handle().
 export async function POST(req: Request): Promise<Response> {
-  return withApi((api) => visionFor(api, req));
+  return withApi({ route: "/api/vision", req }, (api) => visionFor(api, req));
 }
 
 async function visionFor(api: Api, req: Request): Promise<Response> {
@@ -63,7 +64,7 @@ async function visionFor(api: Api, req: Request): Promise<Response> {
   const result = process.env.ANTHROPIC_API_KEY ? await describeFrame({ jpegBase64, previousEvents: prev.data }) : { events: [] };
   // Upstream model errors answer 502, never 429: a 429 means our daily cap and makes the client stop vision for the day.
   if (result.error) {
-    console.warn("vision: upstream failed", result.error);
+    log.warn("vision: upstream failed", { error: result.error });
     return Response.json({ error: "vision_upstream", detail: result.error }, { status: 502 });
   }
   const events: VisionEvent[] = result.events;

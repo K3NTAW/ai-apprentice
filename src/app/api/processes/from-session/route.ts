@@ -20,7 +20,7 @@ async function notConfirmed(fn: () => Promise<Response>): Promise<Response> {
 
 // Any member. ?session_id=<id>: the match decision among the agent's processes ({ linked, match, candidates }).
 export async function GET(req: Request) {
-  return withApi(async ({ store }) => {
+  return withApi({ route: "/api/processes/from-session", req }, async ({ store }) => {
     const sessionId = new URL(req.url).searchParams.get("session_id");
     if (!sessionId || !isValidSessionId(sessionId)) return badRequest("invalid session_id");
     return notConfirmed(async () => Response.json(await suggestForSession(store, sessionId, llmMatch())));
@@ -30,7 +30,7 @@ export async function GET(req: Request) {
 // Owner or expert. choice add (merge, 'extended'), replace ('replaced', old version kept) or new ('trained').
 // preview: the merge's changes and conflicts without writing.
 export async function POST(req: Request) {
-  return withMutation(["agents", "sessions"], async ({ ctx, store }) => {
+  return withMutation(["agents", "sessions"], { route: "/api/processes/from-session", req }, async ({ ctx, store }) => {
     const denied = requireRole(ctx, ["owner", "expert"]);
     if (denied) return denied;
     const body = await parseBody(req, SaveFromSessionBody);

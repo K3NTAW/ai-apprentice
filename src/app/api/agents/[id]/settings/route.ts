@@ -7,8 +7,8 @@ import { adminErrors, OWNER_ONLY_SETTINGS } from "../../_lib";
 export const runtime = "nodejs";
 
 // Any member reads. Before migration 20261004010000: the defaults with available false (never a 500).
-export async function GET(_req: Request, ctx: IdContext) {
-  return withApi(async ({ ctx: rc, store }) => {
+export async function GET(req: Request, ctx: IdContext) {
+  return withApi({ route: "/api/agents/[id]/settings", req }, async ({ ctx: rc, store }) => {
     const { id } = await ctx.params;
     if (!(await store.getAgent(id))) return notFound(`agent not found: ${id}`);
     return adminErrors(async () => {
@@ -25,7 +25,7 @@ export async function GET(_req: Request, ctx: IdContext) {
 // Merge patch: only the given keys change. Owner or expert; Privacy and retention keys are owner only.
 // 503 settings_unavailable until the migration is applied.
 export async function PATCH(req: Request, ctx: IdContext) {
-  return withMutation(["agents"], async ({ ctx: rc, store }) => {
+  return withMutation(["agents"], { route: "/api/agents/[id]/settings", req }, async ({ ctx: rc, store }) => {
     const denied = requireRole(rc, ["owner", "expert"]);
     if (denied) return denied;
     const { id } = await ctx.params;

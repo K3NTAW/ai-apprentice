@@ -26,7 +26,7 @@ async function confirmedMaps(store: SessionStore, agentId: string): Promise<Work
 // (processes plus legacy confirmed sessions without a process).
 // Both are scoped to the active workspace; an agent or session of another workspace answers 404.
 export function GET(req: Request): Promise<Response> {
-  return withApi(async ({ store }) => {
+  return withApi({ route: "/api/export", req }, async ({ store }) => {
     const params = new URL(req.url).searchParams;
     const agentId = params.get("agent_id");
     if (agentId) {

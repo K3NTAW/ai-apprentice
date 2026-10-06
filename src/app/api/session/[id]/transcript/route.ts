@@ -13,7 +13,7 @@ const Body = z.object({
 });
 
 export async function POST(req: Request, ctx: IdContext) {
-  return withApi(async (api) => {
+  return withApi({ route: "/api/session/[id]/transcript", req }, async (api) => {
     const { id } = await ctx.params;
     const denied = await requireCreatorOrOwner(api, id);
     if (denied) return denied;
