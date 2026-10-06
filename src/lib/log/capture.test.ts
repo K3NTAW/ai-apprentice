@@ -21,7 +21,7 @@ const sdk = {
   flush: vi.fn(async (_ms?: number) => true),
 };
 
-async function load(factory: () => unknown = () => sdk) {
+async function load(factory: () => object = () => sdk) {
   vi.resetModules();
   const spy = vi.fn(factory);
   vi.doMock("@sentry/nextjs", spy);
