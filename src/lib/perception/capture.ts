@@ -2,7 +2,10 @@
 import { encodeWithinLimit, FRAME_MAX_WIDTH, scaledSize } from "./frame";
 import { hasChanged } from "./frameDiff";
 
-export type CapturedFrame = { jpegBase64: string; t: number; changed: boolean };
+/** What the user shared, from the track settings; "unknown" when the browser does not say or says something else. */
+export type CaptureSurface = "monitor" | "window" | "browser" | "unknown";
+
+export type CapturedFrame = { jpegBase64: string; t: number; changed: boolean; surface: CaptureSurface };
 
 export type CaptureOptions = {
   intervalMs?: number;
@@ -22,7 +25,12 @@ export type CaptureHandle = {
   stream: MediaStream;
   /** What the user picked: 'monitor', 'window' or 'browser'; undefined when the browser does not say. */
   displaySurface?: string;
+  surface: CaptureSurface;
 };
+
+export function surfaceOf(displaySurface: unknown): CaptureSurface {
+  return displaySurface === "monitor" || displaySurface === "window" || displaySurface === "browser" ? displaySurface : "unknown";
+}
 
 const DIFF_WIDTH = 160;
 
@@ -37,13 +45,17 @@ export async function startScreenCapture({
   if (typeof window === "undefined" || !navigator.mediaDevices?.getDisplayMedia) {
     throw new Error("screen capture is only available in the browser");
   }
-  // Whole monitor: the companion halo and vision rects map to the primary display.
+  // Window first; a monitor stays selectable in the picker. Halo and vision rects map to the primary display only
+  // when surface is "monitor" (callers check it). This tab is excluded from the picker.
   const stream = await navigator.mediaDevices.getDisplayMedia({
-    video: { displaySurface: "monitor" },
+    video: { displaySurface: "window" },
     audio: false,
+    selfBrowserSurface: "exclude",
+    surfaceSwitching: "include",
   } as DisplayMediaStreamOptions);
   const track = stream.getVideoTracks()[0];
   const displaySurface = (track?.getSettings() as { displaySurface?: string } | undefined)?.displaySurface;
+  const surface = surfaceOf(displaySurface);
   const video = document.createElement("video");
   video.muted = true;
   video.playsInline = true;
@@ -79,7 +91,7 @@ export async function startScreenCapture({
       full.toDataURL("image/jpeg", q).replace(/^data:image\/jpeg;base64,/, ""),
     );
     if (jpegBase64 === null) return;
-    onFrame({ jpegBase64, t: getT(), changed });
+    onFrame({ jpegBase64, t: getT(), changed, surface });
   };
 
   const start = () => {
@@ -94,6 +106,7 @@ export async function startScreenCapture({
   const handle: CaptureHandle = {
     stream,
     displaySurface,
+    surface,
     pause: halt,
     resume: start,
     stop() {

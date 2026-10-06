@@ -62,7 +62,7 @@ import { isPanelAction, materialOptions, panelBounds, panelMaterial, panelViewMo
 import { isPermissionKey } from "./pairingWindow.mjs";
 import { canStartHook, PermissionMonitor, readPermissions } from "./permissions.mjs";
 import { wirePermissionRechecks } from "./permissionRechecks.mjs";
-import { allowDisplayMedia, checkPermission, DISPLAY_MEDIA_OPTIONS, grantPermission, isUrlAllowed, pickPrimarySource } from "./permissionsGrant.mjs";
+import { allowDisplayMedia, checkPermission, displayMediaOptions, grantPermission, isUrlAllowed, pickPrimarySource } from "./permissionsGrant.mjs";
 import { appMessage, chordMessage, parsePort, shortcutMessage, statusMessage, type Permissions, type ServerMessage, type SessionStateMessage } from "./protocol.mjs";
 import {
   allowedWhilePaused,
@@ -1113,7 +1113,7 @@ function installGuards(ses: Electron.Session): void {
         log(`screen source unavailable: ${String(err)}`);
         callback({});
       });
-  }, DISPLAY_MEDIA_OPTIONS);
+  }, displayMediaOptions(process.env));
 }
 
 function buildAppMenu(): void {

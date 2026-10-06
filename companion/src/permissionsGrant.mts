@@ -65,5 +65,11 @@ export function pickPrimarySource<T extends ScreenSource>(sources: readonly T[],
   return screens.find((s) => s.display_id === String(primaryDisplayId)) ?? screens[0] ?? null;
 }
 
-/** Options for session.setDisplayMediaRequestHandler: no OS picker. */
-export const DISPLAY_MEDIA_OPTIONS = { useSystemPicker: false } as const;
+/**
+ * Options for session.setDisplayMediaRequestHandler. The OS system picker by default (the user chooses a window or a
+ * screen, so own-window exclusion is not enforceable and not attempted); APPRENTICE_SYSTEM_PICKER=0 turns it off.
+ * Where the OS has no system picker the handler itself answers with the primary screen.
+ */
+export function displayMediaOptions(env: Record<string, string | undefined>): { useSystemPicker: boolean } {
+  return { useSystemPicker: env.APPRENTICE_SYSTEM_PICKER !== "0" };
+}

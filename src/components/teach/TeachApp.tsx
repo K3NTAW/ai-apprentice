@@ -13,7 +13,7 @@ import { createActivityTracker } from "@/lib/perception/activity";
 import { startScreenCapture, type CaptureHandle, type CapturedFrame } from "@/lib/perception/capture";
 import type { CompanionPermissions, CompanionStatus, ShortcutAction } from "@/lib/companion/client";
 import { selectTransport, type CompanionTransport, type TransportHost } from "@/lib/companion/transport";
-import { createShareFlow, startVoiceThenShare } from "@/lib/companion/stepAside";
+import { createShareFlow, mapsRects, startVoiceThenShare } from "@/lib/companion/stepAside";
 import { buddyStateFor } from "@/lib/companion/buddyState";
 import { buildSessionAgent } from "@/lib/companion/agentState";
 import { routeShortcut } from "@/lib/companion/shortcuts";
@@ -46,6 +46,11 @@ const NO_STATS: InterventionStats = { interventions: 0, active: 0, decideCalls: 
 const PREDICT_QUESTION = "What would you do next?";
 const MONITOR_WARNING =
   "You shared a window or tab, not the whole screen. Halos are off because their position would be wrong. Stop sharing and pick the entire screen.";
+
+/** The share warning for a capture surface: none for a monitor, the monitor warning for anything else. */
+export function shareWarningFor(surface: CaptureHandle["surface"] | undefined): string | null {
+  return mapsRects(surface) ? null : MONITOR_WARNING;
+}
 
 type Loop = {
   sessionId: string;
@@ -424,10 +429,10 @@ function TeachInner({ sessionId, localMode, agentParam = null, processId = null,
       );
       // Finished while getDisplayMedia was pending: the flow stopped the late handle, restored once, no step-aside.
       if (!handle) return;
-      // Halo rects map to the primary display only when the whole monitor is shared.
-      monitorRef.current = !handle.displaySurface || handle.displaySurface === "monitor";
+      // Halo rects map to the primary display only when the whole monitor is shared; window, browser and unknown warn.
+      monitorRef.current = mapsRects(handle.surface);
       setSharing(true);
-      setShareWarning(monitorRef.current ? null : MONITOR_WARNING);
+      setShareWarning(shareWarningFor(handle.surface));
     } catch (err) {
       setNotice(quiet("Screen share not started.", err));
     }

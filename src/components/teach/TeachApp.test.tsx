@@ -6,6 +6,7 @@ import { createShareFlow, startVoiceThenShare } from "@/lib/companion/stepAside"
 import { selectTransport } from "@/lib/companion/transport";
 import { EMAIL_FLOW_WORKMAP } from "@/lib/teach/fixtures";
 import type { Intervention } from "@/lib/teach/intervention";
+import { shareWarningFor } from "./TeachApp";
 import TeachConsole, { decideStatus, frameUrl, type TeachConsoleProps } from "./TeachConsole";
 
 const step = EMAIL_FLOW_WORKMAP.steps[2];
@@ -186,5 +187,34 @@ describe("TeachApp in the desktop app: step aside and restore", () => {
     app.unmount();
     expect(d.log.at(-1)).toBe("window:restore");
     expect(d.log.filter((l) => l === "window:restore")).toHaveLength(1);
+  });
+});
+
+// Capture surface (T-0311): halos map rects only for a shared monitor; anything else keeps the monitor warning.
+describe("TeachApp share warning by capture surface", () => {
+  let d: ReturnType<typeof fakeDesktop>;
+  beforeEach(() => {
+    d = fakeDesktop();
+    d.install();
+  });
+  afterEach(() => d.uninstall());
+
+  for (const [given, warns] of [
+    [undefined, true],
+    ["window", true],
+    ["monitor", false],
+  ] as const) {
+    it(`track surface ${String(given)}: monitor warning ${warns}`, async () => {
+      d.surface(given);
+      const h = await startScreenCapture({ getT: () => 0, onFrame: () => {} });
+      const warning = shareWarningFor(h.surface);
+      if (warns) expect(warning).toContain("not the whole screen");
+      else expect(warning).toBeNull();
+      h.stop();
+    });
+  }
+
+  it("an undefined surface warns", () => {
+    expect(shareWarningFor(undefined)).toContain("Halos are off");
   });
 });

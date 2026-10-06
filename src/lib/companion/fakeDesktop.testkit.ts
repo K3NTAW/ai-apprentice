@@ -21,12 +21,13 @@ export function fakeDesktop() {
   };
 
   let ended: Listener | null = null;
+  let settings: { displaySurface?: string } = { displaySurface: "monitor" };
   const track = {
     stopped: 0,
     stop() {
       track.stopped++;
     },
-    getSettings: () => ({ displaySurface: "monitor" }),
+    getSettings: () => settings,
     addEventListener(type: string, fn: Listener) {
       if (type === "ended") ended = fn;
     },
@@ -73,6 +74,10 @@ export function fakeDesktop() {
     },
     nextShare(mode: "resolve" | "reject" | "hold") {
       next = mode;
+    },
+    /** What the captured track reports; undefined means the browser does not say. */
+    surface(displaySurface: string | undefined) {
+      settings = displaySurface === undefined ? {} : { displaySurface };
     },
     failVideo() {
       playFails = true;

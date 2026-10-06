@@ -1,12 +1,19 @@
 // Desktop app screen share (one-app D2). Start runs the existing startScreenCapture unchanged (its
-// getDisplayMedia({ video: { displaySurface: "monitor" } }) is answered by the app's display media handler with
-// the primary screen, which reports displaySurface "monitor"), and only after it resolves the window steps aside.
+// getDisplayMedia({ video: { displaySurface: "window" } }) is answered by the OS system picker where there is one,
+// so the user may pick a window or a screen; the fallback handler answers with the primary screen). Only after it
+// resolves the window steps aside. Halo rects map to the primary display only for surface "monitor" (mapsRects).
 // restore() is idempotent: it sends window('restore') once per share started in the app (a share still pending
 // is cancelled, so a late getDisplayMedia never steps aside) and is safe to call on end, finish, error, stream
 // end, a rejected getDisplayMedia and unmount.
 // Start order in the app (fix round T-0123): the voice agent first, so a mic prompt or a start error is visible,
 // then the share, then the step-aside only when the agent is up.
+import type { CaptureSurface } from "@/lib/perception/capture";
 import type { CompanionTransport } from "./transport";
+
+/** Rect-based halo and step-aside mapping only for a shared monitor; window, browser, unknown and undefined: no. */
+export function mapsRects(surface: CaptureSurface | undefined): boolean {
+  return surface === "monitor";
+}
 
 export type StepAside = {
   /**

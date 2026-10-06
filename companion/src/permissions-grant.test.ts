@@ -3,7 +3,7 @@ import { appAllowlist } from "./appConfig.mjs";
 import {
   allowDisplayMedia,
   checkPermission,
-  DISPLAY_MEDIA_OPTIONS,
+  displayMediaOptions,
   grantPermission,
   pickPrimarySource,
   type PermissionRequest,
@@ -79,7 +79,7 @@ describe("display media", () => {
     expect(allowDisplayMedia({ ...dm, videoRequested: false }, list)).toBe(false);
   });
 
-  it("picks the primary screen without the system picker", () => {
+  it("fallback without a system picker: picks the primary screen", () => {
     const sources = [
       { id: "window:12:0", display_id: "", name: "Outlook" },
       { id: "screen:2:0", display_id: "2", name: "Screen 2" },
@@ -88,6 +88,11 @@ describe("display media", () => {
     expect(pickPrimarySource(sources, 1)?.id).toBe("screen:1:0");
     expect(pickPrimarySource(sources, 99)?.id).toBe("screen:2:0");
     expect(pickPrimarySource([sources[0]], 1)).toBeNull();
-    expect(DISPLAY_MEDIA_OPTIONS.useSystemPicker).toBe(false);
+  });
+
+  it("uses the system picker by default; APPRENTICE_SYSTEM_PICKER=0 turns it off", () => {
+    expect(displayMediaOptions({})).toEqual({ useSystemPicker: true });
+    expect(displayMediaOptions({ APPRENTICE_SYSTEM_PICKER: "1" })).toEqual({ useSystemPicker: true });
+    expect(displayMediaOptions({ APPRENTICE_SYSTEM_PICKER: "0" })).toEqual({ useSystemPicker: false });
   });
 });
