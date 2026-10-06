@@ -755,6 +755,12 @@ export function createSupabaseStore(
       return { stored: true, name };
     },
 
+    async frameAllowed(id, t) {
+      const ranges = (await requireRow(id)).off_record_ranges ?? [];
+      if (hasOpenRange(ranges) || isOffRecord(ranges, t)) return { ok: false, reason: "off_record" };
+      return { ok: true };
+    },
+
     async readFrame(id, name) {
       assertId(id);
       assertFrameName(name);

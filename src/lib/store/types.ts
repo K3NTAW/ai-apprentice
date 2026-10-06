@@ -97,6 +97,7 @@ export type ProcessPatch = {
 export type ListProcessesOptions = { agent_id?: string; include_archived?: boolean };
 
 export type SaveFrameResult = { stored: true; name: string } | { stored: false; reason: "off_record" };
+export type FrameAllowedResult = { ok: true } | { ok: false; reason: "off_record" };
 
 export interface SessionStore {
   /** agent_id must name an agent of the same workspace, else AgentNotFoundError. */
@@ -117,6 +118,8 @@ export interface SessionStore {
   /** Replaces Session.teach. Supabase throws TeachUnavailableError while migration 20261004040000_session_teach is not applied. */
   saveTeach(id: string, teach: TeachProgress): Promise<Session>;
   saveFrame(id: string, t: number, data: Buffer): Promise<SaveFrameResult>;
+  /** saveFrame's off-record pre-check without a write: an open range blocks every t. */
+  frameAllowed(id: string, t: number): Promise<FrameAllowedResult>;
   readFrame(id: string, name: string): Promise<Buffer | null>;
   /** Newest first. */
   listAgents(): Promise<Agent[]>;

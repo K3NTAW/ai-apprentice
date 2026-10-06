@@ -263,6 +263,11 @@ describe("supabase store only", () => {
     expect(fake.objects.size).toBe(0);
   });
 
+  it("rejects frameAllowed on a missing session", async () => {
+    const { store } = supabaseFixture();
+    await expect(store.frameAllowed("s_missing", 1)).rejects.toBeInstanceOf(SessionNotFoundError);
+  });
+
   it("converges when a purge fails after the range is written and the call is retried", async () => {
     const { fake, store, workspaceId } = supabaseFixture();
     const s = await store.createSession({ kind: "capture" });

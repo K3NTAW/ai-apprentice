@@ -51,6 +51,7 @@ import {
   type ProcessInput,
   type ProcessPatch,
   type ProcessVersion,
+  type FrameAllowedResult,
   type SaveFrameResult,
   type SessionStore,
   RECENT_SESSIONS_DEFAULT,
@@ -434,6 +435,16 @@ function saveFrame(id: string, t: number, data: Buffer): Promise<SaveFrameResult
   });
 }
 
+/** saveFrame's pre-write check alone; writes nothing. Without a session.json every t is allowed, as saveFrame writes unrecorded then. */
+function frameAllowed(id: string, t: number): Promise<FrameAllowedResult> {
+  assertId(id);
+  return enqueue(id, async (): Promise<FrameAllowedResult> => {
+    const s = await readSession(id);
+    if (s && (hasOpenRange(s.off_record_ranges) || isOffRecord(s.off_record_ranges, t))) return { ok: false, reason: "off_record" };
+    return { ok: true };
+  });
+}
+
 async function readFrame(id: string, name: string): Promise<Buffer | null> {
   try {
     return await readFile(framePath(id, name));
@@ -628,6 +639,7 @@ export const fileStore: SessionStore = {
   endSession,
   saveTeach,
   saveFrame,
+  frameAllowed,
   readFrame,
   listAgents,
   getAgent,

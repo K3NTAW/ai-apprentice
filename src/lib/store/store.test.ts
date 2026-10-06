@@ -237,6 +237,10 @@ describe("frames and off the record", () => {
     expect((await getSession(s.id))?.frames).toEqual([{ name: "0025.jpg", t: 25 }]);
   });
 
+  it("frameAllowed allows every t on a missing session, as saveFrame writes unrecorded then", async () => {
+    expect(await fileStore.frameAllowed("s_missing", 1)).toEqual({ ok: true });
+  });
+
   it("closing a range deletes stored frames inside it and keeps the rest", async () => {
     const s = await createSession({ kind: "capture" });
     for (const t of [5, 12.5, 18, 25]) await saveFrame(s.id, t, jpg);
