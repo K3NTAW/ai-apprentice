@@ -1,0 +1,34 @@
+# Supabase CLI local stack for the RLS suite (db-tests/, docs/checks/db-tests.md).
+# Minimal on purpose: `supabase start` applies supabase/migrations/* in order. Never used for a hosted project.
+project_id = "ai-apprentice"
+
+[db]
+port = 54622
+shadow_port = 54620
+# The migrations were written against Postgres 15 (column list on delete set null needs 15+).
+major_version = 15
+
+[db.seed]
+enabled = false
+
+[api]
+port = 54621
+# The migrations grant authenticated explicitly and leave service_role on the platform default privileges
+# (init: "service_role is left untouched"). Newer CLIs no longer auto-grant new tables; keep the legacy grants
+# the migrations were written against, else the service role cannot seed or tear down. See docs/checks/db-tests.md.
+auto_expose_new_tables = true
+
+[studio]
+enabled = false
+
+[local_smtp]
+enabled = false
+
+[realtime]
+enabled = false
+
+[analytics]
+enabled = false
+
+[edge_runtime]
+enabled = false
