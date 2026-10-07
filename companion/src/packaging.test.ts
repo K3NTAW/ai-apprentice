@@ -14,9 +14,10 @@ describe("electron-builder config", () => {
     expect(build.files).toContain("app.config.json");
   });
 
-  it("mac builds dmg and dir for arm64 and x64, with icon, entitlements and usage texts, as a Dock app", () => {
+  it("mac builds dmg, zip and dir for arm64 and x64, with icon, entitlements and usage texts, as a Dock app", () => {
     const targets: Target[] = build.mac.target;
-    for (const name of ["dmg", "dir"]) {
+    expect(targets.map((t) => t.target).sort()).toEqual(["dir", "dmg", "zip"]);
+    for (const name of ["dmg", "zip", "dir"]) {
       const t = targets.find((x) => x.target === name);
       expect(t?.arch.sort()).toEqual(["arm64", "x64"]);
     }
@@ -25,6 +26,40 @@ describe("electron-builder config", () => {
     expect(build.mac.extendInfo.LSUIElement).toBeUndefined();
     expect(build.mac.extendInfo.NSMicrophoneUsageDescription).toBeTruthy();
     expect(build.mac.extendInfo.NSScreenCaptureUsageDescription).toBeTruthy();
+  });
+
+  it("mac has no identity key, notarises and publishes to the desktop GitHub repo", () => {
+    expect("identity" in build.mac).toBe(false);
+    expect(build.mac.notarize).toBe(true);
+    expect(build.mac.publish).toEqual([{ provider: "github", owner: "K3NTAW", repo: "ai-apprentice-desktop" }]);
+    expect(build.publish).toBeUndefined();
+  });
+
+  it("windows never publishes", () => {
+    expect(build.win.publish).toBeNull();
+  });
+
+  it("local package scripts build unsigned and never publish; package:signed checks env first", () => {
+    for (const name of ["package", "package:dir"]) {
+      expect(pkg.scripts[name]).toContain("CSC_IDENTITY_AUTO_DISCOVERY=false");
+      expect(pkg.scripts[name]).toContain("--publish never");
+    }
+    const signed: string = pkg.scripts["package:signed"];
+    expect(signed).toContain("--publish never");
+    expect(signed).not.toContain("CSC_IDENTITY_AUTO_DISCOVERY");
+    const check = signed.indexOf("node dist/signingEnv.mjs");
+    expect(check).toBeGreaterThan(-1);
+    expect(check).toBeLessThan(signed.indexOf("electron-builder"));
+  });
+
+  it("ships electron-updater and @sentry/electron as runtime dependencies, locked", () => {
+    const lock = JSON.parse(fs.readFileSync(path.join(root, "package-lock.json"), "utf8"));
+    for (const name of ["electron-updater", "@sentry/electron"]) {
+      expect(pkg.dependencies[name]).toBeTruthy();
+      expect(pkg.devDependencies[name]).toBeUndefined();
+      expect(lock.packages[""].dependencies[name]).toBe(pkg.dependencies[name]);
+      expect(lock.packages[`node_modules/${name}`]?.version).toBeTruthy();
+    }
   });
 
   it("windows builds nsis x64", () => {
@@ -36,6 +71,8 @@ describe("electron-builder config", () => {
 
   it("app.config.json ships no default appUrl (APP_URL or the setup screen provides it)", () => {
     const cfg = JSON.parse(fs.readFileSync(path.join(root, "app.config.json"), "utf8"));
-    expect(cfg.appUrl).toBeNull();
+    expect(cfg).toEqual({ appUrl: null });
+    expect("updates" in cfg).toBe(false);
+    expect("sentryDsn" in cfg).toBe(false);
   });
 });

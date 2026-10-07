@@ -9,13 +9,16 @@
     "build": "tsc -p tsconfig.json",
     "dev": "npm run build && electron .",
     "test": "vitest run",
-    "package": "npm run build && electron-builder --mac",
+    "package": "npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --publish never",
     "postinstall": "electron-builder install-app-deps",
     "package:win": "npm run build && electron-builder --win nsis --x64",
-    "package:dir": "npm run build && electron-builder --mac dir",
-    "make-icon": "node scripts/make-icon.mjs"
+    "package:dir": "npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac dir --publish never",
+    "make-icon": "node scripts/make-icon.mjs",
+    "package:signed": "npm run build && node dist/signingEnv.mjs && electron-builder --mac --publish never"
   },
   "dependencies": {
+    "@sentry/electron": "^8.1.0",
+    "electron-updater": "^6.8.9",
     "get-windows": "^9.3.0",
     "uiohook-napi": "^1.5.5",
     "ws": "^8.22.0"
@@ -58,6 +61,13 @@
           ]
         },
         {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        },
+        {
           "target": "dir",
           "arch": [
             "arm64",
@@ -66,14 +76,21 @@
         }
       ],
       "icon": "assets/icon.icns",
-      "identity": null,
       "hardenedRuntime": true,
       "entitlements": "assets/entitlements.mac.plist",
       "entitlementsInherit": "assets/entitlements.mac.plist",
       "extendInfo": {
         "NSMicrophoneUsageDescription": "AI Apprentice listens while you talk to your agent (push to talk).",
         "NSScreenCaptureUsageDescription": "AI Apprentice sees your screen while you train or learn, so the agent can follow your work and point at things."
-      }
+      },
+      "notarize": true,
+      "publish": [
+        {
+          "provider": "github",
+          "owner": "K3NTAW",
+          "repo": "ai-apprentice-desktop"
+        }
+      ]
     },
     "win": {
       "target": [
@@ -84,7 +101,8 @@
           ]
         }
       ],
-      "icon": "assets/icon.ico"
+      "icon": "assets/icon.ico",
+      "publish": null
     },
     "nsis": {
       "oneClick": true,
