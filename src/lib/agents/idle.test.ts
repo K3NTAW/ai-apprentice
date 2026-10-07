@@ -159,7 +159,7 @@ describe("fileIdleCapturePort", () => {
   });
 
   it("openCaptures is capped, oldest first, and reports the total", async () => {
-    const ids = [];
+    const ids: string[] = [];
     for (let i = 0; i < 3; i++) ids.push((await fileStore.createSession({ kind: "capture" })).id);
     const { captures, total } = await fileIdleCapturePort().openCaptures(Date.now() + 1000, 2);
     expect(total).toBe(3);
