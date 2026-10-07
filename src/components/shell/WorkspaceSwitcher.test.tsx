@@ -20,7 +20,7 @@ vi.mock("next/link", () => ({
 
 const memberships: Membership[] = [
   { workspaceId: "w1", name: "Bakery", role: "owner", city: "Zug" },
-  { workspaceId: "w2", name: "Garage", role: "member", city: null },
+  { workspaceId: "w2", name: "Garage", role: "learner", city: null },
 ];
 
 let host: HTMLDivElement;
