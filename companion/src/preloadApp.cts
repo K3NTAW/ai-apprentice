@@ -7,7 +7,7 @@ type Message = { type: string; [key: string]: unknown };
 type Handler = (msg: Message) => void;
 type Info = { version: string; platform: string; status: Message | null };
 
-const EVENT_TYPES = ["status", "activity", "app", "chord", "shortcut"];
+const EVENT_TYPES = ["status", "activity", "app", "chord", "shortcut", "update"];
 const WINDOW_ACTIONS = ["step-aside", "restore", "focus", "relaunch"];
 const PERMISSION_KINDS = ["microphone", "screen", "accessibility", "input-monitoring"];
 

@@ -25,6 +25,7 @@ import { blockedNavigationLog, isLoadErrorAction, loadErrorView, navigationAllow
 import { BRIDGE_CHANNELS, createForwarder, exposeBridge, routeBridgeMessage, senderAllowed, type BridgeHandlers } from "./bridge.mjs";
 import { buddyView, cursorPollNeeded, expireBuddy, initialBuddy, reduceBuddy, type BuddyAction } from "./buddy.mjs";
 import { chordsEnabled, createChordListener, type ChordGates } from "./chord.mjs";
+import { initCrashReporting } from "./crash.mjs";
 import {
   avatarState,
   ACK_TTL_MS,
@@ -79,6 +80,7 @@ import {
 import { startServer, type CompanionServer } from "./server.mjs";
 import { installLifecycle, mainCloseAction } from "./lifecycle.mjs";
 import { MAC_SETTINGS_URLS } from "./permissionSettings.mjs";
+import { createUpdater, readUpdatesFlag, type AutoUpdaterLike } from "./updater.mjs";
 import { installSessionGuardsOn, isWindowAction, mainWindowOptions, planWindowAction, restoreWindowBounds, serializeWindowBounds, type WindowAction } from "./windowActions.mjs";
 
 const require = createRequire(import.meta.url);
@@ -802,6 +804,27 @@ const bridgeHandlers: BridgeHandlers = {
 const isMainContents = (wc: Electron.WebContents | null | undefined) => !!wc && !!mainWin && !mainWin.isDestroyed() && wc === mainWin.webContents;
 
 /** Sender check for every bridge handler: main window, main frame, allowlisted origin. */
+// Release builds only: app.config.json carries "updates": true on the release runner (updater.mts).
+const releaseConfigText: string | null = (() => {
+  try {
+    return fs.readFileSync(path.join(here, "..", "app.config.json"), "utf8");
+  } catch {
+    return null;
+  }
+})();
+const updatesEnabled = process.platform === "darwin" && app.isPackaged && readUpdatesFlag(releaseConfigText);
+// Update events go to the main window only (dock, panel and pairing windows never get them).
+const updater = createUpdater({
+  autoUpdater: updatesEnabled ? (require("electron-updater") as { autoUpdater: AutoUpdaterLike }).autoUpdater : null,
+  enabled: updatesEnabled,
+  log: { debug: (line) => log(`debug ${line}`) },
+  onEvent: (msg) => {
+    if (!mainWin || mainWin.isDestroyed() || !isMainContents(mainWin.webContents)) return;
+    if (!senderAllowed({ isMainWebContents: true, isMainFrame: true, url: mainWin.webContents.getURL() }, appList)) return;
+    mainWin.webContents.send(BRIDGE_CHANNELS.event, msg);
+  },
+});
+
 function bridgeSender(e: { sender: Electron.WebContents; senderFrame: Electron.WebFrameMain | null }) {
   const frame = e.senderFrame;
   return {
@@ -1173,9 +1196,16 @@ async function boot(): Promise<void> {
     }
   }, 250);
   permissionMonitor.start();
+  updater.start();
   // COMPANION_PERF=1: CPU per process every 5 s (docs/checks/performance.md, desktop section).
   if (perfEnabled(process.env.COMPANION_PERF)) timers.add(() => log(formatMetrics(app.getAppMetrics())), PERF_LOG_MS);
 }
+
+// Crash reporting first, before ready: only with a sentryDsn in app.config.json (crash.mts).
+initCrashReporting({
+  configText: releaseConfigText,
+  init: (opts) => (require("@sentry/electron/main") as typeof import("@sentry/electron/main")).init(opts),
+});
 
 // Before the lock and before ready: the new name, and userData pinned to the pre-rename folder.
 app.setName(PRODUCT_NAME);
@@ -1199,6 +1229,7 @@ if (!app.requestSingleInstanceLock()) {
     cursorPoller.set(false);
     throttle.cancel();
     timers.clearAll();
+    updater.stop();
     void server?.close();
   });
   void app.whenReady().then(boot);
