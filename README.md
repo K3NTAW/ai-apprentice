@@ -26,7 +26,7 @@ Capture -> Debrief -> Work Map -> Teach
 
 | Stage | What happens | Code |
 | --- | --- | --- |
-| Capture | The expert works in their own apps. Frames go to a vision model and become screen events (`invoice 4471 opened`, `cost center changed 4711 -> 0400`). The interviewer agent (ElevenLabs) asks about judgment calls and guardrails at natural pauses. | `src/lib/capture`, `src/lib/perception`, `src/lib/voice` |
+| Capture | The expert works in their own apps. Frames go to a vision model and become screen events (`receipt 3 opened`, `category changed Office -> Travel`). The sample task used throughout: file five expense receipts in a spreadsheet (date, vendor, amount, category per row). The interviewer agent (ElevenLabs) asks about judgment calls and guardrails at natural pauses. | `src/lib/capture`, `src/lib/perception`, `src/lib/voice` |
 | Debrief | A spoken follow-up on what is still unclear, lowest scores first, then a teach-back the expert confirms or corrects. | `src/lib/debrief`, `src/lib/workmap/score.ts`, `src/lib/workmap/teachback.ts` |
 | Work Map | A timeline of steps. Each step has its screen moment, the decision, the reason in the expert's words and the guardrails. | `src/lib/workmap` |
 | Teach | The tutor agent watches the new hire, matches their actions to Work Map steps, asks them to predict the next decision and stops them before a guardrail is broken, with the expert's quote and screen moment. | `src/lib/teach` |
@@ -36,7 +36,7 @@ Capture -> Debrief -> Work Map -> Teach
 1. **When to ask.** `src/lib/voice/askGate.ts`. The default "active" cadence asks only at a real pause: speech silence >= 1.2 s, no typing for >= 2 s and a stable screen for >= 1 s, right after a meaningful action. At most one question per 60 s and 8 per 10 minutes (both agent settings). While the expert types or talks it waits.
 2. **What to ask.** Each event is classified `routine`, `judgment_call` or `possible_guardrail`, plus whether the screen already explains it. Routine and self-explaining events are skipped. Events the expert already explained in unprompted narration are skipped too (`src/lib/capture/narration.ts`). If questions were asked and none was about a guardrail, the next one is.
 3. **When it has understood.** Every Work Map step gets two scores, `reason_captured` and `guardrail_captured` (0 to 1). The debrief targets the lowest ones and is done when all are at or above `SCORE_THRESHOLD = 0.75` (`src/lib/types.ts`). The teach-back is a deterministic template capped at 130 words (`TEACHBACK_MAX_WORDS`), so it is spoken in under a minute. The expert confirms or corrects it explicitly.
-4. **Whether the new hire learned.** In Teach, every value change matched to a step runs deterministic limit rules parsed from the guardrails first (no network, e.g. "over 5,000 must be coded 0400"). Only when no rule applies is one capped `violates_guardrail` decision made. A hit stops the new hire ("Sabine would stop here. Why do you think?"), shows the expert's quote and screen moment, and the session ends with a mastery summary per step (`src/lib/teach/intervention.ts`, `src/lib/teach/mastery.ts`).
+4. **Whether the new hire learned.** In Teach, every value change matched to a step runs deterministic limit rules parsed from the guardrails first (no network, e.g. "amounts over 500 need the category Travel"). Only when no rule applies is one capped `violates_guardrail` decision made. A hit stops the new hire ("Your expert would stop here. Why do you think?"), shows the expert's quote and screen moment, and the session ends with a mastery summary per step (`src/lib/teach/intervention.ts`, `src/lib/teach/mastery.ts`).
 5. **Trust.** Saying "off the record" (the phrase is an agent setting) or pressing Pause / Off the record actually stops frames and transcript, and nothing said off the record is kept. Transcript text and screen event text are redacted before storage or any LLM call: names, emails, IBANs, phone and card numbers (`src/lib/redact`, `src/lib/perception/redactEvent.ts`). **Frames themselves are not redacted yet.**
 
 ## Architecture
@@ -117,6 +117,20 @@ Names only. See `.env.example` and [docs/DEPLOY.md](docs/DEPLOY.md) for what eac
 | `PRESIDIO_URL` | Optional Presidio server for redaction |
 | `USAGE_CAP_VISION`, `USAGE_CAP_DECIDE`, `USAGE_CAP_WORKMAP`, `USAGE_CAP_VOICE` | Optional daily caps per workspace |
 | `NEXT_PUBLIC_MARKETING_URL`, `NEXT_PUBLIC_DESKTOP_DOWNLOAD_MAC`, `NEXT_PUBLIC_DESKTOP_DOWNLOAD_WIN` | Optional links in the app |
+| `JEV_MODEL` | Optional Jev model id (default `jev-latest`) |
+| `USAGE_EVENTS` | Cost meter. `0` turns off `usage_events` recording (default on in Supabase mode) |
+| `STORE_ALL_FRAMES` | `1` stores every frame (rollback). Default: only key-moment frames |
+| `DATA_DIR` | Local mode data directory (default `./data`) |
+| `ONBOARDING_ENABLED` | `0`, `false`, `off` or `no` turns off onboarding (default on) |
+| `PERF_LOG` | `1` logs server timings |
+| `SENTRY_DSN` | Optional Sentry, server. Empty: off. See [docs/OBSERVABILITY.md](docs/OBSERVABILITY.md) |
+| `NEXT_PUBLIC_SENTRY_DSN` | Optional Sentry, browser. Inlined at build time |
+| `NEXT_PUBLIC_COMPANION_WS` | Optional. `1` turns on the old local WebSocket companion (default off) |
+| `NEXT_PUBLIC_ASK_CADENCE` | Optional. `active` (default) or `classic` (rollback) |
+| `NEXT_PUBLIC_TTS_OVERRIDES` | Optional. `1` allows TTS overrides on the voice agents (default off) |
+| `SUPABASE_TEST_URL`, `SUPABASE_TEST_ANON_KEY`, `SUPABASE_TEST_SERVICE_ROLE_KEY`, `SUPABASE_TEST_ALLOWED_HOST` | `npm run test:db` only, against the local Supabase CLI stack ([docs/checks/db-tests.md](docs/checks/db-tests.md)) |
+
+Desktop release secrets (signing, notarization, release token) are not app env vars. They live in GitHub Actions secrets, see [docs/RELEASE.md](docs/RELEASE.md).
 
 ### Local mode (no Supabase)
 
@@ -139,8 +153,16 @@ npm run typecheck        # tsc --noEmit
 npm run lint             # ESLint
 npm run test:companion   # desktop app: ci, tests, build
 npm run e2e              # Playwright click-through in local mode
+npm run test:db          # RLS tests against the local Supabase CLI stack (docs/checks/db-tests.md)
 BASE_URL=... E2E_EMAIL=... E2E_PASSWORD=... npm run e2e:live   # against a deployed app with real keys
 ```
+
+GitHub Actions workflows (`.github/workflows/`, secret names in [docs/DEPLOY.md](docs/DEPLOY.md#github-actions)):
+
+- `ci.yml`: lint, typecheck and `npm test` on every push and PR (lands with RLS tests 2/2).
+- `db-tests.yml`: `npm run test:db` against a throwaway local Supabase stack, no secrets (lands with RLS tests 2/2).
+- `nightly-live.yml`: `npm run e2e:live` against staging every day at 03:00 UTC ([docs/checks/e2e-live.md](docs/checks/e2e-live.md)).
+- `desktop-release.yml`: manual signed macOS release ([docs/RELEASE.md](docs/RELEASE.md)).
 
 Marketing site: `npm run marketing:dev` (port 3100), `npm run marketing:build`.
 
@@ -151,21 +173,24 @@ Full step-by-step guide: [docs/DEPLOY.md](docs/DEPLOY.md).
 1. **Vercel, two projects from one repo.** The app with root directory = repo root, and the marketing site with root directory `marketing`. Env vars as in the table above (the marketing site has no server secrets). `vercel.json` schedules the retention cron.
 2. **Supabase migrations.** `supabase login`, `supabase link --project-ref <project-ref>`, `supabase db push`. Or run the files in `supabase/migrations/` in filename order in the SQL editor. They create the schema, RLS policies and the private `frames` bucket.
 3. **ElevenLabs agents.** `node scripts/create-agents.mjs` creates the interviewer and tutor agents and prints their ids for `ELEVENLABS_AGENT_ID_INTERVIEWER` and `ELEVENLABS_AGENT_ID_TUTOR`. Rerun with `--update` to push prompt and tool changes to existing agents, add `--dry-run` to print the bodies only. More: [docs/VOICE_SETUP.md](docs/VOICE_SETUP.md).
-4. **Desktop packaging.** `npm --prefix companion run package` builds the macOS dmg (arm64 and x64). Upload it as a release asset and set the download variables on the marketing project.
+4. **Desktop packaging.** `npm --prefix companion run package` builds an unsigned macOS dmg (arm64 and x64) for local use. Signed releases run through `desktop-release.yml`, see [docs/RELEASE.md](docs/RELEASE.md). Set the download variables on the marketing project to the release assets.
 
 ## Trust, privacy and limitations
 
 **Trust and privacy**
 
+- Capture prefers a single window: the browser picker opens on windows, and the desktop app uses the macOS system picker. Entire screen stays selectable.
+- Only key-moment frames are stored: frames with a non-routine event. Routine frames are dropped after vision. `STORE_ALL_FRAMES=1` is the rollback.
+- Default retention is 90 days (`retention_days` in agent settings, `src/lib/agents/settings.ts`). The daily retention cron deletes older frames.
 - Off the record by voice or button stops frames and transcript. Nothing said off the record is stored.
 - Transcript and screen event text are redacted before storage and before any LLM call.
-- Data is scoped per workspace with Postgres RLS. Frames live in a private Storage bucket and expire through the daily retention cron.
+- Data is scoped per workspace with Postgres RLS. Frames live in a private Storage bucket.
 - Daily usage caps per workspace on every paid call.
 
 **Known limitations**
 
-- The macOS app is unsigned and not notarized. macOS will warn on first open.
-- Frames are not redacted yet. Only text is.
+- Signed builds ship through [docs/RELEASE.md](docs/RELEASE.md) once the certificate exists. Until then the macOS app is unsigned and macOS warns on first open.
+- Frames are not pixel-redacted yet. Only text is.
 - Vision latency: screen events trail the screen by the vision round trip, so the agent can be a beat late.
 - No Windows build yet (the `package:win` target exists but is not released).
 

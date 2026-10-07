@@ -171,3 +171,54 @@ upload each installer to a public host (e.g. a GitHub Release asset), paste each
 variable on the marketing project and redeploy it. A value that is not an http(s) URL counts as unset. The
 variables are inlined at build time, so every change needs a redeploy. Local check: `npm run marketing:dev`
 (port 3100) and `npm run marketing:build` from the repo root.
+
+## 11. Staging
+
+See docs/STAGING.md (RLS tests 2/2). It lands with T-0352 and is not on this branch yet; this guide does not
+repeat its content.
+
+## 12. Observability env
+
+Set on the app project, Production and Preview, both optional:
+
+| Name | Notes |
+| --- | --- |
+| SENTRY_DSN | Sentry for the server (nodejs runtime). Empty: Sentry is off |
+| NEXT_PUBLIC_SENTRY_DSN | Sentry for the browser. Inlined at build time: unset it and redeploy to turn it off |
+
+Log line format, what is sent, the smoke check and rollback: docs/OBSERVABILITY.md.
+
+## 13. Cost meter migration
+
+The cost meter records model and voice usage in `usage_events` (details: docs/checks/cost-meter.md).
+
+1. Apply the migration `supabase/migrations/20261006000000_usage_events.sql` (`supabase db push`).
+2. Then deploy the app.
+
+The app without the migration is safe: the recorder backs off on the missing table and the cost route answers 500
+until the view exists. `USAGE_EVENTS=0` on the app project turns recording off. The rollback destroys billing
+history, see the Rollback section of docs/checks/cost-meter.md.
+
+## 14. GitHub Actions
+
+Workflows live in `.github/workflows/`. Repository secrets go under Settings, Secrets and variables, Actions.
+Names only; values never go into the repo, docs or issues.
+
+| Workflow | Runs | Secret names |
+| --- | --- | --- |
+| ci.yml | every push and pull request: lint, typecheck, `npm test` (lands with RLS tests 2/2) | none |
+| db-tests.yml | `npm run test:db` against a local `supabase start` stack (lands with RLS tests 2/2) | none |
+| nightly-live.yml | `npm run e2e:live` against staging, daily 03:00 UTC and on demand | BASE_URL, E2E_EMAIL, E2E_PASSWORD (GITHUB_TOKEN is automatic) |
+| desktop-release.yml | manual, signed and notarized macOS release from the default branch | CSC_LINK, CSC_KEY_PASSWORD, APPLE_API_KEY_P8, APPLE_API_KEY_ID, APPLE_API_ISSUER, DESKTOP_RELEASE_TOKEN, SENTRY_DSN_ELECTRON |
+
+## 15. Nightly live run
+
+`nightly-live.yml` runs the live hands-on suite against staging every night and on demand (Actions, Nightly live
+e2e, Run workflow). It fails at its first step with the missing secret's name when one is not set. Setup, output and
+the data it creates and removes: docs/checks/e2e-live.md.
+
+## 16. Desktop release
+
+Signed and notarized macOS builds ship through `desktop-release.yml` once the Apple Developer certificate exists.
+One-time setup, the release procedure, rollback and what the app sends: docs/RELEASE.md. Until then
+`npm --prefix companion run package` builds an unsigned local dmg.
