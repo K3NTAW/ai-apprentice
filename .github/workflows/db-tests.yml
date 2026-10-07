@@ -1,5 +1,5 @@
-# RLS tests (T-0352, P0-1 part 2/2): npm run test:db against the local Supabase CLI stack only.
-# No hosted project and no repository secrets. The local keys are masked before they reach GITHUB_ENV.
+# RLS tests (T-0352, P0-1 part 2/2): the db-tests suite against the local Supabase CLI stack only.
+# No hosted project and no repository secrets; the local keys are masked before they are exported.
 # See docs/checks/db-tests.md and docs/STAGING.md.
 name: DB tests
 
