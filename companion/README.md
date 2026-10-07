@@ -285,9 +285,18 @@ permissions granted to the old app where the signature allows it. userData stays
 (`AI Apprentice Companion`, dev: `ai-apprentice-companion`), so settings, dock prefs and window
 state survive the rename.
 
-The app is **not signed or notarized** (`identity: null`; entitlements in
-`assets/entitlements.mac.plist` incl. `com.apple.security.device.audio-input` apply once it is
-signed). Before first launch remove the quarantine flag:
+### Signed releases
+
+Signed and notarized macOS releases are built only by the `Desktop release` GitHub Actions workflow
+(`npm run package:signed` on the runner, keys from repository secrets) and uploaded as drafts to
+`K3NTAW/ai-apprentice-desktop`. Setup, release, rollback and the human checks: [docs/RELEASE.md](../docs/RELEASE.md).
+Windows stays unsigned (NSIS, SmartScreen warning expected) with no auto-update.
+
+### Unsigned local builds
+
+`npm run package` and `package:dir` build **unsigned, not notarized** apps (identity discovery off;
+entitlements in `assets/entitlements.mac.plist` incl. `com.apple.security.device.audio-input` apply
+once it is signed). Before first launch remove the quarantine flag:
 
 ```sh
 xattr -dr com.apple.quarantine "release/mac-arm64/AI Apprentice.app"
@@ -438,8 +447,18 @@ Invalid messages are ignored with a log line. Halos are cleared on disconnect, o
 - Shortcuts (modifier combos such as `Cmd+Shift+T`) are recorded and sent to the paired page with the
   frontmost app name; plain typing never is (see Chords for exactly what counts). No chords while
   paused, off the record or with `COMPANION_CHORDS=0`.
-- Nothing leaves the machine except to the paired local web page over `127.0.0.1`. No files, no
-  telemetry, no network calls.
+- Local and unsigned builds (`npm run dev`, `package`, `package:dir`, `package:win`) make no network
+  calls beyond the configured app URL (the page the window loads). No files are uploaded.
+- Signed releases (see [docs/RELEASE.md](../docs/RELEASE.md)) additionally, and only because the
+  release config written on the release runner sets `updates: true` and `sentryDsn`:
+  1. **Update checks**: at start and every 6 hours the app checks GitHub releases
+     (`latest-mac.yml` on `K3NTAW/ai-apprentice-desktop`), downloads a newer version in the background
+     and installs it on quit.
+  2. **Crash reports** to Sentry, PII scrubbed: no breadcrumbs, no screenshots, home paths rewritten
+     to `~`. Without a `sentryDsn` no crash reports are sent.
+- There is no opt-out yet: neither has an in-app switch today. The only way to block them is editing
+  `app.config.json` inside the app bundle (`/Applications/AI Apprentice.app/Contents/Resources/app.asar`,
+  entry `app.config.json`), which invalidates the code signature, so it is not a real option.
 
 ## Build choices
 
