@@ -116,11 +116,13 @@ export default function WorkspaceSwitcher({
   name,
   activeId,
   memberships,
+  deps,
 }: {
   mode: "local" | "supabase";
   name: string;
   activeId: string | null;
   memberships: Membership[];
+  deps?: MenuDeps;
 }) {
   const [error, setError] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -138,7 +140,7 @@ export default function WorkspaceSwitcher({
   const active = memberships.find((m) => m.workspaceId === activeId);
   const select = async (workspaceId: string) => {
     setError(false);
-    const result = await switchWorkspace(workspaceId, activeId, browserDeps());
+    const result = await switchWorkspace(workspaceId, activeId, deps ?? browserDeps());
     // On success the page is reloading into the chosen workspace: close the menu so it never shows the old check.
     if (!result.ok) setError(true);
     else close();
