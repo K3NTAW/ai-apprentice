@@ -1,0 +1,62 @@
+# RLS tests (T-0352, P0-1 part 2/2): npm run test:db against the local Supabase CLI stack only.
+# No hosted project and no repository secrets. The local keys are masked before they reach GITHUB_ENV.
+# See docs/checks/db-tests.md and docs/STAGING.md.
+name: DB tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: db-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  db-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+
+      - uses: supabase/setup-cli@45a513f8c64c0bc8e0e3dfe572b5c95be85f6359 # v3.0.1
+        with:
+          version: 2.109.0
+
+      - run: npm ci
+
+      - name: Start the local Supabase stack
+        run: supabase start
+
+      - name: Export the local stack env (masked)
+        run: |
+          status="$(supabase status -o env)"
+          url="$(printf '%s\n' "$status" | sed -n 's/^API_URL="\{0,1\}\([^"]*\)"\{0,1\}$/\1/p')"
+          anon="$(printf '%s\n' "$status" | sed -n 's/^ANON_KEY="\{0,1\}\([^"]*\)"\{0,1\}$/\1/p')"
+          service="$(printf '%s\n' "$status" | sed -n 's/^SERVICE_ROLE_KEY="\{0,1\}\([^"]*\)"\{0,1\}$/\1/p')"
+          if [ -z "$url" ] || [ -z "$anon" ] || [ -z "$service" ]; then
+            echo "::error::supabase status -o env did not return API_URL, ANON_KEY and SERVICE_ROLE_KEY"
+            exit 1
+          fi
+          echo "::add-mask::$anon"
+          echo "::add-mask::$service"
+          echo "::add-mask::$url"
+          {
+            echo "SUPABASE_TEST_URL=$url"
+            echo "SUPABASE_TEST_ANON_KEY=$anon"
+            echo "SUPABASE_TEST_SERVICE_ROLE_KEY=$service"
+          } >> "$GITHUB_ENV"
+
+      - name: Run test:db
+        run: REQUIRE_DB=1 npm run test:db
+
+      - name: Stop the local Supabase stack
+        if: always()
+        run: supabase stop
