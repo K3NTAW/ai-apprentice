@@ -27,7 +27,11 @@ export type RequestContext = {
   fullName?: string | null;
   /** When the user's address was confirmed (Supabase email_confirmed_at); null when never. Unset in local mode. */
   emailConfirmedAt?: string | null;
-  /** Supabase: onboarding state from user_metadata (T-0211); unset when not known (forwarded user, completed) and in local mode. */
+  /**
+   * Supabase: onboarding state from user_metadata (T-0211), always set. The forwarded user carries it (T-0255); a
+   * forwarded payload without it (signed before that deploy, inside the TTL) is treated as unknown and the context
+   * reads the server state with getUser instead, so AppShell and /onboarding never disagree. Unset in local mode.
+   */
   onboarding?: OnboardingState;
   workspaceId: string;
   workspaceName: string;
@@ -209,6 +213,8 @@ async function resolveRequestContext(opts: ResolveOpts): Promise<ContextResult> 
   } | null = opts.fresh
     ? null
     : await forwardedUser();
+  // No onboarding in the forwarded payload means unknown, not completed: fetch the server state.
+  if (user && !user.onboarding) user = null;
   if (!user) {
     user = await timed("ctx-auth", async () => {
       try {
@@ -237,7 +243,7 @@ async function resolveRequestContext(opts: ResolveOpts): Promise<ContextResult> 
   if (memberships.length === 0) return { kind: "no_workspace" };
 
   const active = pickActive(memberships, wsCookie);
-  const onboarding = user.onboarding ?? (user.user_metadata ? stateFromUser(user) : undefined);
+  const onboarding = user.onboarding ?? stateFromUser(user);
   return {
     kind: "ok",
     ctx: {
@@ -246,7 +252,7 @@ async function resolveRequestContext(opts: ResolveOpts): Promise<ContextResult> 
       email: user.email ?? null,
       fullName: metadataFullName(user.user_metadata) ?? user.full_name ?? null,
       emailConfirmedAt: user.email_confirmed_at ?? null,
-      ...(onboarding ? { onboarding } : {}),
+      onboarding,
       workspaceId: active.workspaceId,
       workspaceName: active.name,
       role: active.role,

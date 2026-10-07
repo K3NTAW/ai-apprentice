@@ -35,7 +35,18 @@ vi.mock("next/headers", () => ({
   headers: async () => new Headers(state.headers),
 }));
 
+vi.mock("next/navigation", () => ({
+  redirect: (to: string) => {
+    throw new Error(`NEXT_REDIRECT ${to}`);
+  },
+  useRouter: () => ({ push: () => {} }),
+}));
+vi.mock("@/app/agents/new/experts", () => ({ loadExpertOptions: async () => [] }));
+
+import { createHash, createHmac } from "node:crypto";
 import { NextRequest } from "next/server";
+import OnboardingPage from "@/app/onboarding/page";
+import { shellUser } from "@/components/shell/AppShell";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { proxy } from "@/proxy";
 import { FORWARDED_USER_HEADER, signForwardedUser } from "./forwardedUser";
@@ -369,4 +380,47 @@ describe("workspace view model", () => {
     expect(emailLookupIds({ ...baseCtx, role: "expert" }, many)).toEqual([]);
     expect(emailLookupIds(baseCtx, members)).toEqual([OTHER]);
   });
+});
+
+describe("forwarded payload without onboarding (signed before T-0255, inside the 30 s TTL)", () => {
+  // Same key and HMAC as forwardedUser.ts, so the header verifies like an old proxy's would.
+  const oldHeader = (id: string) => {
+    const k = createHash("sha256").update("aa-forwarded-user:test-forwarded-secret").digest();
+    const payload = Buffer.from(JSON.stringify({ id, email: null, email_confirmed_at: null, exp: Date.now() + 30_000 })).toString("base64url");
+    return `${payload}.${createHmac("sha256", k).update(payload).digest("base64url")}`;
+  };
+  const pageOutcome = async () => {
+    try {
+      await OnboardingPage({ searchParams: Promise.resolve({}) });
+      return "onboarding";
+    } catch (e) {
+      return String((e as Error).message);
+    }
+  };
+  const cases = [
+    {
+      name: "finished on the server",
+      meta: { onboarding_completed_at: "2026-10-05T08:00:00Z", onboarding_steps: { workspace: "done", permissions: "done", agent: "done", training: "done" } },
+      open: false,
+      page: "NEXT_REDIRECT /agents",
+    },
+    { name: "in progress on the server", meta: { onboarding_steps: { workspace: "done" } }, open: true, page: "onboarding" },
+  ];
+
+  for (const c of cases) {
+    it(`is unknown, not completed: the context reads the server state and AppShell and /onboarding agree (${c.name})`, async () => {
+      state.headers = { [FORWARDED_USER_HEADER]: oldHeader(USER) };
+      const client = fakeClient({ members: { data: [memberRow(WS_A, "A")], error: null } });
+      client.auth.getUser.mockImplementation(async () => ({
+        data: { user: { id: USER, created_at: "2026-10-06T08:00:00Z", user_metadata: c.meta } as never },
+        error: null,
+      }));
+      state.client = client;
+      const r = await getRequestContext();
+      expect(client.auth.getUser).toHaveBeenCalled();
+      expect(r.kind === "ok" && r.ctx.onboarding).toBeTruthy();
+      expect((await shellUser())?.onboardingOpen).toBe(c.open);
+      expect(await pageOutcome()).toBe(c.page);
+    });
+  }
 });

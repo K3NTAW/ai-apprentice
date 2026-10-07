@@ -408,8 +408,13 @@ function saveTeach(id: string, teach: TeachProgress): Promise<Session> {
 }
 
 function endSession(id: string): Promise<Session> {
+  return endSessionAt(id, new Date().toISOString());
+}
+
+/** Sets ended_at once (an ended session keeps its time). endSession and the idle-capture cron (the run time) share it. */
+export function endSessionAt(id: string, endedAt: string): Promise<Session> {
   return mutate(id, (s) => {
-    s.ended_at ??= new Date().toISOString();
+    s.ended_at ??= endedAt;
   });
 }
 

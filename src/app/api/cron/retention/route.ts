@@ -6,8 +6,9 @@
 // Work: src/lib/agents/admin.ts runRetention with the service role (idempotent, at most RETENTION_BATCH frames
 // per run, Storage objects before rows). Then the empty capture runs that ended 24 h ago or more
 // (src/lib/capture/emptyPurge.ts, at most EMPTY_PURGE_BATCH per run); the answer adds empty_purged. Then capture
-// sessions idle for more than 2 h are ended (endIdleCaptures), so they stop showing 'live' in the sidebar; the answer
-// adds ended_captures.
+// sessions idle for more than 2 h are ended (endIdleCaptures, at most IDLE_BATCH checked per run, oldest first), so
+// they stop showing 'live' in the sidebar; the answer adds ended_captures and captures_remaining (open captures past
+// the cap, left for the next run).
 // The three run independently: any may fail (error / empty_error / idle_error in the answer, 502, or 503 for
 // settings) and the others still run and report their result.
 import {
@@ -69,7 +70,8 @@ async function handleGET(req: Request) {
   }
   let idle: Record<string, unknown>;
   try {
-    idle = { ended_captures: (await endIdleCaptures(db ? supabaseIdleCapturePort(db) : fileIdleCapturePort(), now)).ended };
+    const r = await endIdleCaptures(db ? supabaseIdleCapturePort(db) : fileIdleCapturePort(), now);
+    idle = { ended_captures: r.ended, captures_remaining: r.remaining };
   } catch (err) {
     log.error("cron end idle captures", { error: message(err) });
     idle = { idle_error: "end_idle_failed" };

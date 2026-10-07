@@ -40,6 +40,13 @@ are shown in the app and the dock.
 - **Quit**: Cmd+Q or `AI Apprentice > Quit` in the app menu (Windows: close the window outside a
   session, or `File > Exit`).
 
+## Known changes
+
+- **Sign in once after the persistent-session update (T-0255)**: the main window moved to its own
+  on-disk session (`persist:apprentice`), so the sign-in cookies of the older in-memory session are not
+  carried over. The first launch after this update asks you to sign in once; after that the sign-in
+  survives quitting the app.
+
 ## Where the app loads from (APP_URL)
 
 There is no built-in default URL. Order:

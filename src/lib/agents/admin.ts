@@ -22,6 +22,7 @@ import path from "node:path";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { RequestContext } from "@/lib/auth/context";
 import { dataDir, fileStore, framePath } from "@/lib/store";
+import { endSessionAt } from "@/lib/store/file";
 import { appMode } from "@/lib/supabase/env";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { AgentSettingsPatch, resolveSettings, type AgentSettings } from "./settings";
@@ -189,17 +190,30 @@ export async function runRetention(port: RetentionPort, now: number, limit = RET
 
 export const IDLE_CAPTURE_MS = 2 * 60 * 60 * 1000;
 export type OpenCapture = { id: string; started_at: string; last_t: number | null };
+/** Open captures checked per run (three latest-t reads each), oldest first; the rest wait for the next run. */
+export const IDLE_BATCH = 50;
 export type IdleCapturePort = {
-  /** Capture sessions without ended_at that started before cutoffMs, with their latest event, transcript or frame t. */
-  openCaptures(cutoffMs: number): Promise<OpenCapture[]>;
+  /**
+   * The oldest `limit` capture sessions without ended_at that started before cutoffMs, with their latest event,
+   * transcript or frame t, and how many such sessions there are in total.
+   */
+  openCaptures(cutoffMs: number, limit: number): Promise<{ captures: OpenCapture[]; total: number }>;
+  /** Sets ended_at = endedAt on sessions still open; an ended session keeps its ended_at. */
   endSessions(ids: string[], endedAt: string): Promise<void>;
 };
 
-export async function endIdleCaptures(port: IdleCapturePort, now: number, idleMs = IDLE_CAPTURE_MS): Promise<{ ended: number }> {
+/** remaining: open captures past the cap, not checked this run (the cron reports it so a backlog is visible). */
+export async function endIdleCaptures(
+  port: IdleCapturePort,
+  now: number,
+  idleMs = IDLE_CAPTURE_MS,
+  batch = IDLE_BATCH,
+): Promise<{ ended: number; remaining: number }> {
   const cutoff = now - idleMs;
-  const idle = (await port.openCaptures(cutoff)).filter((s) => frameTimeMs(s.started_at, s.last_t) < cutoff).map((s) => s.id);
+  const { captures, total } = await port.openCaptures(cutoff, batch);
+  const idle = captures.filter((s) => frameTimeMs(s.started_at, s.last_t) < cutoff).map((s) => s.id);
   if (idle.length) await port.endSessions(idle, new Date(now).toISOString());
-  return { ended: idle.length };
+  return { ended: idle.length, remaining: Math.max(0, total - captures.length) };
 }
 
 /** Frame time for retention: session start plus the frame's session time; a frame without t counts at the start. */
@@ -268,18 +282,20 @@ const maxT = (rows: { t?: number }[] | undefined) =>
 
 export function fileIdleCapturePort(): IdleCapturePort {
   return {
-    async openCaptures(cutoffMs) {
-      const out: OpenCapture[] = [];
-      for (const s of await fileSessions()) {
-        if (s.kind !== "capture" || s.ended_at || Date.parse(s.started_at) >= cutoffMs) continue;
+    async openCaptures(cutoffMs, limit) {
+      const open = (await fileSessions())
+        .filter((s) => s.kind === "capture" && !s.ended_at && Date.parse(s.started_at) < cutoffMs)
+        .sort((a, b) => Date.parse(a.started_at) - Date.parse(b.started_at));
+      const captures = open.slice(0, limit).map((s): OpenCapture => {
         const full = s as FileSession & { events?: { t?: number }[]; transcript?: { t?: number }[] };
         const ts = [maxT(full.events), maxT(full.transcript), maxT(s.frames)].filter((t): t is number => t !== null);
-        out.push({ id: s.id, started_at: s.started_at, last_t: ts.length ? Math.max(...ts) : null });
-      }
-      return out;
+        return { id: s.id, started_at: s.started_at, last_t: ts.length ? Math.max(...ts) : null };
+      });
+      return { captures, total: open.length };
     },
-    async endSessions(ids) {
-      for (const id of ids) await fileStore.endSession(id);
+    // The same end path as POST /api/session/<id>/end (fileStore.endSession), with the run time as ended_at.
+    async endSessions(ids, endedAt) {
+      for (const id of ids) await endSessionAt(id, endedAt);
     },
   };
 }
@@ -530,16 +546,26 @@ export function supabaseIdleCapturePort(db: SupabaseClient): IdleCapturePort {
     return rows[0]?.t ?? null;
   };
   return {
-    async openCaptures(cutoffMs) {
-      const sessions = must(
-        "select open captures",
-        await db
+    // A missing child table or t column (42P01 / PGRST205 / 42703) fails the run: ending captures without knowing
+    // their last activity could end live ones, so nothing is ended and the cron reports idle_error.
+    async openCaptures(cutoffMs, limit) {
+      const cutoff = new Date(cutoffMs).toISOString();
+      const open = () => db.from("sessions").select("id,started_at").eq("kind", "capture").is("ended_at", null).lt("started_at", cutoff);
+      const sessions = must("select open captures", await open().order("started_at", { ascending: true }).limit(limit)) as {
+        id: string;
+        started_at: string;
+      }[];
+      let total = sessions.length;
+      if (sessions.length >= limit) {
+        const res = await db
           .from("sessions")
-          .select("id,started_at")
+          .select("id", { count: "exact", head: true })
           .eq("kind", "capture")
           .is("ended_at", null)
-          .lt("started_at", new Date(cutoffMs).toISOString()),
-      ) as { id: string; started_at: string }[];
+          .lt("started_at", cutoff);
+        must("count open captures", res);
+        total = res.count ?? sessions.length;
+      }
       const out: OpenCapture[] = [];
       for (const s of sessions) {
         const ts = (await Promise.all([latest("session_events", s.id), latest("session_transcript", s.id), latest("session_frames", s.id)])).filter(
@@ -547,8 +573,10 @@ export function supabaseIdleCapturePort(db: SupabaseClient): IdleCapturePort {
         );
         out.push({ id: s.id, started_at: s.started_at, last_t: ts.length ? Math.max(...ts) : null });
       }
-      return out;
+      return { captures: out, total };
     },
+    // Not the store's endSession (POST /end): that runs per session with the user's client and RLS; the cron ends
+    // sessions of every workspace with the service role. Same rule: ended_at is set once, never moved.
     async endSessions(ids, endedAt) {
       must("end idle captures", await db.from("sessions").update({ ended_at: endedAt }).in("id", ids).is("ended_at", null));
     },

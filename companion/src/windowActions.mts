@@ -44,6 +44,36 @@ function bringBack(w: WindowSnapshot): WindowOp[] {
 export const MAIN_WINDOW = { width: 1280, height: 820, minWidth: 960, minHeight: 640 } as const;
 /** The main window's session: on disk ('persist:'), so the sign-in cookies survive a relaunch (T-0255). */
 export const MAIN_PARTITION = "persist:apprentice";
+/** BrowserWindow options for the main window; the persistent partition keeps the sign-in (T-0255). */
+export function mainWindowOptions(o: { bounds: SavedBounds; title: string; preload: string }) {
+  return {
+    ...o.bounds,
+    minWidth: MAIN_WINDOW.minWidth,
+    minHeight: MAIN_WINDOW.minHeight,
+    title: o.title,
+    show: false,
+    backgroundColor: "#0b0b0c",
+    webPreferences: {
+      preload: o.preload,
+      // Persistent session: the sign-in cookies survive quitting the app.
+      partition: MAIN_PARTITION,
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
+      webSecurity: true,
+      // Throttled outside a session; syncSessionTimers turns throttling off while one is active (voice and frames).
+      backgroundThrottling: true,
+    },
+  };
+}
+
+/** Electron's `session` module, injectable so the guard wiring is testable without Electron. */
+export type SessionFactory<S> = { defaultSession: S; fromPartition(partition: string): S };
+
+/** The main window lives in its own persistent partition; the other windows use the default session. Both get the guards. */
+export function installSessionGuardsOn<S>(sessions: SessionFactory<S>, install: (ses: S) => void): void {
+  for (const ses of [sessions.defaultSession, sessions.fromPartition(MAIN_PARTITION)]) install(ses);
+}
 export type Bounds = { x: number; y: number; width: number; height: number };
 export type SavedBounds = { width: number; height: number; x?: number; y?: number };
 /** Part of the window's top edge that must sit on a display, so it can be grabbed. */

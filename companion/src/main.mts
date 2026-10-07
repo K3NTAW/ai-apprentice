@@ -79,7 +79,7 @@ import {
 import { startServer, type CompanionServer } from "./server.mjs";
 import { installLifecycle, mainCloseAction } from "./lifecycle.mjs";
 import { MAC_SETTINGS_URLS } from "./permissionSettings.mjs";
-import { isWindowAction, MAIN_PARTITION, MAIN_WINDOW, planWindowAction, restoreWindowBounds, serializeWindowBounds, type WindowAction } from "./windowActions.mjs";
+import { installSessionGuardsOn, isWindowAction, mainWindowOptions, planWindowAction, restoreWindowBounds, serializeWindowBounds, type WindowAction } from "./windowActions.mjs";
 
 const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -974,25 +974,7 @@ function createMainWindow(): BrowserWindow {
     saved = null;
   }
   const bounds = restoreWindowBounds(saved, screen.getAllDisplays().map((d) => d.workArea));
-  const win = new BrowserWindow({
-    ...bounds,
-    minWidth: MAIN_WINDOW.minWidth,
-    minHeight: MAIN_WINDOW.minHeight,
-    title: PRODUCT_NAME,
-    show: false,
-    backgroundColor: "#0b0b0c",
-    webPreferences: {
-      preload: path.join(here, "preloadApp.cjs"),
-      // Persistent session: the sign-in cookies survive quitting the app.
-      partition: MAIN_PARTITION,
-      contextIsolation: true,
-      sandbox: true,
-      nodeIntegration: false,
-      webSecurity: true,
-      // Throttled outside a session; syncSessionTimers turns throttling off while one is active (voice and frames).
-      backgroundThrottling: true,
-    },
-  });
+  const win = new BrowserWindow(mainWindowOptions({ bounds, title: PRODUCT_NAME, preload: path.join(here, "preloadApp.cjs") }));
   mainWin = win;
   mainThrottled = true;
   syncSessionTimers();
@@ -1069,8 +1051,7 @@ const mainVisible = () => !!mainWin && !mainWin.isDestroyed() && mainWin.isVisib
 
 /** Microphone and display-capture only for the main window's allowlisted page; screen frames without a picker. */
 function installSessionGuards(): void {
-  // The main window lives in its own persistent partition; the other windows use the default session.
-  for (const ses of [electronSession.defaultSession, electronSession.fromPartition(MAIN_PARTITION)]) installGuards(ses);
+  installSessionGuardsOn(electronSession, installGuards);
 }
 
 function installGuards(ses: Electron.Session): void {

@@ -17,6 +17,7 @@ Run on a packaged build (`npm --prefix companion run package`) on macOS, and whe
 
 ## Login flow
 - [ ] Sign in with the email one-time code inside the window. The session survives a quit and relaunch.
+- [ ] Update from a build before T-0255 (main window on the default session): the first launch after the update asks you to sign in once (the old cookies are not carried into `persist:apprentice`); after that the sign-in survives a quit and relaunch.
 - [ ] A magic link or OAuth button opens in the system browser, not in the app window (expected until the web side offers code entry).
 - [ ] Sign out and sign in again: `window.apprentice` is present on the control room after login.
 

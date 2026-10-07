@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const h = vi.hoisted(() => ({
   run: vi.fn(async () => ({ agents: 1, deleted: 2, more: false })),
   purge: vi.fn(async () => ({ purged: 3 })),
-  idle: vi.fn(async () => ({ ended: 4 })),
+  idle: vi.fn(async () => ({ ended: 4, remaining: 1 })),
   ctx: vi.fn(),
 }));
 vi.mock("@/lib/auth/context", () => ({ requireContext: h.ctx }));
@@ -53,7 +53,7 @@ describe("cron retention route", () => {
     vi.stubEnv("CRON_SECRET", SECRET);
     const res = await call(`Bearer ${SECRET}`);
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ agents: 1, deleted: 2, more: false, empty_purged: 3, ended_captures: 4 });
+    expect(await res.json()).toEqual({ agents: 1, deleted: 2, more: false, empty_purged: 3, ended_captures: 4, captures_remaining: 1 });
     expect(h.purge).toHaveBeenCalledTimes(1);
     expect(h.idle).toHaveBeenCalledTimes(1);
     expect(h.ctx).not.toHaveBeenCalled();
@@ -63,14 +63,14 @@ describe("cron retention route", () => {
     h.run.mockRejectedValueOnce(new Error("storage down"));
     let res = await call(`Bearer ${SECRET}`);
     expect(res.status).toBe(502);
-    expect(await res.json()).toEqual({ error: "retention_failed", empty_purged: 3, ended_captures: 4 });
+    expect(await res.json()).toEqual({ error: "retention_failed", empty_purged: 3, ended_captures: 4, captures_remaining: 1 });
     expect(h.purge).toHaveBeenCalledTimes(1);
     expect(h.idle).toHaveBeenCalledTimes(1);
 
     h.purge.mockRejectedValueOnce(new Error("db down"));
     res = await call(`Bearer ${SECRET}`);
     expect(res.status).toBe(502);
-    expect(await res.json()).toEqual({ agents: 1, deleted: 2, more: false, empty_error: "empty_purge_failed", ended_captures: 4 });
+    expect(await res.json()).toEqual({ agents: 1, deleted: 2, more: false, empty_error: "empty_purge_failed", ended_captures: 4, captures_remaining: 1 });
     expect(h.run).toHaveBeenCalledTimes(2);
     expect(h.idle).toHaveBeenCalledTimes(2);
 
@@ -85,22 +85,25 @@ describe("cron retention route", () => {
 
 describe("endIdleCaptures", () => {
   it("ends capture sessions idle for more than 2 h, keeps active ones", async () => {
-    const { endIdleCaptures, IDLE_CAPTURE_MS } = await vi.importActual<typeof import("@/lib/agents/admin")>("@/lib/agents/admin");
+    const { endIdleCaptures, IDLE_BATCH, IDLE_CAPTURE_MS } = await vi.importActual<typeof import("@/lib/agents/admin")>("@/lib/agents/admin");
     const now = Date.parse("2026-10-04T12:00:00Z");
     const ended: string[][] = [];
     const port = {
-      openCaptures: vi.fn(async () => [
+      openCaptures: vi.fn(async () => ({
+        captures: [
         // Started 5 h ago, last event 4 h ago: idle.
         { id: "old", started_at: "2026-10-04T07:00:00Z", last_t: 3600 },
         // Started 5 h ago, nothing recorded: idle.
         { id: "empty", started_at: "2026-10-04T07:00:00Z", last_t: null },
         // Started 3 h ago, last event 30 min ago: still active.
         { id: "busy", started_at: "2026-10-04T09:00:00Z", last_t: 9000 },
-      ]),
+        ],
+        total: 3,
+      })),
       endSessions: vi.fn<(ids: string[], endedAt?: string) => Promise<void>>(async (ids) => void ended.push(ids)),
     };
-    expect(await endIdleCaptures(port, now)).toEqual({ ended: 2 });
-    expect(port.openCaptures).toHaveBeenCalledWith(now - IDLE_CAPTURE_MS);
+    expect(await endIdleCaptures(port, now)).toEqual({ ended: 2, remaining: 0 });
+    expect(port.openCaptures).toHaveBeenCalledWith(now - IDLE_CAPTURE_MS, IDLE_BATCH);
     expect(ended).toEqual([["old", "empty"]]);
     expect(port.endSessions.mock.calls[0][1]).toBe("2026-10-04T12:00:00.000Z");
   });

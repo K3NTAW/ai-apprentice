@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { appAllowlist, resolveAppUrl, validateAppUrl, wsEnabled } from "./appConfig.mjs";
 import { panelBounds, PANEL_SIZE } from "./panel.mjs";
-import { isWindowAction, MAIN_PARTITION, MAIN_WINDOW, planWindowAction, restoreWindowBounds, serializeWindowBounds, type WindowSnapshot } from "./windowActions.mjs";
+import { installSessionGuardsOn, isWindowAction, MAIN_PARTITION, mainWindowOptions, MAIN_WINDOW, planWindowAction, restoreWindowBounds, serializeWindowBounds, type WindowSnapshot } from "./windowActions.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const open: WindowSnapshot = { visible: true, minimized: false, fullscreen: false };
@@ -139,11 +139,24 @@ describe("app config and the WebSocket switch", () => {
 });
 
 describe("main window session (T-0255)", () => {
-  it("uses a persistent partition so the sign-in survives a relaunch, with the permission guards on it", () => {
+  it("uses a persistent partition so the sign-in survives a relaunch", () => {
     expect(MAIN_PARTITION).toMatch(/^persist:/);
-    const src = fs.readFileSync(path.join(here, "main.mts"), "utf8");
-    const main = src.slice(src.indexOf('preload: path.join(here, "preloadApp.cjs")'));
-    expect(main.slice(0, 300)).toContain("partition: MAIN_PARTITION");
-    expect(src).toContain("electronSession.fromPartition(MAIN_PARTITION)");
+    const o = mainWindowOptions({ bounds: { width: 1280, height: 820 }, title: "App", preload: "/x/preloadApp.cjs" });
+    expect(o.webPreferences.partition).toBe(MAIN_PARTITION);
+    expect(o.webPreferences).toMatchObject({ preload: "/x/preloadApp.cjs", contextIsolation: true, sandbox: true, nodeIntegration: false });
+    expect(o).toMatchObject({ width: 1280, height: 820, minWidth: MAIN_WINDOW.minWidth, minHeight: MAIN_WINDOW.minHeight, show: false });
+  });
+
+  it("installs the permission guards on the default session and on the main partition's session", () => {
+    const def = { name: "default" };
+    const made = new Map<string, { name: string }>();
+    const factory = {
+      defaultSession: def,
+      fromPartition: (p: string) => made.get(p) ?? made.set(p, { name: p }).get(p)!,
+    };
+    const guarded: { name: string }[] = [];
+    installSessionGuardsOn(factory, (ses) => guarded.push(ses));
+    expect([...made.keys()]).toEqual([MAIN_PARTITION]);
+    expect(guarded).toEqual([def, made.get(MAIN_PARTITION)]);
   });
 });

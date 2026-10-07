@@ -328,7 +328,9 @@ test("12 user menu: theme toggle, account, sign out and sign in again", async ({
   };
   await openMenu();
   await shot("user menu");
-  const checked = (await menu.getByRole("group", { name: "Theme" }).getByRole("menuitemradio", { checked: true }).textContent())?.trim() ?? "System";
+  // The checked choice by its fixed name, not its textContent (icons or a hint would break the restore).
+  let checked = "System";
+  for (const name of ["Dark", "Light", "System"]) if ((await choice(name).getAttribute("aria-checked")) === "true") checked = name;
   const next = (await html.getAttribute("data-theme")) === "dark" ? "Light" : "Dark";
   await choice(next).click();
   await expect(choice(next)).toHaveAttribute("aria-checked", "true");

@@ -9,7 +9,7 @@ import { finishSetupVisible, onboardingEnabled } from "@/lib/onboarding/state";
 import ShellHeader, { type ShellUser } from "./ShellHeader";
 import { type AgentNames, groupRecent, RECENT_LIMIT, type RecentSessions } from "./recent";
 
-/** 'Finish setup' visibility: local mode reads the file flag, Supabase the user_metadata state (absent = completed). */
+/** 'Finish setup' visibility: local mode reads the file flag, Supabase the user_metadata state (the context always sets it). */
 async function onboardingOpen(ctx: RequestContext): Promise<boolean> {
   if (!onboardingEnabled()) return false;
   if (ctx.mode === "local") return finishSetupVisible(await readLocalOnboarding());
