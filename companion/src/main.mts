@@ -803,7 +803,6 @@ const bridgeHandlers: BridgeHandlers = {
 
 const isMainContents = (wc: Electron.WebContents | null | undefined) => !!wc && !!mainWin && !mainWin.isDestroyed() && wc === mainWin.webContents;
 
-/** Sender check for every bridge handler: main window, main frame, allowlisted origin. */
 // Release builds only: app.config.json carries "updates": true on the release runner (updater.mts).
 const releaseConfigText: string | null = (() => {
   try {
@@ -825,6 +824,7 @@ const updater = createUpdater({
   },
 });
 
+/** Sender check for every bridge handler: main window, main frame, allowlisted origin. */
 function bridgeSender(e: { sender: Electron.WebContents; senderFrame: Electron.WebFrameMain | null }) {
   const frame = e.senderFrame;
   return {
