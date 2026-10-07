@@ -159,8 +159,8 @@ BASE_URL=... E2E_EMAIL=... E2E_PASSWORD=... npm run e2e:live   # against a deplo
 
 GitHub Actions workflows (`.github/workflows/`, secret names in [docs/DEPLOY.md](docs/DEPLOY.md#github-actions)):
 
-- `ci.yml`: lint, typecheck and `npm test` on every push and PR (lands with RLS tests 2/2).
-- `db-tests.yml`: `npm run test:db` against a throwaway local Supabase stack, no secrets (lands with RLS tests 2/2).
+- `ci.yml`: lint, typecheck and `npm test` on every push and PR.
+- `db-tests.yml`: `npm run test:db` against a throwaway local Supabase stack, no secrets, on every push and PR. Staging setup: [docs/STAGING.md](docs/STAGING.md).
 - `nightly-live.yml`: `npm run e2e:live` against staging every day at 03:00 UTC ([docs/checks/e2e-live.md](docs/checks/e2e-live.md)).
 - `desktop-release.yml`: manual signed macOS release ([docs/RELEASE.md](docs/RELEASE.md)).
 

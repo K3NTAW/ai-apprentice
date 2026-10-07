@@ -174,8 +174,8 @@ variables are inlined at build time, so every change needs a redeploy. Local che
 
 ## 11. Staging
 
-See docs/STAGING.md (RLS tests 2/2). It lands with T-0352 and is not on this branch yet; this guide does not
-repeat its content.
+A separate staging Supabase project and Vercel env, used by the nightly live run and the unit cost measurement.
+Setup, GitHub secrets, running db-tests locally with Docker and rollback: docs/STAGING.md.
 
 ## 12. Observability env
 
@@ -206,8 +206,8 @@ Names only; values never go into the repo, docs or issues.
 
 | Workflow | Runs | Secret names |
 | --- | --- | --- |
-| ci.yml | every push and pull request: lint, typecheck, `npm test` (lands with RLS tests 2/2) | none |
-| db-tests.yml | `npm run test:db` against a local `supabase start` stack (lands with RLS tests 2/2) | none |
+| ci.yml | every push and pull request: lint, typecheck, `npm test` | none |
+| db-tests.yml | `npm run test:db` against a local `supabase start` stack, every push and pull request | none |
 | nightly-live.yml | `npm run e2e:live` against staging, daily 03:00 UTC and on demand | BASE_URL, E2E_EMAIL, E2E_PASSWORD (GITHUB_TOKEN is automatic) |
 | desktop-release.yml | manual, signed and notarized macOS release from the default branch | CSC_LINK, CSC_KEY_PASSWORD, APPLE_API_KEY_P8, APPLE_API_KEY_ID, APPLE_API_ISSUER, DESKTOP_RELEASE_TOKEN, SENTRY_DSN_ELECTRON |
 
