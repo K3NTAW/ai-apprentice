@@ -1,3 +1,5 @@
+> **Archived 2026-11-17.** This repository is frozen and kept as reference. The product continues under the working name Atelier in a separate repository. Nothing here is maintained; the Supabase project is inactive.
+
 # AI Apprentice
 
 An apprentice, not a recorder. An expert does a real task on their own screen while a voice agent watches and asks *why* at natural pauses. A short spoken debrief closes the gaps and ends with a teach-back the expert confirms. The result is a Work Map that a voice tutor then uses to coach a new hire on a case the expert never showed, stepping in before a guardrail is broken.
